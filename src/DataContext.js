@@ -367,20 +367,22 @@ export function DataProvider({ children: reactChildren }) {
     }
   }
 
-  // Trigger network fetch once auth has finished loading so API calls include auth token
+  // Trigger network fetch once auth has finished loading and a user is signed in.
   useEffect(() => {
     let mounted = true;
-    if (loading) return () => { mounted = false; };
+    if (loading || !user) return () => { mounted = false; };
+
     try {
       InteractionManager.runAfterInteractions(() => {
         if (!mounted) return;
         console.log('DataProvider: running fetchAndSync after auth ready', new Date().toISOString());
         fetchAndSync().catch((e) => console.warn('fetchAndSync after auth failed', e?.message || e));
       });
-    } catch (e) {
+    } catch (_) {
       // fallback
       fetchAndSync().catch(() => {});
     }
+
     return () => { mounted = false; };
   }, [loading, user]);
 

@@ -9,7 +9,6 @@ import ForgotPasswordScreen from './ForgotPasswordScreen';
 import { useAuth } from '../src/AuthContext';
 import LogoTitle from '../src/components/LogoTitle';
 import { logger } from '../src/utils/logger';
-import { API_BASE_URL } from '../src/Api';
 import { Sentry } from '../src/sentry';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -54,38 +53,17 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       logger.debug('auth', 'Login submit', { hasEmail: !!cleanedEmail });
       const res = await auth.login(cleanedEmail, cleanedPassword);
       try {
-        await SecureStore.setItemAsync('bb_bio_token', String(res?.token || auth?.token || ''));
+        await SecureStore.setItemAsync('bb_bio_enabled', '1');
         await SecureStore.setItemAsync('bb_bio_user', JSON.stringify(res?.user || auth?.user || {}));
         setHasBiometricAuthStored(true);
-      } catch (e) {}
+      } catch (_) {}
       navigation.replace('Main');
-    }catch(e){
+    } catch (e) {
       logger.warn('auth', 'Login failed', { message: e?.message || String(e) });
-      const status = e?.response?.status;
-      const responseData = e?.response?.data;
-
-      const msg = e?.message || 'Please check credentials';
-      const isNetworkish = /network|timeout|ssl|certificate|ats/i.test(String(msg));
-      const isBadGateway = status === 502;
-
-      const base = API_BASE_URL || '(unset)';
-      const detailLines = [];
-      if (status) detailLines.push(`Status: ${status}`);
-      if (base) detailLines.push(`Server: ${base}`);
-      if (isBadGateway) detailLines.push('Note: 502 usually means the proxy/server could not reach the backend.');
-      if (responseData != null && typeof responseData === 'string' && responseData.trim()) {
-        detailLines.push(`Response: ${responseData.slice(0, 300)}`);
-      } else if (responseData != null && typeof responseData === 'object') {
-        try {
-          detailLines.push(`Response: ${JSON.stringify(responseData).slice(0, 300)}`);
-        } catch (e) {
-          // ignore
-        }
-      }
-
-      const detail = (isNetworkish || status) ? `\n\n${detailLines.join('\n')}` : '';
-      Alert.alert('Login failed', `${msg}${detail}`);
-    }finally{ setBusy(false); }
+      Alert.alert('Login failed', e?.message || 'Please check your credentials and try again.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   function showGoogleConfigHelp() {
@@ -108,7 +86,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       Sentry.withScope((scope) => {
         scope.setTag('bb_sentry_test', '1');
         scope.setTag('bb_env', sentryEnv || 'unknown');
-        scope.setExtra('apiBaseUrl', API_BASE_URL || '');
+        scope.setExtra('apiBaseUrl', '');
         scope.setExtra('time', new Date().toISOString());
         Sentry.captureException(new Error('BuddyBoard Sentry test error (internal build)'));
       });
@@ -122,9 +100,9 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   async function doBiometricUnlock() {
     setBiometricBusy(true);
     try {
-      const storedToken = await SecureStore.getItemAsync('bb_bio_token');
+      const storedEnabled = await SecureStore.getItemAsync('bb_bio_enabled');
       const storedUser = await SecureStore.getItemAsync('bb_bio_user');
-      if (!storedToken || !storedUser) {
+      if (!storedEnabled || !storedUser) {
         Alert.alert('Biometric sign-in', 'No saved sign-in found. Please sign in with email and password first.');
         return;
       }
@@ -136,9 +114,10 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       });
 
       if (result?.success) {
-        let parsedUser = null;
-        try { parsedUser = JSON.parse(storedUser); } catch (e) {}
-        await auth.setAuth({ token: storedToken, user: parsedUser || undefined });
+        if (!auth?.token) {
+          Alert.alert('Biometric unlock', 'Please sign in with email and password.');
+          return;
+        }
         navigation.replace('Main');
         return;
       }
@@ -199,9 +178,9 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     let mounted = true;
     (async () => {
       try {
-        const storedToken = await SecureStore.getItemAsync('bb_bio_token');
+        const storedEnabled = await SecureStore.getItemAsync('bb_bio_enabled');
         const storedUser = await SecureStore.getItemAsync('bb_bio_user');
-        if (mounted) setHasBiometricAuthStored(!!storedToken && !!storedUser);
+        if (mounted) setHasBiometricAuthStored(!!storedEnabled && !!storedUser);
       } catch (e) {
         if (mounted) setHasBiometricAuthStored(false);
       }

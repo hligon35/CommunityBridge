@@ -10,6 +10,7 @@
     "ios": {
       "bundleIdentifier": "com.azlabs.buddyboard",
       "buildNumber": "1.0.12",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSFaceIDUsageDescription": "BuddyBoard uses Face ID / Touch ID to help you securely sign in on this device.",
@@ -52,6 +53,7 @@
     },
     "android": {
       "package": "com.azlabs.buddyboard",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 12,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
