@@ -6,14 +6,32 @@ import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
 
 function getExpoPublicEnv(key) {
+  // IMPORTANT: Expo inlines EXPO_PUBLIC_* vars only for *static* references.
+  // Dynamic lookups like process.env[key] will often be empty in production.
   try {
-    if (typeof process !== 'undefined' && process.env && process.env[key] != null) {
-      return String(process.env[key]);
+    switch (String(key || '')) {
+      case 'EXPO_PUBLIC_FIREBASE_API_KEY':
+        return String(process.env.EXPO_PUBLIC_FIREBASE_API_KEY || '');
+      case 'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN':
+        return String(process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || '');
+      case 'EXPO_PUBLIC_FIREBASE_PROJECT_ID':
+        return String(process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || '');
+      case 'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET':
+        return String(process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || '');
+      case 'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID':
+        return String(process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '');
+      case 'EXPO_PUBLIC_FIREBASE_APP_ID':
+        return String(process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '');
+      case 'EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID':
+        return String(process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID || '');
+      case 'EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION':
+        return String(process.env.EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION || '');
+      default:
+        return '';
     }
   } catch (_) {
-    // ignore
+    return '';
   }
-  return '';
 }
 
 function getFirebaseConfigFromGoogleServices() {
@@ -69,7 +87,65 @@ if (missing.length) {
   } catch (_) {}
 }
 
-export const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const APP_GLOBAL_KEY = '__bb_firebase_app_instance__';
+const APP_ERROR_GLOBAL_KEY = '__bb_firebase_app_init_error__';
+
+function getFirebaseApp() {
+  try {
+    const cached = globalThis?.[APP_GLOBAL_KEY];
+    if (cached) return cached;
+  } catch (_) {}
+
+  // If config is obviously missing, avoid creating a broken app instance.
+  if (missing.length) {
+    const err = new Error(`Firebase config missing: ${missing.join(', ')}`);
+    err.code = 'BB_FIREBASE_CONFIG_MISSING';
+    try {
+      if (globalThis) {
+        globalThis[APP_GLOBAL_KEY] = null;
+        globalThis[APP_ERROR_GLOBAL_KEY] = err;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  let app = null;
+  let initErr = null;
+
+  try {
+    if (getApps().length) {
+      app = getApp();
+    } else {
+      initializeApp(firebaseConfig);
+      app = getApp();
+    }
+  } catch (e) {
+    initErr = e || new Error('Firebase app initialization failed');
+    app = null;
+    try {
+      console.warn('[firebase] App initialization failed', initErr);
+    } catch (_) {}
+  }
+
+  try {
+    if (globalThis) {
+      globalThis[APP_GLOBAL_KEY] = app;
+      globalThis[APP_ERROR_GLOBAL_KEY] = initErr;
+    }
+  } catch (_) {}
+
+  return app;
+}
+
+export function getFirebaseAppInitError() {
+  try {
+    return globalThis?.[APP_ERROR_GLOBAL_KEY] || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+export const firebaseApp = getFirebaseApp();
 
 const AUTH_GLOBAL_KEY = '__bb_firebase_auth_instance__';
 const AUTH_ERROR_GLOBAL_KEY = '__bb_firebase_auth_init_error__';
@@ -85,25 +161,31 @@ export function getAuthInstance() {
   }
   if (inst) return inst;
 
+  const app = getFirebaseApp();
+  if (!app) {
+    authInitError = getFirebaseAppInitError() || new Error('Firebase App is not initialized.');
+    try {
+      if (globalThis) {
+        globalThis[AUTH_GLOBAL_KEY] = null;
+        globalThis[AUTH_ERROR_GLOBAL_KEY] = authInitError;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   // Note: Firebase v10+ no longer exports `firebase/auth/react-native` via package.json
   // `exports`, so using that import breaks Metro bundling (and EAS builds).
   // We intentionally use `getAuth()` only; this avoids crash-on-launch and builds reliably.
   try {
-    inst = getAuth(firebaseApp);
+    // Use the *actual* default app instance (getApp()) to avoid any "no-app" surprises.
+    inst = getAuth(getApp());
     authInitError = null;
   } catch (e1) {
-    // Some edge cases (module duplication / invalid app argument) can throw here.
-    // Try again with the default app getter before giving up.
+    authInitError = e1 || new Error('Firebase Auth initialization failed');
+    inst = null;
     try {
-      inst = getAuth();
-      authInitError = null;
-    } catch (e2) {
-      authInitError = e2 || e1 || new Error('Firebase Auth initialization failed');
-      inst = null;
-      try {
-        console.warn('[firebase] Auth initialization failed', authInitError);
-      } catch (_) {}
-    }
+      console.warn('[firebase] Auth initialization failed', authInitError);
+    } catch (_) {}
   }
 
   try {
@@ -127,8 +209,8 @@ export function getAuthInitError() {
 }
 
 export const auth = getAuthInstance();
-export const db = getFirestore(firebaseApp);
-export const storage = getStorage(firebaseApp);
+export const db = firebaseApp ? getFirestore(firebaseApp) : null;
+export const storage = firebaseApp ? getStorage(firebaseApp) : null;
 
 const region = getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION') || 'us-central1';
-export const functions = getFunctions(firebaseApp, region);
+export const functions = firebaseApp ? getFunctions(firebaseApp, region) : null;

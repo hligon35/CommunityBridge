@@ -92,6 +92,11 @@ export function setAuthToken(_) {
 }
 
 async function getUserProfile(uid) {
+  if (!db) {
+    const err = new Error('Firebase is not initialized (missing Firestore instance).');
+    err.code = 'BB_FIREBASE_INIT_FAILED';
+    throw err;
+  }
   const snap = await getDoc(doc(db, 'users', uid));
   if (!snap.exists()) return null;
   const data = snap.data() || {};
@@ -104,6 +109,11 @@ async function getUserProfile(uid) {
 }
 
 async function upsertUserProfile(uid, fields) {
+  if (!db) {
+    const err = new Error('Firebase is not initialized (missing Firestore instance).');
+    err.code = 'BB_FIREBASE_INIT_FAILED';
+    throw err;
+  }
   const now = serverTimestamp();
   await setDoc(
     doc(db, 'users', uid),
