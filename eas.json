@@ -4,7 +4,7 @@
   },
   "build": {
     "internal": {
-      "node": "20.11.1",
+      "node": "20.19.4",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
@@ -22,7 +22,7 @@
       "channel": "internal"
     },
     "testflight-internal": {
-      "node": "20.11.1",
+      "node": "20.19.4",
       "distribution": "store",
       "android": {
         "buildType": "app-bundle"
@@ -40,7 +40,7 @@
       "channel": "testflight-internal"
     },
     "development": {
-      "node": "20.11.1",
+      "node": "20.19.4",
       "developmentClient": true,
       "distribution": "internal",
       "android": {
@@ -59,7 +59,7 @@
       "channel": "development"
     },
     "preview": {
-      "node": "20.11.1",
+      "node": "20.19.4",
       "distribution": "store",
       "android": {
         "buildType": "app-bundle"
@@ -77,7 +77,7 @@
       "channel": "preview"
     },
     "production": {
-      "node": "20.11.1",
+      "node": "20.19.4",
       "distribution": "store",
       "android": {
         "buildType": "app-bundle"
