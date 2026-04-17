@@ -6,9 +6,6 @@
     "internal": {
       "node": "20.19.4",
       "distribution": "internal",
-      "hooks": {
-        "preInstall": "node -e \"require('fs').rmSync('ios', { recursive: true, force: true })\""
-      },
       "android": {
         "buildType": "apk"
       },
@@ -20,16 +17,13 @@
         "SENTRY_ORG": "sparq-digital",
         "SENTRY_PROJECT": "sparqplug",
         "SENTRY_ALLOW_FAILURE": "true",
-        "EXPO_PUBLIC_API_BASE_URL": "https://buddyboard.getsparqd.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://buddy-board.com"
       },
       "channel": "internal"
     },
     "testflight-internal": {
       "node": "20.19.4",
       "distribution": "store",
-      "hooks": {
-        "preInstall": "node -e \"require('fs').rmSync('ios', { recursive: true, force: true })\""
-      },
       "android": {
         "buildType": "app-bundle"
       },
@@ -41,7 +35,7 @@
         "SENTRY_ORG": "sparq-digital",
         "SENTRY_PROJECT": "sparqplug",
         "SENTRY_ALLOW_FAILURE": "true",
-        "EXPO_PUBLIC_API_BASE_URL": "https://buddyboard.getsparqd.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://buddy-board.com"
       },
       "channel": "testflight-internal"
     },
@@ -49,9 +43,6 @@
       "node": "20.19.4",
       "developmentClient": true,
       "distribution": "internal",
-      "hooks": {
-        "preInstall": "node -e \"require('fs').rmSync('ios', { recursive: true, force: true })\""
-      },
       "android": {
         "buildType": "apk"
       },
@@ -63,16 +54,13 @@
         "SENTRY_ORG": "sparq-digital",
         "SENTRY_PROJECT": "sparqplug",
         "SENTRY_ALLOW_FAILURE": "true",
-        "EXPO_PUBLIC_API_BASE_URL": "https://buddyboard.getsparqd.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://buddy-board.com"
       },
       "channel": "development"
     },
     "preview": {
       "node": "20.19.4",
       "distribution": "store",
-      "hooks": {
-        "preInstall": "node -e \"require('fs').rmSync('ios', { recursive: true, force: true })\""
-      },
       "android": {
         "buildType": "app-bundle"
       },
@@ -84,16 +72,13 @@
         "SENTRY_ORG": "sparq-digital",
         "SENTRY_PROJECT": "sparqplug",
         "SENTRY_ALLOW_FAILURE": "true",
-        "EXPO_PUBLIC_API_BASE_URL": "https://buddyboard.getsparqd.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://buddy-board.com"
       },
       "channel": "preview"
     },
     "production": {
       "node": "20.19.4",
       "distribution": "store",
-      "hooks": {
-        "preInstall": "node -e \"require('fs').rmSync('ios', { recursive: true, force: true })\""
-      },
       "android": {
         "buildType": "app-bundle"
       },
@@ -105,7 +90,7 @@
         "SENTRY_ORG": "sparq-digital",
         "SENTRY_PROJECT": "sparqplug",
         "SENTRY_ALLOW_FAILURE": "true",
-        "EXPO_PUBLIC_API_BASE_URL": "https://buddyboard.getsparqd.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://buddy-board.com"
       },
       "channel": "production"
     }
