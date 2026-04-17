@@ -24,6 +24,7 @@
     },
     "testflight-internal": {
       "node": "20.19.4",
+      "autoIncrement": true,
       "distribution": "store",
       "android": {
         "buildType": "app-bundle"
