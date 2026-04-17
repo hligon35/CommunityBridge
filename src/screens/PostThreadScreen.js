@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TouchableWithoutFeedback, Image, Linking } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TouchableWithoutFeedback, Image, Linking, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../AuthContext';
@@ -73,11 +73,21 @@ export default function PostThreadScreen() {
         }}
       />
 
-      <FlatList
-        data={post.comments || []}
-        keyExtractor={(c) => c.id || `${c.createdAt || Math.random()}`}
-        renderItem={({ item }) => (
-          <View>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 96 : 0}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={{ flex: 1 }}>
+            <FlatList
+              data={post.comments || []}
+              keyExtractor={(c) => c.id || `${c.createdAt || Math.random()}`}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              contentContainerStyle={{ paddingBottom: 120 }}
+              renderItem={({ item }) => (
+                <View>
             <View style={styles.commentRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.commentAuthor}>{item.author?.name || 'Anonymous'}</Text>
@@ -146,16 +156,26 @@ export default function PostThreadScreen() {
               </View>
             ) : null}
           </View>
-        )}
-        ListEmptyComponent={<Text style={{ padding: 12, color: '#6b7280' }}>No comments yet — be the first to reply.</Text>}
-      />
+                )}
+                ListEmptyComponent={<Text style={{ padding: 12, color: '#6b7280' }}>No comments yet — be the first to reply.</Text>}
+              />
 
-      <View style={styles.composer}>
-        <TextInput ref={composerRef} placeholder="Write a comment..." value={text} onChangeText={setText} style={styles.input} multiline />
-        <TouchableOpacity style={styles.sendBtn} onPress={handleSend} disabled={sending || !text.trim()}>
-          {sending ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Send</Text>}
-        </TouchableOpacity>
-      </View>
+            <View style={styles.composer}>
+              <TextInput
+                ref={composerRef}
+                placeholder="Write a comment..."
+                value={text}
+                onChangeText={setText}
+                style={styles.input}
+                multiline
+              />
+              <TouchableOpacity style={styles.sendBtn} onPress={handleSend} disabled={sending || !text.trim()}>
+                {sending ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Send</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
       {showUserModal && selectedUser && (
         <Modal transparent visible animationType="fade">
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' }}>

@@ -1,0 +1,152 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return signedIn() && userDoc().exists() &&
+        (userDoc().data.role == 'admin' || userDoc().data.role == 'administrator');
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+
+      // Users may create their own profile on first sign-in.
+      allow create: if signedIn() && request.auth.uid == uid &&
+        (request.resource.data.role == 'parent');
+
+      // Users may update their own profile, but may not change role.
+      allow update: if signedIn() && request.auth.uid == uid &&
+        request.resource.data.role == resource.data.role;
+
+      allow delete: if false;
+    }
+
+    match /directoryLinks/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+
+      // Allow a parent user to create/update their own link only when it points to their own uid.
+      allow create, update: if signedIn() && request.auth.uid == uid &&
+        request.resource.data.role == 'parent' &&
+        request.resource.data.parentId == uid;
+
+      // All other link mutations are admin-only.
+      allow create, update: if isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    match /parents/{id} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == id);
+      allow create, update: if isAdmin() || (signedIn() && request.auth.uid == id);
+      allow delete: if false;
+    }
+
+    match /therapists/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /children/{id} {
+      allow read: if isAdmin() || (signedIn() && (request.auth.uid in (resource.data.parentIds || [])));
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /posts/{postId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn() && request.resource.data.author.id == request.auth.uid;
+
+      allow update: if signedIn() && (
+        resource.data.author.id == request.auth.uid ||
+        request.resource.data.diff(resource.data).changedKeys().hasOnly(['likes', 'shares', 'updatedAt'])
+      );
+
+      allow delete: if isAdmin() || (signedIn() && resource.data.author.id == request.auth.uid);
+
+      match /comments/{commentId} {
+        allow read: if signedIn();
+        allow create: if signedIn() && request.resource.data.author.id == request.auth.uid;
+
+        // Allow emoji reactions without letting users rewrite the comment body.
+        allow update: if signedIn() &&
+          request.resource.data.diff(resource.data).changedKeys().hasOnly(['reactions', 'userReactions']);
+
+        allow delete: if isAdmin() || (signedIn() && resource.data.author.id == request.auth.uid);
+      }
+    }
+
+    match /messages/{messageId} {
+      allow read: if signedIn() && (
+        isAdmin() ||
+        (request.auth.uid in (resource.data.participantUids || [])) ||
+        (isAdmin() && ('admin' in (resource.data.toRoles || [])))
+      );
+
+      allow create: if signedIn() &&
+        (request.auth.uid in (request.resource.data.participantUids || [])) &&
+        request.resource.data.sender.id == request.auth.uid;
+
+      allow update, delete: if false;
+    }
+
+    match /urgentMemos/{memoId} {
+      allow read: if signedIn();
+      allow create: if isAdmin();
+
+      // Allow users to record their response status; admins can update full memos.
+      allow update: if isAdmin() || (signedIn() &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly(['status', 'respondedAt']));
+
+      allow delete: if isAdmin();
+
+      match /reads/{uid} {
+        allow read, create, update: if signedIn() && request.auth.uid == uid;
+        allow delete: if false;
+      }
+    }
+
+    match /timeChangeProposals/{proposalId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.proposerUid == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.proposerUid == request.auth.uid;
+
+      // Allow admins to respond; proposer may not change after creation.
+      allow update: if isAdmin() || (signedIn() &&
+        resource.data.proposerUid == request.auth.uid &&
+        request.resource.data.proposerUid == resource.data.proposerUid);
+
+      allow delete: if isAdmin();
+    }
+
+    match /arrivalPings/{pingId} {
+      allow read: if isAdmin();
+      allow create: if signedIn();
+      allow update, delete: if false;
+    }
+
+    match /pushTokens/{tokenId} {
+      allow read: if isAdmin();
+      allow create, update: if signedIn() && request.resource.data.userUid == request.auth.uid;
+      allow delete: if signedIn() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /orgSettings/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /meta/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

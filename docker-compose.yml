@@ -66,6 +66,9 @@ services:
       - NODE_ENV=production
       - PORT=3005
       - BB_DB_PATH=/usr/src/app/.data/buddyboard.sqlite
+      # Optional: set to use Postgres instead of SQLite.
+      # Example: postgres://buddyboard:buddyboard@postgres:5432/buddyboard
+      - BB_DATABASE_URL=${BB_DATABASE_URL}
       - BB_PUBLIC_BASE_URL=${BB_PUBLIC_BASE_URL}
       - BB_JWT_SECRET=${BB_JWT_SECRET}
       - BB_ALLOW_SIGNUP=${BB_ALLOW_SIGNUP}
@@ -84,8 +87,27 @@ services:
       - BB_TWILIO_AUTH_TOKEN=${BB_TWILIO_AUTH_TOKEN}
       - BB_TWILIO_FROM=${BB_TWILIO_FROM}
       - BB_TWILIO_MESSAGING_SERVICE_SID=${BB_TWILIO_MESSAGING_SERVICE_SID}
-    command: sh -c "npm install --no-audit --no-fund && node ./scripts/api-server.js"
+    command: sh -c "npm install --no-audit --no-fund && if [ -n \"$BB_DATABASE_URL\" ]; then node ./scripts/api-server-pg.js; else node ./scripts/api-server.js; fi"
     restart: unless-stopped
+
+  postgres:
+    profiles: ["postgres"]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_DB=${BB_PG_DATABASE:-buddyboard}
+      - POSTGRES_USER=${BB_PG_USER:-buddyboard}
+      - POSTGRES_PASSWORD=${BB_PG_PASSWORD:-buddyboard}
+    volumes:
+      # Point BB_PGDATA_DIR at your 1TB drive mount (e.g. /mnt/drive/buddyboard/postgres)
+      - ${BB_PGDATA_DIR:-./.data/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   api-mock:
     image: node:18-alpine

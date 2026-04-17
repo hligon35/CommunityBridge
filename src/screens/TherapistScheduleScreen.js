@@ -3,17 +3,21 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
+import { findLinkedTherapistId } from '../utils/directoryLinking';
 // header provided by ScreenWrapper
 
 export default function TherapistScheduleScreen() {
-  const { children } = useData();
+  const { children, therapists } = useData();
   const { user } = useAuth();
 
   const assignedChildren = useMemo(() => {
     if (!user) return [];
     const uid = user.id;
-    return (children || []).filter(c => (c.amTherapist && c.amTherapist.id === uid) || (c.pmTherapist && c.pmTherapist.id === uid) || (c.bcaTherapist && c.bcaTherapist.id === uid));
-  }, [children, user]);
+    const linkedTherapistId = findLinkedTherapistId(user, therapists) || uid;
+    return (children || []).filter((c) => (c.amTherapist && c.amTherapist.id === linkedTherapistId)
+      || (c.pmTherapist && c.pmTherapist.id === linkedTherapistId)
+      || (c.bcaTherapist && c.bcaTherapist.id === linkedTherapistId));
+  }, [children, therapists, user]);
 
   const upcoming = useMemo(() => {
     const list = [];

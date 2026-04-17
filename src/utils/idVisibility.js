@@ -32,6 +32,7 @@ export function formatIdForDisplay(id, { allow = false } = {}) {
 export function avatarSeed(user) {
   if (!user) return 'anon';
   if (user.email) return encodeURIComponent(String(user.email));
+  if (user.phone) return encodeURIComponent(String(user.phone));
   if (user.name) return encodeURIComponent(String(user.name));
   if (user.firstName || user.lastName) return encodeURIComponent(((user.firstName || '') + ' ' + (user.lastName || '')).trim());
   return 'anon';

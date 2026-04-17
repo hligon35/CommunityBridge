@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Api from './Api';
 import { Share } from 'react-native';
 import { useAuth } from './AuthContext';
+import { additionalChildren, additionalParents } from './seed/directoryAdditions';
 
 const DataContext = createContext(null);
 
@@ -20,21 +21,113 @@ const BLOCKED_KEY = 'bbs_blocked_v1';
 
 
 // Helper: attach therapist objects (ABA/BCBA) to children based on assigned ABA ids
-function attachTherapistsToChildren(childrenArr, therapistsArr) {
-  const byId = (therapistsArr || []).reduce((acc, t) => { acc[t.id] = t; return acc; }, {});
+function attachTherapistsToChildren(childrenArr, therapistsArr, abaRel) {
+  const byId = (therapistsArr || []).reduce((acc, t) => {
+    if (t && t.id != null) acc[String(t.id)] = t;
+    return acc;
+  }, {});
+
+  const rel = (abaRel && typeof abaRel === 'object') ? abaRel : null;
+  const relAssignments = rel && Array.isArray(rel.assignments) ? rel.assignments : null;
+  const relSupervision = rel && Array.isArray(rel.supervision) ? rel.supervision : null;
+
+  const assignmentByChildSession = {};
+  if (relAssignments) {
+    relAssignments.forEach((a) => {
+      const childId = a && a.childId != null ? String(a.childId).trim() : '';
+      const session = a && a.session != null ? String(a.session).trim().toUpperCase() : '';
+      const abaId = a && a.abaId != null ? String(a.abaId).trim() : '';
+      if (!childId || (session !== 'AM' && session !== 'PM') || !abaId) return;
+      assignmentByChildSession[`${childId}|${session}`] = abaId;
+    });
+  }
+
+  const supervisionByAbaId = {};
+  if (relSupervision) {
+    relSupervision.forEach((s) => {
+      const abaId = s && s.abaId != null ? String(s.abaId).trim() : '';
+      const bcbaId = s && s.bcbaId != null ? String(s.bcbaId).trim() : '';
+      if (abaId && bcbaId) supervisionByAbaId[abaId] = bcbaId;
+    });
+  }
+
   return (childrenArr || []).map((c) => {
+    const childId = c && c.id != null ? String(c.id) : '';
+
+    // Preferred path: use server-normalized session assignments when present.
+    const amAbaId = childId ? assignmentByChildSession[`${childId}|AM`] : null;
+    const pmAbaId = childId ? assignmentByChildSession[`${childId}|PM`] : null;
+    if (amAbaId || pmAbaId) {
+      const amTherapist = amAbaId ? (byId[amAbaId] || null) : null;
+      const pmTherapist = pmAbaId ? (byId[pmAbaId] || null) : null;
+      const bcbaId = (amAbaId && supervisionByAbaId[amAbaId]) || (pmAbaId && supervisionByAbaId[pmAbaId]) || null;
+      const bcaTherapist = bcbaId ? (byId[bcbaId] || null) : null;
+      return { ...c, bcaTherapist, amTherapist, pmTherapist };
+    }
+
+    // Fallback path: infer from child's assignedABA and session.
     const assigned = c.assignedABA || c.assigned_ABA || c.assigned || [];
-    const primaryId = Array.isArray(assigned) && assigned.length ? assigned[0] : null;
-    const aba = primaryId ? byId[primaryId] : null;
+    const primaryId = Array.isArray(assigned) && assigned.length ? String(assigned[0]) : null;
+    const aba = primaryId ? (byId[primaryId] || null) : null;
+
     let amTherapist = null;
     let pmTherapist = null;
     if (c.session === 'AM') amTherapist = aba;
     else if (c.session === 'PM') pmTherapist = aba;
     else { amTherapist = aba; pmTherapist = aba; }
+
     let bcaTherapist = null;
     if (aba && aba.supervisedBy) bcaTherapist = byId[aba.supervisedBy] || null;
     return { ...c, bcaTherapist, amTherapist, pmTherapist };
   });
+}
+
+function mergeById(existing, additions) {
+  const out = Array.isArray(existing) ? [...existing] : [];
+  const byId = new Set(out.map((x) => String(x && x.id ? x.id : '')).filter(Boolean));
+  (Array.isArray(additions) ? additions : []).forEach((item) => {
+    const id = item && item.id ? String(item.id) : '';
+    if (!id) return;
+    if (byId.has(id)) return;
+    byId.add(id);
+    out.push(item);
+  });
+  return out;
+}
+
+function deriveTherapistsFromChildren(childrenArr) {
+  try {
+    const ids = new Set();
+    (childrenArr || []).forEach((c) => {
+      const assigned = c?.assignedABA || c?.assigned_ABA || c?.assigned || [];
+      if (Array.isArray(assigned)) {
+        assigned.forEach((id) => {
+          const s = id != null ? String(id).trim() : '';
+          if (s) ids.add(s);
+        });
+      }
+    });
+
+    return Array.from(ids).map((id) => {
+      const pretty = id.startsWith('aba-') ? `ABA ${id.replace(/^aba-/, '')}` : `Staff ${id}`;
+      return {
+        id,
+        name: pretty,
+        role: 'therapist',
+        avatar: '',
+        phone: '',
+        email: '',
+      };
+    });
+  } catch (e) {
+    return [];
+  }
+}
+
+function stripComputedChildFields(child) {
+  if (!child || typeof child !== 'object') return child;
+  const { amTherapist, pmTherapist, bcaTherapist, ...rest } = child;
+  return rest;
 }
 
 // Note: removed legacy demo children and therapist pools so the
@@ -104,15 +197,23 @@ export function DataProvider({ children: reactChildren }) {
         if (tRaw) {
           try { const parsed = JSON.parse(tRaw); if (Array.isArray(parsed)) parsedTherapists = parsed; } catch (e) { parsedTherapists = []; }
         }
-        setParents(parsedParents);
-        setTherapists(parsedTherapists);
+        const mergedParents = mergeById(parsedParents, additionalParents);
+        setParents(mergedParents);
 
-        // Children — attach therapist objects where possible
+        // Children
         let parsedChildren = [];
         if (cRaw) {
           try { const parsed = JSON.parse(cRaw); if (Array.isArray(parsed)) parsedChildren = parsed; } catch (e) { parsedChildren = []; }
         }
-        const mapped = attachTherapistsToChildren(parsedChildren, parsedTherapists);
+        const mergedChildren = mergeById(parsedChildren, additionalChildren);
+
+        // Therapists: use persisted therapists, but if empty derive placeholders from children assignments.
+        const derivedTherapists = deriveTherapistsFromChildren(mergedChildren);
+        const mergedTherapists = mergeById(parsedTherapists, derivedTherapists);
+        setTherapists(mergedTherapists);
+
+        // Attach therapist objects where possible
+        const mapped = attachTherapistsToChildren(mergedChildren, mergedTherapists);
         setChildren(mapped);
 
         // Archived threads
@@ -226,22 +327,62 @@ export function DataProvider({ children: reactChildren }) {
       const proposals = await Api.getTimeChangeProposals();
       setTimeChangeProposals(Array.isArray(proposals) ? proposals : (proposals?.proposals || []));
     } catch (e) { console.warn('getTimeChangeProposals failed', e.message); }
+
+    // Directory sync. Admins can read/seed the full directory; non-admins use /api/directory/me.
+    try {
+      const isAdmin = (user && user.role) ? ['admin', 'administrator'].includes(String(user.role).toLowerCase()) : false;
+      let dir = isAdmin ? await Api.getDirectory() : await Api.getDirectoryMe();
+      if (dir && dir.ok) {
+        let remoteChildren = Array.isArray(dir.children) ? dir.children : [];
+        let remoteParents = Array.isArray(dir.parents) ? dir.parents : [];
+        let remoteTherapists = Array.isArray(dir.therapists) ? dir.therapists : [];
+
+        // If server directory is empty and this is an admin session, seed it from local (persisted + additions).
+        if (isAdmin && !remoteChildren.length && !remoteParents.length && !remoteTherapists.length) {
+          const localParents = mergeById(parents || [], additionalParents);
+          const localChildren = mergeById((children || []).map(stripComputedChildFields), additionalChildren);
+          const derivedTherapists = deriveTherapistsFromChildren(localChildren);
+          const localTherapists = mergeById(therapists || [], derivedTherapists);
+
+          await Api.mergeDirectory({
+            parents: localParents,
+            children: localChildren,
+            therapists: localTherapists,
+          });
+
+          dir = await Api.getDirectory();
+          if (dir && dir.ok) {
+            remoteChildren = Array.isArray(dir.children) ? dir.children : remoteChildren;
+            remoteParents = Array.isArray(dir.parents) ? dir.parents : remoteParents;
+            remoteTherapists = Array.isArray(dir.therapists) ? dir.therapists : remoteTherapists;
+          }
+        }
+
+        setParents(remoteParents);
+        setTherapists(remoteTherapists);
+        setChildren(attachTherapistsToChildren(remoteChildren, remoteTherapists, dir.aba));
+      }
+    } catch (e) {
+      console.warn('getDirectory failed', e?.message || e);
+    }
   }
 
-  // Trigger network fetch once auth has finished loading so API calls include auth token
+  // Trigger network fetch once auth has finished loading and a user is signed in.
   useEffect(() => {
     let mounted = true;
-    if (loading) return () => { mounted = false; };
+    if (loading || !user) return () => { mounted = false; };
+
     try {
       InteractionManager.runAfterInteractions(() => {
         if (!mounted) return;
         console.log('DataProvider: running fetchAndSync after auth ready', new Date().toISOString());
         fetchAndSync().catch((e) => console.warn('fetchAndSync after auth failed', e?.message || e));
       });
-    } catch (e) {
+    } catch (_) {
       // fallback
       fetchAndSync().catch(() => {});
     }
+
     return () => { mounted = false; };
   }, [loading, user]);
 

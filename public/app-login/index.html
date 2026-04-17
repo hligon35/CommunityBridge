@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BuddyBoard – App Login</title>
+    <meta name="robots" content="noindex" />
+    <style>
+      :root { --bg:#0b1220; --card:#0f1a33; --text:#e5e7eb; --muted:#94a3b8; --accent:#22c55e; --danger:#ef4444; --line: rgba(255,255,255,.10); }
+      *{box-sizing:border-box}
+      body{margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background: radial-gradient(1200px 700px at 20% 0%, #1b2a52 0%, var(--bg) 55%); color:var(--text);}
+      a{color:inherit}
+      .wrap{max-width: 520px; margin: 0 auto; padding: 42px 18px;}
+      .card{background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03)); border: 1px solid var(--line); border-radius: 18px; padding: 18px;}
+      h1{margin:0 0 8px; font-size: 26px}
+      p{margin:0 0 14px; color: var(--muted); line-height:1.5}
+      label{display:block; font-size: 12px; color: var(--muted); margin: 10px 0 6px}
+      input{width:100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0,0,0,.18); color: var(--text); outline: none;}
+      input:focus{border-color: rgba(34,197,94,.55)}
+      .row{display:flex; gap: 10px; flex-wrap: wrap; margin-top: 12px}
+      .btn{display:inline-flex; align-items:center; justify-content:center; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); text-decoration:none; background: rgba(255,255,255,.04); color: var(--text); cursor: pointer;}
+      .btnPrimary{background: rgba(34,197,94,.14); border-color: rgba(34,197,94,.35)}
+      .btnDanger{background: rgba(239,68,68,.14); border-color: rgba(239,68,68,.35)}
+      .msg{margin-top: 10px; font-size: 13px; color: var(--muted)}
+      .msg.err{color: #fecaca}
+      .pill{display:inline-flex; gap:8px; align-items:center; border:1px solid var(--line); border-radius: 999px; padding: 8px 10px; background: rgba(255,255,255,.03)}
+      .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; color: var(--muted)}
+      .hr{height:1px; background: var(--line); margin: 14px 0}
+      .small{font-size: 12px; color: var(--muted)}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap: 10px;">
+          <h1>App Login</h1>
+          <div style="display:flex; gap: 10px; flex-wrap: wrap; justify-content:flex-end;">
+            <a class="btn" href="/support">Support</a>
+            <a class="btn" href="/">Home</a>
+          </div>
+        </div>
+        <p>Sign in with the same email and password you use in the BuddyBoard mobile app.</p>
+
+        <div id="signedOut">
+          <label for="email">Email</label>
+          <input id="email" autocomplete="email" inputmode="email" placeholder="you@example.com" />
+
+          <label for="password">Password</label>
+          <input id="password" type="password" autocomplete="current-password" placeholder="Password" />
+
+          <div class="row">
+            <button id="btnLogin" class="btn btnPrimary" type="button">Sign in</button>
+            <button id="btnReset" class="btn" type="button">Send reset link</button>
+          </div>
+          <div id="msg" class="msg"></div>
+
+          <div class="hr"></div>
+          <div class="small">
+            If you plan to use this on <span class="mono">buddy-board.com</span>, add that domain in Firebase Console → Authentication → Settings → Authorized domains.
+          </div>
+          <div class="small" style="margin-top: 10px;">
+            <a href="/support">Support</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a>
+          </div>
+        </div>
+
+        <div id="signedIn" style="display:none;">
+          <div class="pill">
+            <div style="width:10px;height:10px;border-radius:999px;background:var(--accent);"></div>
+            <div>
+              <div style="font-weight:800;">Signed in</div>
+              <div id="who" class="mono"></div>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top: 14px;">
+            <a class="btn btnPrimary" href="buddyboard://">Open the mobile app</a>
+            <button id="btnLogout" class="btn btnDanger" type="button">Sign out</button>
+          </div>
+
+          <div class="msg">
+            This page authenticates with Firebase. It does not replace the mobile app UI.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
+      import {
+        getAuth,
+        onAuthStateChanged,
+        signInWithEmailAndPassword,
+        signOut,
+        sendPasswordResetEmail
+      } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
+
+      // NOTE: Firebase config is not a secret; it identifies your Firebase project.
+      // If you later create a dedicated Web App in Firebase, you can replace these values with the Web config.
+      const firebaseConfig = {
+        apiKey: 'AIzaSyDp-yfw3d7uzs43tf5SaJd0czIBcWwNpDc',
+        authDomain: 'buddyboard-7acda.firebaseapp.com',
+        projectId: 'buddyboard-7acda',
+        storageBucket: 'buddyboard-7acda.firebasestorage.app',
+        messagingSenderId: '870175047052',
+        appId: '1:870175047052:android:ff966198b531ee97a9eaa9'
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+
+      const $ = (id) => document.getElementById(id);
+      const emailEl = $('email');
+      const passEl = $('password');
+      const msgEl = $('msg');
+      const signedOut = $('signedOut');
+      const signedIn = $('signedIn');
+      const who = $('who');
+
+      function setMsg(text, isErr = false) {
+        msgEl.textContent = text || '';
+        msgEl.className = isErr ? 'msg err' : 'msg';
+      }
+
+      $('btnLogin').addEventListener('click', async () => {
+        setMsg('');
+        const email = String(emailEl.value || '').trim();
+        const password = String(passEl.value || '');
+        if (!email || !password) {
+          setMsg('Enter email and password.', true);
+          return;
+        }
+        try {
+          await signInWithEmailAndPassword(auth, email, password);
+          setMsg('');
+        } catch (e) {
+          setMsg(e?.message || 'Sign-in failed.', true);
+        }
+      });
+
+      $('btnReset').addEventListener('click', async () => {
+        setMsg('');
+        const email = String(emailEl.value || '').trim();
+        if (!email) {
+          setMsg('Enter your email first.', true);
+          return;
+        }
+        try {
+          await sendPasswordResetEmail(auth, email);
+          setMsg('If an account exists, a reset link has been sent.');
+        } catch (e) {
+          setMsg(e?.message || 'Reset failed.', true);
+        }
+      });
+
+      $('btnLogout').addEventListener('click', async () => {
+        setMsg('');
+        try { await signOut(auth); } catch (_) {}
+      });
+
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          signedOut.style.display = 'none';
+          signedIn.style.display = 'block';
+          who.textContent = `${user.email || '(no email)'}  ·  ${user.uid}`;
+        } else {
+          signedIn.style.display = 'none';
+          signedOut.style.display = 'block';
+          who.textContent = '';
+          setMsg('');
+        }
+      });
+    </script>
+  </body>
+</html>

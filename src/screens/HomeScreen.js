@@ -1,7 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Button, FlatList, Image, TouchableOpacity, ActivityIndicator, StyleSheet, Modal, Alert, TouchableWithoutFeedback, Linking, Platform, Share, RefreshControl, Keyboard } from 'react-native';
 import { ScreenWrapper, CenteredContainer } from '../components/ScreenWrapper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../AuthContext';
@@ -103,13 +102,14 @@ export default function HomeScreen() {
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [shareTargetPost, setShareTargetPost] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const insets = useSafeAreaInsets();
-  const [bannerHeight, setBannerHeight] = useState(0);
-  const [showStickyInput, setShowStickyInput] = useState(false);
-  const [isComposerFocused, setIsComposerFocused] = useState(false);
-  const NATIVE_HEADER_HEIGHT = -55; // approximate native stack header height
-  const scrollY = useRef(0);
   const displayedPosts = React.useMemo(() => (posts || []), [posts]);
+  const feedItems = React.useMemo(() => {
+    const items = [{ __type: 'composer', id: '__composer__' }];
+    const hasPosts = Array.isArray(displayedPosts) && displayedPosts.length > 0;
+    if (!showWall || !hasPosts) items.push({ __type: 'empty', id: '__empty__' });
+    if (showWall && hasPosts) items.push(...displayedPosts);
+    return items;
+  }, [displayedPosts, showWall]);
 
   React.useEffect(() => {
     try {
@@ -240,113 +240,76 @@ export default function HomeScreen() {
     <ScreenWrapper bannerShowBack={false} hideBanner={true}>
       <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
         <CenteredContainer>
-      <View onLayout={(e) => setBannerHeight(e.nativeEvent.layout.height)} style={{ width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#fff', alignItems: 'center' }}>
-        <Text style={{ fontSize: 18, fontWeight: '700' }}>Post Board</Text>
-      </View>
-
-      <View style={styles.inputTileCompact}>
-        <Image source={{ uri: (user?.avatar && !String(user.avatar).includes('pravatar.cc')) ? user.avatar : pravatarUriFor(user, 80) }} style={styles.inputAvatarCompact} />
-
-        <TextInput
-          placeholder="Share something..."
-          value={body}
-          onChangeText={setBody}
-          style={[styles.inputTextCompact, { flex: 1, marginHorizontal: 6 }]}
-          multiline
-          onFocus={() => setIsComposerFocused(true)}
-          onBlur={() => setIsComposerFocused(false)}
-        />
-
-        <TouchableOpacity style={styles.pickButtonCompact} onPress={onAttachPress} accessibilityLabel="Attach">
-          <MaterialIcons name="attach-file" size={20} color="#444" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.postButtonCompact} onPress={handlePost} accessibilityLabel="Post">
-          <Ionicons name="send" size={18} color="#fff" />
-        </TouchableOpacity>
-      </View>
-
-      {!showWall ? (
-        <View style={{ padding: 20, alignItems: 'center' }}>
-          <Text style={{ fontSize: 16, color: '#6b7280' }}>No posts yet...</Text>
-        </View>
-      ) : (
       <FlatList
-        data={displayedPosts}
+        data={feedItems}
         onTouchStart={() => Keyboard.dismiss()}
-        keyExtractor={(i) => i.id}
+        keyExtractor={(i) => (i && i.id ? String(i.id) : String(i?.__type || Math.random()))}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        onScroll={(e) => {
-          const y = e.nativeEvent.contentOffset.y || 0;
-          scrollY.current = y;
-          // show sticky input once the banner (index 0 header) has scrolled off
-          if (bannerHeight && y > (bannerHeight - 4)) {
-            if (!showStickyInput && !isComposerFocused) setShowStickyInput(true);
-          } else {
-            if (showStickyInput) setShowStickyInput(false);
-          }
-        }}
-        scrollEventThrottle={16}
         renderItem={({ item }) => (
-          <PostCard
-            post={item}
-            onLike={() => like(item.id)}
-            onComment={() => navigation.navigate('PostThread', { postId: item.id })}
-            onShare={() => openShareModal(item)}
-            onAvatarPress={async (author) => {
-              // attempt to enrich author with known records (children/therapists)
-              let full = author || {};
-              const tryFind = (list) => (list || []).find((u) => (u.id && full.id && u.id === full.id) || (u.name && full.name && u.name === full.name));
-              const found = tryFind(children) || tryFind(therapists);
-              if (found) full = { ...found, ...full };
-              // If the tapped user is the current user, respect local privacy settings persisted in AsyncStorage
-              try {
-                const SHOW_EMAIL_KEY = 'settings_show_email_v1';
-                const SHOW_PHONE_KEY = 'settings_show_phone_v1';
-                if (full && user && full.id && user.id && full.id === user.id) {
-                  const se = await AsyncStorage.getItem(SHOW_EMAIL_KEY);
-                  const sp = await AsyncStorage.getItem(SHOW_PHONE_KEY);
-                  if (se !== null) full.showEmail = (se === '1');
-                  if (sp !== null) full.showPhone = (sp === '1');
+          item?.__type === 'composer' ? (
+            <View>
+              <View style={{ width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#fff', alignItems: 'center' }}>
+                <Text style={{ fontSize: 18, fontWeight: '700' }}>Post Board</Text>
+              </View>
+              <View style={styles.inputTileCompact}>
+                <Image source={{ uri: (user?.avatar && !String(user.avatar).includes('pravatar.cc')) ? user.avatar : pravatarUriFor(user, 80) }} style={styles.inputAvatarCompact} />
+
+                <TextInput
+                  placeholder="Share something..."
+                  value={body}
+                  onChangeText={setBody}
+                  style={[styles.inputTextCompact, { flex: 1, marginHorizontal: 6 }]}
+                  multiline
+                />
+
+                <TouchableOpacity style={styles.pickButtonCompact} onPress={onAttachPress} accessibilityLabel="Attach">
+                  <MaterialIcons name="attach-file" size={20} color="#444" />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.postButtonCompact} onPress={handlePost} accessibilityLabel="Post">
+                  <Ionicons name="send" size={18} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : item?.__type === 'empty' ? (
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <Text style={{ fontSize: 16, color: '#6b7280' }}>No posts yet...</Text>
+            </View>
+          ) : (
+            <PostCard
+              post={item}
+              onLike={() => like(item.id)}
+              onComment={() => navigation.navigate('PostThread', { postId: item.id })}
+              onShare={() => openShareModal(item)}
+              onAvatarPress={async (author) => {
+                // attempt to enrich author with known records (children/therapists)
+                let full = author || {};
+                const tryFind = (list) => (list || []).find((u) => (u.id && full.id && u.id === full.id) || (u.name && full.name && u.name === full.name));
+                const found = tryFind(children) || tryFind(therapists);
+                if (found) full = { ...found, ...full };
+                // If the tapped user is the current user, respect local privacy settings persisted in AsyncStorage
+                try {
+                  const SHOW_EMAIL_KEY = 'settings_show_email_v1';
+                  const SHOW_PHONE_KEY = 'settings_show_phone_v1';
+                  if (full && user && full.id && user.id && full.id === user.id) {
+                    const se = await AsyncStorage.getItem(SHOW_EMAIL_KEY);
+                    const sp = await AsyncStorage.getItem(SHOW_PHONE_KEY);
+                    if (se !== null) full.showEmail = (se === '1');
+                    if (sp !== null) full.showPhone = (sp === '1');
+                  }
+                } catch (e) {
+                  // ignore
                 }
-              } catch (e) {
-                // ignore
-              }
-              setSelectedUser(full);
-              setShowUserModal(true);
-            }}
-          />
+                setSelectedUser(full);
+                setShowUserModal(true);
+              }}
+            />
+          )
         )}
         
       />
-      )}
-      {/* sticky input clone positioned at top when banner scrolls away */}
-      {showStickyInput ? (
-        <View style={{ position: 'absolute', left: 0, right: 0, top: insets.top + NATIVE_HEADER_HEIGHT, zIndex: 50, alignItems: 'center' }} pointerEvents="box-none">
-          <View style={{ width: '100%', maxWidth: 720}} pointerEvents="box-none">
-            <View style={[styles.inputTileCompact, { marginHorizontal: 0 }]}> 
-              <Image source={{ uri: (user?.avatar && !String(user.avatar).includes('pravatar.cc')) ? user.avatar : pravatarUriFor(user, 80) }} style={styles.inputAvatarCompact} />
-              <TextInput
-                placeholder="Share something..."
-                value={body}
-                onChangeText={setBody}
-                style={[styles.inputTextCompact, { flex: 1, marginHorizontal: 6 }]}
-                multiline
-                onFocus={() => setIsComposerFocused(true)}
-                onBlur={() => setIsComposerFocused(false)}
-              />
-              <TouchableOpacity style={styles.pickButtonCompact} onPress={onAttachPress} accessibilityLabel="Attach">
-                <MaterialIcons name="attach-file" size={20} color="#444" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.postButtonCompact} onPress={handlePost} accessibilityLabel="Post">
-                <Ionicons name="send" size={18} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      ) : null}
       {/* Modals moved outside the header so they don't become sticky */}
       {showLinkModal && (
         <Modal transparent visible animationType="fade">

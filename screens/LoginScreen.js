@@ -1,14 +1,14 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Modal, Platform, ImageBackground } from 'react-native';
+import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Modal, Platform, ImageBackground, KeyboardAvoidingView, ScrollView, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import SignUpScreen from './SignUpScreen';
+import ForgotPasswordScreen from './ForgotPasswordScreen';
 import { useAuth } from '../src/AuthContext';
 import LogoTitle from '../src/components/LogoTitle';
 import { logger } from '../src/utils/logger';
-import { API_BASE_URL } from '../src/Api';
 import { Sentry } from '../src/sentry';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -23,6 +23,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   const [biometricLabel, setBiometricLabel] = useState('Use biometrics');
   const [hasBiometricAuthStored, setHasBiometricAuthStored] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const auth = useAuth();
 
   // Google sign-in is currently disabled per product decision.
@@ -52,38 +53,17 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       logger.debug('auth', 'Login submit', { hasEmail: !!cleanedEmail });
       const res = await auth.login(cleanedEmail, cleanedPassword);
       try {
-        await SecureStore.setItemAsync('bb_bio_token', String(res?.token || auth?.token || ''));
+        await SecureStore.setItemAsync('bb_bio_enabled', '1');
         await SecureStore.setItemAsync('bb_bio_user', JSON.stringify(res?.user || auth?.user || {}));
         setHasBiometricAuthStored(true);
-      } catch (e) {}
+      } catch (_) {}
       navigation.replace('Main');
-    }catch(e){
+    } catch (e) {
       logger.warn('auth', 'Login failed', { message: e?.message || String(e) });
-      const status = e?.response?.status;
-      const responseData = e?.response?.data;
-
-      const msg = e?.message || 'Please check credentials';
-      const isNetworkish = /network|timeout|ssl|certificate|ats/i.test(String(msg));
-      const isBadGateway = status === 502;
-
-      const base = API_BASE_URL || '(unset)';
-      const detailLines = [];
-      if (status) detailLines.push(`Status: ${status}`);
-      if (base) detailLines.push(`Server: ${base}`);
-      if (isBadGateway) detailLines.push('Note: 502 usually means the proxy/server could not reach the backend.');
-      if (responseData != null && typeof responseData === 'string' && responseData.trim()) {
-        detailLines.push(`Response: ${responseData.slice(0, 300)}`);
-      } else if (responseData != null && typeof responseData === 'object') {
-        try {
-          detailLines.push(`Response: ${JSON.stringify(responseData).slice(0, 300)}`);
-        } catch (e) {
-          // ignore
-        }
-      }
-
-      const detail = (isNetworkish || status) ? `\n\n${detailLines.join('\n')}` : '';
-      Alert.alert('Login failed', `${msg}${detail}`);
-    }finally{ setBusy(false); }
+      Alert.alert('Login failed', e?.message || 'Please check your credentials and try again.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   function showGoogleConfigHelp() {
@@ -106,7 +86,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       Sentry.withScope((scope) => {
         scope.setTag('bb_sentry_test', '1');
         scope.setTag('bb_env', sentryEnv || 'unknown');
-        scope.setExtra('apiBaseUrl', API_BASE_URL || '');
+        scope.setExtra('apiBaseUrl', '');
         scope.setExtra('time', new Date().toISOString());
         Sentry.captureException(new Error('BuddyBoard Sentry test error (internal build)'));
       });
@@ -120,9 +100,9 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   async function doBiometricUnlock() {
     setBiometricBusy(true);
     try {
-      const storedToken = await SecureStore.getItemAsync('bb_bio_token');
+      const storedEnabled = await SecureStore.getItemAsync('bb_bio_enabled');
       const storedUser = await SecureStore.getItemAsync('bb_bio_user');
-      if (!storedToken || !storedUser) {
+      if (!storedEnabled || !storedUser) {
         Alert.alert('Biometric sign-in', 'No saved sign-in found. Please sign in with email and password first.');
         return;
       }
@@ -134,9 +114,10 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       });
 
       if (result?.success) {
-        let parsedUser = null;
-        try { parsedUser = JSON.parse(storedUser); } catch (e) {}
-        await auth.setAuth({ token: storedToken, user: parsedUser || undefined });
+        if (!auth?.token) {
+          Alert.alert('Biometric unlock', 'Please sign in with email and password.');
+          return;
+        }
         navigation.replace('Main');
         return;
       }
@@ -197,9 +178,9 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     let mounted = true;
     (async () => {
       try {
-        const storedToken = await SecureStore.getItemAsync('bb_bio_token');
+        const storedEnabled = await SecureStore.getItemAsync('bb_bio_enabled');
         const storedUser = await SecureStore.getItemAsync('bb_bio_user');
-        if (mounted) setHasBiometricAuthStored(!!storedToken && !!storedUser);
+        if (mounted) setHasBiometricAuthStored(!!storedEnabled && !!storedUser);
       } catch (e) {
         if (mounted) setHasBiometricAuthStored(false);
       }
@@ -225,42 +206,52 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       style={{ flex: 1, backgroundColor: '#fff' }}
       imageStyle={{ transform: [{ scale: 0.92 }] }}
     >
-      <View style={styles.container}>
-        <View style={styles.logoWrap}>
-          <LogoTitle width={450} height={135} />
-        </View>
-        <View style={styles.formCard}>
-          <View style={fieldWidthStyle}>
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              style={styles.input}
-              placeholder="Email"
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <ScrollView
+            contentContainerStyle={styles.container}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
+            <View style={styles.logoWrap}>
+              <LogoTitle width={450} height={135} />
+            </View>
+            <View style={styles.formCard}>
+              <View style={fieldWidthStyle}>
+                <TextInput
+                  value={email}
+                  onChangeText={setEmail}
+                  style={styles.input}
+                  placeholder="Email"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
 
-          <View style={[fieldWidthStyle, styles.passwordFieldWrap]}>
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              style={[styles.input, styles.passwordInput]}
-              placeholder="Password"
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="password"
-            />
-            <TouchableOpacity
-              style={styles.peekIconBtn}
-              onPress={() => setShowPassword((v) => !v)}
-              accessibilityRole="button"
-              accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-            >
-              <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color="#2563eb" />
-            </TouchableOpacity>
-          </View>
+              <View style={[fieldWidthStyle, styles.passwordFieldWrap]}>
+                <TextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  style={[styles.input, styles.passwordInput]}
+                  placeholder="Password"
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textContentType="password"
+                />
+                <TouchableOpacity
+                  style={styles.peekIconBtn}
+                  onPress={() => setShowPassword((v) => !v)}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color="#2563eb" />
+                </TouchableOpacity>
+              </View>
 
           <View style={styles.actionsRow}>
             {showSentryTestButton ? (
@@ -305,25 +296,25 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
           <View style={styles.linksRow}>
             <TouchableOpacity
-              onPress={() => {
-                try {
-                  WebBrowser.openBrowserAsync('mailto:support@example.com?subject=BuddyBoard%20Password%20Reset');
-                } catch (e) {
-                  Alert.alert('Password reset', 'Please email support@example.com for help resetting your password.');
-                }
-              }}
-              accessibilityRole="button"
-              disabled={busy}
-            >
-              <Text style={styles.linkText}>Forgot password?</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
               onPress={() => setShowSignUp(true)}
               accessibilityRole="button"
               disabled={busy}
             >
               <Text style={styles.linkText}>Register</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.linkSeparator} accessibilityElementsHidden accessibilityIgnoresInvertColors>
+              /
+            </Text>
+
+            <TouchableOpacity
+              onPress={() => {
+                setShowForgotPassword(true);
+              }}
+              accessibilityRole="button"
+              disabled={busy}
+            >
+              <Text style={styles.linkText}>Forgot password?</Text>
             </TouchableOpacity>
           </View>
 
@@ -334,6 +325,13 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
                 if (result && result.authed) navigation.replace('Main');
               }}
               onCancel={() => setShowSignUp(false)}
+            />
+          </Modal>
+
+          <Modal visible={showForgotPassword} animationType="slide" onRequestClose={() => setShowForgotPassword(false)}>
+            <ForgotPasswordScreen
+              onDone={() => setShowForgotPassword(false)}
+              onCancel={() => setShowForgotPassword(false)}
             />
           </Modal>
 
@@ -361,9 +359,11 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
             {/* Internal Sentry test moved to icon button near Sign In */}
           </View>
-        </View>
-    </View>
-    </ImageBackground>
+              </View>
+            </ScrollView>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </ImageBackground>
   );
 }
 
@@ -382,8 +382,9 @@ const styles = StyleSheet.create({
   primaryPushBtn: { backgroundColor: '#2563eb', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 10, minWidth: 140, alignItems: 'center' },
   primaryPushBtnText: { color: '#fff', fontWeight: '800' },
   iconPushBtn: { width: 44, height: 44, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' },
-  linksRow: { marginTop: 12, width: '100%', maxWidth: 360, flexDirection: 'row', justifyContent: 'space-between', alignSelf: 'center' },
+  linksRow: { marginTop: 12, width: '100%', maxWidth: 360, flexDirection: 'row', justifyContent: 'center', alignSelf: 'center', alignItems: 'center' },
   linkText: { color: '#2563eb', fontWeight: '700' },
+  linkSeparator: { marginHorizontal: 10, color: '#6b7280', fontWeight: '700' },
   secondaryActions: { marginTop: 10, alignItems: 'center' },
   secondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc', width: '100%', maxWidth: 360 },
   secondaryBtnText: { marginLeft: 8, color: '#111827', fontWeight: '700' },

@@ -4,6 +4,17 @@ import { ScreenWrapper } from '../components/ScreenWrapper';
 import { MaterialIcons } from '@expo/vector-icons';
 // header provided by ScreenWrapper
 
+const SUPPORT_EMAIL = (() => {
+  try {
+    const v = (typeof process !== 'undefined' && process.env && process.env.EXPO_PUBLIC_SUPPORT_EMAIL)
+      ? String(process.env.EXPO_PUBLIC_SUPPORT_EMAIL)
+      : '';
+    return v.trim() || 'support@buddyboard.getsparqd.com';
+  } catch (e) {
+    return 'support@buddyboard.getsparqd.com';
+  }
+})();
+
 export default function HelpScreen() {
   return (
     <ScreenWrapper hideBanner style={styles.container}>
@@ -38,7 +49,7 @@ export default function HelpScreen() {
           To sign out, use the Logout button in the top-right. For account issues or to request help, tap the button below to email support.
         </Text>
 
-        <TouchableOpacity style={styles.contact} onPress={() => Linking.openURL('mailto:support@example.com') }>
+        <TouchableOpacity style={styles.contact} onPress={() => Linking.openURL(`mailto:${encodeURIComponent(SUPPORT_EMAIL)}?subject=${encodeURIComponent('BuddyBoard Support')}`) }>
           <MaterialIcons name="email" size={20} color="#fff" style={{ marginRight: 8 }} />
           <Text style={styles.contactText}>Email Support</Text>
         </TouchableOpacity>

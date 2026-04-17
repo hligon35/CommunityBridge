@@ -1,0 +1,21 @@
+# Keep EAS upload tarballs small and avoid bundling transient artifacts.
+
+.git/
+.expo/
+.vscode/
+
+node_modules/
+
+dist/
+build/
+.web-dist/
+
+android/**/build/
+ios/**/build/
+
+.data/
+
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

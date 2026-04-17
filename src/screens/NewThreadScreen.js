@@ -21,6 +21,17 @@ function sameName(a, b) {
   return normalizeName(a).toLowerCase() === normalizeName(b).toLowerCase();
 }
 
+function normalizeEmail(email) {
+  const e = (email || '').toString().trim().toLowerCase();
+  return e.includes('@') ? e : '';
+}
+
+function sameEmail(a, b) {
+  const ea = normalizeEmail(a);
+  const eb = normalizeEmail(b);
+  return !!(ea && eb && ea === eb);
+}
+
 function RoleSection({ title, items, selectedId, onPick }) {
   if (!items || items.length === 0) return null;
 
@@ -95,7 +106,15 @@ export default function NewThreadScreen({ navigation }) {
 
     // Parent connections: family parents + child therapists.
     if (isParent) {
-      const me = normalizedParents.find((p) => p.id === user?.id) || normalizedParents.find((p) => sameName(p.name, user?.name));
+      const rawParents = Array.isArray(parents) ? parents : [];
+      const myParentId = rawParents.find((p) => p && (p.id === user?.id))?.id
+        || rawParents.find((p) => p && sameEmail(p.email, user?.email))?.id
+        || rawParents.find((p) => p && sameName(fullNameFromParent(p), user?.name))?.id
+        || null;
+
+      const me = myParentId
+        ? (normalizedParents.find((p) => p.id === myParentId) || null)
+        : null;
       if (!me) {
         return {
           admins: adminContacts,
@@ -132,7 +151,15 @@ export default function NewThreadScreen({ navigation }) {
 
     // Therapist connections: parents of assigned children + therapist supervisor/team.
     if (isTherapist) {
-      const me = normalizedTherapists.find((t) => t.id === user?.id) || normalizedTherapists.find((t) => sameName(t.name, user?.name));
+      const rawTherapists = Array.isArray(therapists) ? therapists : [];
+      const myTherapistId = rawTherapists.find((t) => t && (t.id === user?.id))?.id
+        || rawTherapists.find((t) => t && sameEmail(t.email, user?.email))?.id
+        || rawTherapists.find((t) => t && sameName(t.name, user?.name))?.id
+        || null;
+
+      const me = myTherapistId
+        ? (normalizedTherapists.find((t) => t.id === myTherapistId) || null)
+        : null;
       if (!me) {
         return {
           admins: adminContacts,

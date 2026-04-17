@@ -102,7 +102,7 @@ export default function ParentDetailScreen() {
           })()}
           <View style={{ marginLeft: 12, flex: 1 }}>
               <Text style={styles.name}>{parent.firstName ? `${parent.firstName} ${parent.lastName}` : parent.name}</Text>
-              <Text style={styles.meta}>{formatIdForDisplay(parent.id, { allow: true })}</Text>
+             <Text style={styles.meta}>{formatIdForDisplay(parent.id)}</Text>
           </View>
           <View style={styles.headerActionsRight}>
             {parent.phone ? (

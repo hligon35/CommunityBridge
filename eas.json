@@ -21,6 +21,24 @@
       },
       "channel": "internal"
     },
+    "testflight-internal": {
+      "node": "20.19.4",
+      "distribution": "store",
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "ios": {
+        "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "testflight-internal",
+        "SENTRY_ORG": "sparq-digital",
+        "SENTRY_PROJECT": "sparqplug",
+        "SENTRY_ALLOW_FAILURE": "true",
+        "EXPO_PUBLIC_API_BASE_URL": "https://buddyboard.getsparqd.com"
+      },
+      "channel": "testflight-internal"
+    },
     "development": {
       "node": "20.19.4",
       "developmentClient": true,
@@ -82,6 +100,12 @@
       "android": {
         "serviceAccountKeyPath": "./google-play-service-account.json",
         "track": "internal"
+      }
+    },
+    "testflight-internal": {
+      "ios": {
+        "ascAppId": "6756227915",
+        "appleId": "ligon88harold@gmail.com"
       }
     },
     "production": {

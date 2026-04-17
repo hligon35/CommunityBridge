@@ -6,6 +6,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const Database = require('better-sqlite3');
 const multer = require('multer');
@@ -85,6 +86,10 @@ const TWILIO_MESSAGING_SERVICE_SID = (process.env.BB_TWILIO_MESSAGING_SERVICE_SI
 const SMTP_URL = (process.env.BB_SMTP_URL || '').trim();
 const EMAIL_FROM = (process.env.BB_EMAIL_FROM || '').trim();
 const EMAIL_2FA_SUBJECT = (process.env.BB_EMAIL_2FA_SUBJECT || 'BuddyBoard verification code').trim();
+const EMAIL_PASSWORD_RESET_SUBJECT = (process.env.BB_EMAIL_PASSWORD_RESET_SUBJECT || 'BuddyBoard password reset').trim();
+
+const RETURN_PASSWORD_RESET_CODE = envFlag(process.env.BB_RETURN_PASSWORD_RESET_CODE, NODE_ENV !== 'production');
+const PASSWORD_RESET_TTL_MINUTES = Math.max(5, Number(process.env.BB_PASSWORD_RESET_TTL_MINUTES || 30));
 
 const slog = require('./logger');
 
@@ -338,6 +343,51 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS directory_children (
+  id TEXT PRIMARY KEY,
+  data_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS directory_parents (
+  id TEXT PRIMARY KEY,
+  data_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS directory_therapists (
+  id TEXT PRIMARY KEY,
+  data_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+-- Normalized ABA relationships (derived from directory JSON).
+CREATE TABLE IF NOT EXISTS aba_supervision (
+  aba_id TEXT PRIMARY KEY,
+  bcba_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS child_aba_assignments (
+  child_id TEXT NOT NULL,
+  session TEXT NOT NULL,
+  aba_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (child_id, session)
+);
+
+CREATE TABLE IF NOT EXISTS org_settings (
+  id TEXT PRIMARY KEY,
+  data_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS posts (
   id TEXT PRIMARY KEY,
   author_json TEXT,
@@ -408,7 +458,80 @@ CREATE TABLE IF NOT EXISTS arrival_pings (
   when_iso TEXT,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS password_resets (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  token_hash TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  created_at TEXT NOT NULL
+);
 `);
+
+try {
+  db.exec('CREATE INDEX IF NOT EXISTS aba_supervision_bcba_idx ON aba_supervision (bcba_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS child_aba_assignments_aba_idx ON child_aba_assignments (aba_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS password_resets_user_id_idx ON password_resets (user_id)');
+} catch (_) {
+  // ignore
+}
+
+function passwordResetEmailConfigured() {
+  return !!(SMTP_URL && EMAIL_FROM);
+}
+
+let passwordResetTransporter = null;
+function getPasswordResetEmailTransporter() {
+  if (!passwordResetEmailConfigured()) return null;
+  if (passwordResetTransporter) return passwordResetTransporter;
+  const nodemailer = getNodemailerLib();
+  if (!nodemailer) {
+    throw new Error("Missing dependency 'nodemailer' in this server build. Rebuild your Docker image after installing dependencies (npm ci) so the nodemailer package is included.");
+  }
+  passwordResetTransporter = nodemailer.createTransport(SMTP_URL);
+  return passwordResetTransporter;
+}
+
+function hashResetCode(code) {
+  const raw = String(code || '');
+  return crypto.createHash('sha256').update(`${raw}:${JWT_SECRET}`).digest('hex');
+}
+
+function generateResetCode() {
+  // 12 hex chars (~48 bits). Short enough to type; large enough to avoid guessing.
+  return crypto.randomBytes(6).toString('hex');
+}
+
+async function sendPasswordResetEmail({ to, code }) {
+  const destination = normalizeEmail(to);
+  if (!destination) throw new Error('Invalid email destination');
+
+  const transporter = getPasswordResetEmailTransporter();
+  if (!transporter) {
+    throw new Error('Password reset email delivery is not configured (set BB_SMTP_URL and BB_EMAIL_FROM)');
+  }
+
+  const text = `BuddyBoard password reset code: ${code}.\n\nEnter this code in the app to set a new password.\n\nThis code expires in ${PASSWORD_RESET_TTL_MINUTES} minutes.`;
+  await transporter.sendMail({
+    from: EMAIL_FROM,
+    to: destination,
+    subject: EMAIL_PASSWORD_RESET_SUBJECT,
+    text,
+  });
+}
+
+function isAdminRole(role) {
+  const r = safeString(role).trim().toLowerCase();
+  return r === 'admin' || r === 'administrator';
+}
+
+function requireAdmin(req, res, next) {
+  try {
+    if (req.user && isAdminRole(req.user.role)) return next();
+  } catch (e) {}
+  return res.status(403).json({ ok: false, error: 'admin required' });
+}
 
 function ensureUserProfileColumns() {
   try {
@@ -431,6 +554,26 @@ function ensureUserProfileColumns() {
 
 ensureUserProfileColumns();
 
+function ensureUserEmailCaseInsensitiveUniqueness() {
+  try {
+    // If duplicates already exist (older DBs), creating a unique index will fail.
+    const dups = db
+      .prepare("SELECT lower(email) AS email_lc, COUNT(*) AS c FROM users GROUP BY lower(email) HAVING c > 1")
+      .all();
+    if (Array.isArray(dups) && dups.length) {
+      slog.warn('db', 'Duplicate user emails detected; cannot enforce case-insensitive uniqueness until cleaned up', { duplicates: dups.length });
+      return;
+    }
+
+    // Enforce case-insensitive uniqueness going forward.
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_email_nocase_idx ON users(email COLLATE NOCASE)");
+  } catch (e) {
+    slog.warn('db', 'users email NOCASE uniqueness index skipped', { message: e?.message || String(e) });
+  }
+}
+
+ensureUserEmailCaseInsensitiveUniqueness();
+
 // Lightweight migrations for older databases.
 try {
   const cols = db.prepare("PRAGMA table_info('urgent_memos')").all().map((c) => String(c.name));
@@ -449,6 +592,111 @@ function safeJsonParse(text, fallback) {
   } catch (_) {
     return fallback;
   }
+}
+
+function normalizeSession(value) {
+  const s = safeString(value).trim().toUpperCase();
+  if (s === 'AM' || s === 'PM') return s;
+  return null;
+}
+
+function normalizeId(value) {
+  const s = safeString(value).trim();
+  return s || null;
+}
+
+function deriveChildAbaAssignments(child) {
+  try {
+    const childId = normalizeId(child && child.id);
+    if (!childId) return [];
+
+    const rawAssigned = (child && (child.assignedABA || child.assigned_ABA || child.assigned)) || [];
+    const assignedArr = Array.isArray(rawAssigned) ? rawAssigned : [rawAssigned];
+    const assigned = assignedArr
+      .map((x) => normalizeId(x))
+      .filter(Boolean);
+
+    if (!assigned.length) return [];
+
+    const sess = normalizeSession(child && child.session);
+
+    if (assigned.length === 1) {
+      if (sess) return [{ childId, session: sess, abaId: assigned[0] }];
+      return [{ childId, session: 'AM', abaId: assigned[0] }];
+    }
+
+    if (sess === 'AM') {
+      return [
+        { childId, session: 'AM', abaId: assigned[0] },
+        { childId, session: 'PM', abaId: assigned[1] },
+      ];
+    }
+    if (sess === 'PM') {
+      return [
+        { childId, session: 'PM', abaId: assigned[0] },
+        { childId, session: 'AM', abaId: assigned[1] },
+      ];
+    }
+    return [
+      { childId, session: 'AM', abaId: assigned[0] },
+      { childId, session: 'PM', abaId: assigned[1] },
+    ];
+  } catch (_) {
+    return [];
+  }
+}
+
+function rebuildAbaRelationshipsFromDirectorySqlite(now) {
+  const therapistRows = db.prepare('SELECT data_json FROM directory_therapists').all();
+  const therapists = (therapistRows || [])
+    .map((r) => safeJsonParse(String(r && r.data_json ? r.data_json : ''), null))
+    .filter(Boolean);
+
+  const supervision = new Map();
+  for (const t of therapists) {
+    const abaId = normalizeId(t && t.id);
+    const bcbaId = normalizeId(t && (t.supervisedBy || t.supervised_by));
+    if (abaId && bcbaId) supervision.set(abaId, bcbaId);
+  }
+
+  const childRows = db.prepare('SELECT data_json FROM directory_children').all();
+  const children = (childRows || [])
+    .map((r) => safeJsonParse(String(r && r.data_json ? r.data_json : ''), null))
+    .filter(Boolean);
+
+  const assignments = new Map();
+  for (const c of children) {
+    const pairs = deriveChildAbaAssignments(c);
+    for (const p of pairs) assignments.set(`${p.childId}|${p.session}`, p);
+  }
+
+  db.prepare('DELETE FROM child_aba_assignments').run();
+  db.prepare('DELETE FROM aba_supervision').run();
+
+  const upsertSupervision = db.prepare(
+    'INSERT INTO aba_supervision (aba_id, bcba_id, created_at, updated_at) VALUES (?,?,?,?)\n' +
+    'ON CONFLICT(aba_id) DO UPDATE SET bcba_id=excluded.bcba_id, updated_at=excluded.updated_at'
+  );
+  const upsertAssignment = db.prepare(
+    'INSERT INTO child_aba_assignments (child_id, session, aba_id, created_at, updated_at) VALUES (?,?,?,?,?)\n' +
+    'ON CONFLICT(child_id, session) DO UPDATE SET aba_id=excluded.aba_id, updated_at=excluded.updated_at'
+  );
+
+  for (const [abaId, bcbaId] of supervision.entries()) {
+    upsertSupervision.run(abaId, bcbaId, now, now);
+  }
+  for (const p of assignments.values()) {
+    upsertAssignment.run(p.childId, p.session, p.abaId, now, now);
+  }
+
+  return { supervision: supervision.size, assignments: assignments.size };
+}
+
+// Best-effort: keep ABA relationship tables in sync at startup.
+try {
+  rebuildAbaRelationshipsFromDirectorySqlite(nowISO());
+} catch (_) {
+  // ignore
 }
 
 function roleLower(u) {
@@ -712,8 +960,355 @@ function authMiddleware(req, res, next) {
   }
 }
 
+function isParentRole(role) {
+  const r = safeString(role).trim().toLowerCase();
+  return r.includes('parent');
+}
+
+function isTherapistRole(role) {
+  const r = safeString(role).trim().toLowerCase();
+  return r.includes('therapist') || r.includes('bcba');
+}
+
+function isBcbaRole(role) {
+  const r = safeString(role).trim().toLowerCase();
+  return r.includes('bcba');
+}
+
+function pickDirectoryRecordForUser(user, records) {
+  const uid = safeString(user && user.id).trim();
+  if (uid) {
+    const byId = (records || []).find((r) => r && safeString(r.id).trim() === uid);
+    if (byId) return byId;
+  }
+  const uEmail = normalizeEmail(user && user.email);
+  if (uEmail) {
+    const matches = (records || []).filter((r) => r && normalizeEmail(r.email) === uEmail);
+    if (matches.length) return matches[0];
+  }
+  return null;
+}
+
+function childHasParentId(child, parentId) {
+  const pid = safeString(parentId).trim();
+  if (!pid) return false;
+  const list = Array.isArray(child && child.parents) ? child.parents : [];
+  return list.some((p) => {
+    if (!p) return false;
+    if (typeof p === 'string' || typeof p === 'number') return safeString(p).trim() === pid;
+    if (typeof p === 'object' && p.id != null) return safeString(p.id).trim() === pid;
+    return false;
+  });
+}
+
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, uptime: process.uptime() });
+});
+
+// Directory (SQLite-backed). Admin-only for now.
+app.get('/api/directory', authMiddleware, requireAdmin, (req, res) => {
+  try {
+    const children = db.prepare('SELECT data_json FROM directory_children ORDER BY updated_at DESC').all()
+      .map((r) => {
+        try { return JSON.parse(String(r.data_json || '')); } catch (e) { return null; }
+      }).filter(Boolean);
+    const parents = db.prepare('SELECT data_json FROM directory_parents ORDER BY updated_at DESC').all()
+      .map((r) => {
+        try { return JSON.parse(String(r.data_json || '')); } catch (e) { return null; }
+      }).filter(Boolean);
+    const therapists = db.prepare('SELECT data_json FROM directory_therapists ORDER BY updated_at DESC').all()
+      .map((r) => {
+        try { return JSON.parse(String(r.data_json || '')); } catch (e) { return null; }
+      }).filter(Boolean);
+
+    const assignments = db.prepare('SELECT child_id, session, aba_id FROM child_aba_assignments ORDER BY child_id ASC').all()
+      .map((r) => ({ childId: r.child_id, session: r.session, abaId: r.aba_id }));
+    const supervision = db.prepare('SELECT aba_id, bcba_id FROM aba_supervision ORDER BY aba_id ASC').all()
+      .map((r) => ({ abaId: r.aba_id, bcbaId: r.bcba_id }));
+
+    return res.json({ ok: true, children, parents, therapists, aba: { assignments, supervision } });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+// Directory scope for the current user (safe for non-admins).
+app.get('/api/directory/me', authMiddleware, (req, res) => {
+  try {
+    const allChildren = db.prepare('SELECT data_json FROM directory_children ORDER BY updated_at DESC').all()
+      .map((r) => {
+        try { return JSON.parse(String(r.data_json || '')); } catch (e) { return null; }
+      }).filter(Boolean);
+    const allParents = db.prepare('SELECT data_json FROM directory_parents ORDER BY updated_at DESC').all()
+      .map((r) => {
+        try { return JSON.parse(String(r.data_json || '')); } catch (e) { return null; }
+      }).filter(Boolean);
+    const allTherapists = db.prepare('SELECT data_json FROM directory_therapists ORDER BY updated_at DESC').all()
+      .map((r) => {
+        try { return JSON.parse(String(r.data_json || '')); } catch (e) { return null; }
+      }).filter(Boolean);
+
+    const allAssignments = db.prepare('SELECT child_id, session, aba_id FROM child_aba_assignments ORDER BY child_id ASC').all()
+      .map((r) => ({ childId: r.child_id, session: r.session, abaId: r.aba_id }));
+    const allSupervision = db.prepare('SELECT aba_id, bcba_id FROM aba_supervision ORDER BY aba_id ASC').all()
+      .map((r) => ({ abaId: r.aba_id, bcbaId: r.bcba_id }));
+
+    if (req.user && isAdminRole(req.user.role)) {
+      return res.json({ ok: true, children: allChildren, parents: allParents, therapists: allTherapists, aba: { assignments: allAssignments, supervision: allSupervision } });
+    }
+
+    const role = safeString(req.user && req.user.role);
+    const wantParent = isParentRole(role);
+    const wantTherapist = isTherapistRole(role);
+    const wantBcba = isBcbaRole(role);
+
+    const outChildIds = new Set();
+    const outParentIds = new Set();
+    const outTherapistIds = new Set();
+
+    const supervisionByAba = new Map();
+    (allSupervision || []).forEach((s) => {
+      const abaId = safeString(s && s.abaId).trim();
+      const bcbaId = safeString(s && s.bcbaId).trim();
+      if (abaId && bcbaId) supervisionByAba.set(abaId, bcbaId);
+    });
+
+    const assignmentsByChild = new Map();
+    (allAssignments || []).forEach((a) => {
+      const childId = safeString(a && a.childId).trim();
+      const abaId = safeString(a && a.abaId).trim();
+      const session = safeString(a && a.session).trim().toUpperCase();
+      if (!childId || !abaId) return;
+      const list = assignmentsByChild.get(childId) || [];
+      list.push({ childId, session, abaId });
+      assignmentsByChild.set(childId, list);
+    });
+
+    if (wantParent) {
+      const meParent = pickDirectoryRecordForUser(req.user, allParents);
+      if (!meParent) {
+        return res.json({ ok: true, children: [], parents: [], therapists: [], aba: { assignments: [], supervision: [] }, unlinked: true });
+      }
+
+      const meParentId = safeString(meParent.id).trim();
+      (allChildren || []).forEach((c) => {
+        const childId = safeString(c && c.id).trim();
+        if (!childId) return;
+        if (!childHasParentId(c, meParentId)) return;
+        outChildIds.add(childId);
+
+        const parentList = Array.isArray(c && c.parents) ? c.parents : [];
+        parentList.forEach((p) => {
+          const pid = (typeof p === 'object' && p && p.id != null) ? safeString(p.id).trim() : safeString(p).trim();
+          if (pid) outParentIds.add(pid);
+        });
+
+        const childAssignments = assignmentsByChild.get(childId) || [];
+        childAssignments.forEach((a) => {
+          if (a.abaId) outTherapistIds.add(a.abaId);
+        });
+
+        const rawAssigned = (c && (c.assignedABA || c.assigned_ABA || c.assigned)) || [];
+        const assignedArr = Array.isArray(rawAssigned) ? rawAssigned : [rawAssigned];
+        assignedArr.forEach((id) => {
+          const tid = safeString(id).trim();
+          if (tid) outTherapistIds.add(tid);
+        });
+      });
+
+      Array.from(outTherapistIds).forEach((abaId) => {
+        const bcbaId = supervisionByAba.get(abaId);
+        if (bcbaId) outTherapistIds.add(bcbaId);
+      });
+    } else if (wantTherapist) {
+      const meTherapist = pickDirectoryRecordForUser(req.user, allTherapists);
+      if (!meTherapist) {
+        return res.json({ ok: true, children: [], parents: [], therapists: [], aba: { assignments: [], supervision: [] }, unlinked: true });
+      }
+
+      const meTherapistId = safeString(meTherapist.id).trim();
+      if (meTherapistId) outTherapistIds.add(meTherapistId);
+
+      if (wantBcba) {
+        (allSupervision || []).forEach((s) => {
+          if (safeString(s && s.bcbaId).trim() === meTherapistId) {
+            const abaId = safeString(s && s.abaId).trim();
+            if (abaId) outTherapistIds.add(abaId);
+          }
+        });
+      } else {
+        const bcbaId = supervisionByAba.get(meTherapistId) || safeString(meTherapist.supervisedBy || meTherapist.supervised_by).trim();
+        if (bcbaId) outTherapistIds.add(bcbaId);
+      }
+
+      (allAssignments || []).forEach((a) => {
+        const childId = safeString(a && a.childId).trim();
+        const abaId = safeString(a && a.abaId).trim();
+        if (!childId || !abaId) return;
+        if (wantBcba) {
+          if (outTherapistIds.has(abaId) && abaId !== meTherapistId) outChildIds.add(childId);
+        } else {
+          if (abaId === meTherapistId) outChildIds.add(childId);
+        }
+      });
+
+      (allChildren || []).forEach((c) => {
+        const childId = safeString(c && c.id).trim();
+        if (!childId || !outChildIds.has(childId)) return;
+
+        const parentList = Array.isArray(c && c.parents) ? c.parents : [];
+        parentList.forEach((p) => {
+          const pid = (typeof p === 'object' && p && p.id != null) ? safeString(p.id).trim() : safeString(p).trim();
+          if (pid) outParentIds.add(pid);
+        });
+
+        const childAssignments = assignmentsByChild.get(childId) || [];
+        childAssignments.forEach((aa) => {
+          if (aa.abaId) outTherapistIds.add(aa.abaId);
+        });
+      });
+
+      Array.from(outTherapistIds).forEach((abaId) => {
+        const bcbaId = supervisionByAba.get(abaId);
+        if (bcbaId) outTherapistIds.add(bcbaId);
+      });
+    } else {
+      return res.json({ ok: true, children: [], parents: [], therapists: [], aba: { assignments: [], supervision: [] } });
+    }
+
+    const children = (allChildren || []).filter((c) => {
+      const id = safeString(c && c.id).trim();
+      return id && outChildIds.has(id);
+    });
+    const parents = (allParents || []).filter((p) => {
+      const id = safeString(p && p.id).trim();
+      return id && outParentIds.has(id);
+    });
+    const therapists = (allTherapists || []).filter((t) => {
+      const id = safeString(t && t.id).trim();
+      return id && outTherapistIds.has(id);
+    });
+
+    const abaAssignments = (allAssignments || []).filter((a) => {
+      const childId = safeString(a && a.childId).trim();
+      const abaId = safeString(a && a.abaId).trim();
+      return childId && abaId && outChildIds.has(childId) && outTherapistIds.has(abaId);
+    });
+    const abaSupervision = (allSupervision || []).filter((s) => {
+      const abaId = safeString(s && s.abaId).trim();
+      const bcbaId = safeString(s && s.bcbaId).trim();
+      return abaId && bcbaId && outTherapistIds.has(abaId) && outTherapistIds.has(bcbaId);
+    });
+
+    return res.json({ ok: true, children, parents, therapists, aba: { assignments: abaAssignments, supervision: abaSupervision } });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.post('/api/directory/merge', authMiddleware, requireAdmin, (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const children = Array.isArray(body.children) ? body.children : [];
+  const parents = Array.isArray(body.parents) ? body.parents : [];
+  const therapists = Array.isArray(body.therapists) ? body.therapists : [];
+
+  function normalize(items) {
+    const out = [];
+    for (const it of items) {
+      if (!it || typeof it !== 'object') continue;
+      const id = it.id != null ? String(it.id).trim() : '';
+      if (!id) continue;
+      out.push({ id, item: { ...it, id } });
+    }
+    return out;
+  }
+
+  const c = normalize(children);
+  const p = normalize(parents);
+  const t = normalize(therapists);
+  const now = nowISO();
+
+  const upsertChild = db.prepare(
+    'INSERT INTO directory_children (id, data_json, created_at, updated_at) VALUES (?,?,?,?)\n' +
+    'ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json, updated_at=excluded.updated_at'
+  );
+  const upsertParent = db.prepare(
+    'INSERT INTO directory_parents (id, data_json, created_at, updated_at) VALUES (?,?,?,?)\n' +
+    'ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json, updated_at=excluded.updated_at'
+  );
+  const upsertTherapist = db.prepare(
+    'INSERT INTO directory_therapists (id, data_json, created_at, updated_at) VALUES (?,?,?,?)\n' +
+    'ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json, updated_at=excluded.updated_at'
+  );
+
+  const tx = db.transaction(() => {
+    for (const row of c) upsertChild.run(row.id, JSON.stringify(row.item), now, now);
+    for (const row of p) upsertParent.run(row.id, JSON.stringify(row.item), now, now);
+    for (const row of t) upsertTherapist.run(row.id, JSON.stringify(row.item), now, now);
+
+    rebuildAbaRelationshipsFromDirectorySqlite(now);
+  });
+
+  try {
+    tx();
+    return res.json({ ok: true, upserted: { children: c.length, parents: p.length, therapists: t.length } });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+// ABA relationship maintenance (admin-only)
+app.post('/api/aba/refresh', authMiddleware, requireAdmin, (req, res) => {
+  const now = nowISO();
+  try {
+    const tx = db.transaction(() => rebuildAbaRelationshipsFromDirectorySqlite(now));
+    const rebuilt = tx();
+    return res.json({ ok: true, rebuilt });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+// Org settings (arrival/business location). Readable by any authed user; writable by admins.
+app.get('/api/org-settings', authMiddleware, (req, res) => {
+  try {
+    const row = db.prepare('SELECT data_json FROM org_settings WHERE id = ?').get('default');
+    let item = null;
+    if (row && row.data_json) {
+      try { item = JSON.parse(String(row.data_json)); } catch (e) { item = null; }
+    }
+    return res.json({ ok: true, item });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.put('/api/org-settings', authMiddleware, requireAdmin, (req, res) => {
+  const payload = req.body && typeof req.body === 'object' ? req.body : {};
+  const address = payload.address != null ? String(payload.address) : '';
+  const lat = payload.lat != null ? Number(payload.lat) : null;
+  const lng = payload.lng != null ? Number(payload.lng) : null;
+  const dropZoneMiles = payload.dropZoneMiles != null ? Number(payload.dropZoneMiles) : null;
+  const orgArrivalEnabled = (typeof payload.orgArrivalEnabled === 'boolean') ? payload.orgArrivalEnabled : null;
+
+  const item = {
+    address,
+    lat: Number.isFinite(lat) ? lat : null,
+    lng: Number.isFinite(lng) ? lng : null,
+    dropZoneMiles: Number.isFinite(dropZoneMiles) ? dropZoneMiles : null,
+    orgArrivalEnabled: orgArrivalEnabled,
+  };
+  const now = nowISO();
+
+  try {
+    db.prepare(
+      'INSERT INTO org_settings (id, data_json, created_at, updated_at) VALUES (?,?,?,?)\n' +
+      'ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json, updated_at=excluded.updated_at'
+    ).run('default', JSON.stringify(item), now, now);
+    return res.json({ ok: true, item });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
 });
 
 // Request logging (dev-friendly)
@@ -756,6 +1351,86 @@ app.post('/api/auth/login', (req, res) => {
   res.json({ token, user });
 });
 
+// Password reset (request a reset code)
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const email = (req.body && req.body.email) ? String(req.body.email).trim().toLowerCase() : '';
+  if (!email) return res.status(400).json({ ok: false, error: 'email required' });
+  if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'server missing BB_JWT_SECRET' });
+
+  // Always return ok to avoid account enumeration.
+  try {
+    const row = db.prepare('SELECT id,email FROM users WHERE lower(email) = ?').get(email);
+    if (row && row.id) {
+      const resetCode = generateResetCode();
+      const tokenHash = hashResetCode(resetCode);
+      const createdAt = nowISO();
+      const expiresAt = new Date(Date.now() + (PASSWORD_RESET_TTL_MINUTES * 60 * 1000)).toISOString();
+
+      try {
+        db.prepare('INSERT INTO password_resets (id, user_id, token_hash, expires_at, used_at, created_at) VALUES (?,?,?,?,?,?)')
+          .run(nanoId(), String(row.id), tokenHash, expiresAt, null, createdAt);
+      } catch (e) {
+        // Non-fatal: still attempt delivery.
+      }
+
+      // Try to deliver via email if configured; otherwise log.
+      try {
+        if (passwordResetEmailConfigured()) {
+          await sendPasswordResetEmail({ to: email, code: resetCode });
+        } else {
+          slog.warn('auth', 'Password reset requested but SMTP not configured; logging reset code', { email: maskEmail(email), resetCode });
+        }
+      } catch (e) {
+        slog.error('auth', 'Password reset delivery failed', { email: maskEmail(email), message: e?.message || String(e) });
+        // Fall back to logging for internal/dev convenience.
+        slog.warn('auth', 'Password reset code (fallback)', { email: maskEmail(email), resetCode });
+      }
+
+      const payload = { ok: true };
+      if (RETURN_PASSWORD_RESET_CODE) payload.resetCode = resetCode;
+      return res.json(payload);
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return res.json({ ok: true });
+});
+
+// Password reset (consume code and set a new password)
+app.post('/api/auth/reset-password', (req, res) => {
+  const email = (req.body && req.body.email) ? String(req.body.email).trim().toLowerCase() : '';
+  const resetCode = (req.body && (req.body.resetCode || req.body.code || req.body.token)) ? String(req.body.resetCode || req.body.code || req.body.token).trim() : '';
+  const newPassword = (req.body && req.body.newPassword) ? String(req.body.newPassword) : '';
+  if (!email || !resetCode || !newPassword) return res.status(400).json({ ok: false, error: 'email, resetCode, newPassword required' });
+  if (String(newPassword).length < 6) return res.status(400).json({ ok: false, error: 'password must be at least 6 characters' });
+  if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'server missing BB_JWT_SECRET' });
+
+  try {
+    const user = db.prepare('SELECT id,email FROM users WHERE lower(email) = ?').get(email);
+    if (!user || !user.id) return res.status(400).json({ ok: false, error: 'invalid code' });
+
+    const tokenHash = hashResetCode(resetCode);
+    const now = nowISO();
+    const row = db.prepare(
+      'SELECT * FROM password_resets WHERE user_id = ? AND token_hash = ? AND used_at IS NULL AND expires_at > ? ORDER BY created_at DESC LIMIT 1'
+    ).get(String(user.id), tokenHash, now);
+
+    if (!row) return res.status(400).json({ ok: false, error: 'invalid or expired code' });
+
+    const hash = bcrypt.hashSync(newPassword, 12);
+    const tx = db.transaction(() => {
+      db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(hash, now, String(user.id));
+      db.prepare('UPDATE password_resets SET used_at = ? WHERE id = ?').run(now, String(row.id));
+    });
+    tx();
+
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
 app.post('/api/auth/google', async (req, res) => {
   const idToken = (req.body && req.body.idToken) ? String(req.body.idToken).trim() : '';
   if (!idToken) return res.status(400).json({ ok: false, error: 'idToken required' });
@@ -782,9 +1457,14 @@ app.post('/api/auth/google', async (req, res) => {
       // Generate an unguessable random hash.
       const randomSecret = `${nanoId()}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
       const hash = bcrypt.hashSync(randomSecret, 12);
-      db.prepare('INSERT INTO users (id,email,password_hash,name,phone,address,role,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)')
-        .run(id, email, hash, name || 'User', '', '', 'parent', t, t);
-      row = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+      try {
+        db.prepare('INSERT INTO users (id,email,password_hash,name,phone,address,role,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)')
+          .run(id, email, hash, name || 'User', '', '', 'parent', t, t);
+        row = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+      } catch (e) {
+        // If a duplicate email slipped in (race, older DB collation), fall back to the existing account.
+        row = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(email);
+      }
     }
 
     const user = userToClient(row);
@@ -924,8 +1604,17 @@ app.post('/api/auth/signup', async (req, res) => {
   const id = nanoId();
   const hash = bcrypt.hashSync(password, 12);
   const t = nowISO();
-  db.prepare('INSERT INTO users (id,email,password_hash,name,phone,role,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)')
-    .run(id, email, hash, name, phone, role, t, t);
+  try {
+    db.prepare('INSERT INTO users (id,email,password_hash,name,phone,role,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)')
+      .run(id, email, hash, name, phone, role, t, t);
+  } catch (e) {
+    // If a duplicate email got created concurrently, return a consistent error.
+    const msg = String(e?.message || '').toLowerCase();
+    if (msg.includes('unique') || msg.includes('constraint')) {
+      return res.status(409).json({ ok: false, error: 'email already exists' });
+    }
+    return res.status(500).json({ ok: false, error: e?.message || 'signup failed' });
+  }
 
   const user = { id, email, name, role };
 
@@ -1041,8 +1730,40 @@ app.post('/api/auth/2fa/resend', async (req, res) => {
 // Board / Posts
 app.get('/api/board', authMiddleware, (req, res) => {
   const rows = db.prepare('SELECT * FROM posts ORDER BY datetime(created_at) DESC').all();
+
+  // Attach the latest avatar URL from the users table (author_json may be a snapshot).
+  let avatarByUserId = {};
+  try {
+    const authorIds = Array.from(
+      new Set(
+        rows
+          .map((r) => {
+            const a = safeJsonParse(r.author_json, null);
+            return a && a.id ? String(a.id) : '';
+          })
+          .filter(Boolean)
+      )
+    );
+
+    if (authorIds.length) {
+      const placeholders = authorIds.map(() => '?').join(',');
+      const urows = db.prepare(`SELECT id, avatar FROM users WHERE id IN (${placeholders})`).all(...authorIds);
+      avatarByUserId = (urows || []).reduce((acc, u) => {
+        const id = u && u.id ? String(u.id) : '';
+        if (id) acc[id] = u && u.avatar ? String(u.avatar) : '';
+        return acc;
+      }, {});
+    }
+  } catch (e) {
+    // ignore; fallback to pravatar client-side
+  }
+
   const out = rows.map((r) => {
-    const author = safeJsonParse(r.author_json, null);
+    let author = safeJsonParse(r.author_json, null);
+    if (author && author.id) {
+      const a = avatarByUserId[String(author.id)] || '';
+      if (a) author = { ...author, avatar: a };
+    }
     const comments = safeJsonParse(r.comments_json, []);
     return {
       id: r.id,
@@ -1067,7 +1788,7 @@ app.post('/api/board', authMiddleware, (req, res) => {
 
   const id = nanoId();
   const t = nowISO();
-  const author = req.user ? { id: req.user.id, name: req.user.name } : null;
+  const author = req.user ? { id: req.user.id, name: req.user.name, avatar: req.user.avatar || '' } : null;
   db.prepare('INSERT INTO posts (id, author_json, title, body, image, likes, shares, comments_json, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
     .run(id, JSON.stringify(author), title, body, image, 0, 0, JSON.stringify([]), t, t);
 
@@ -1111,7 +1832,7 @@ app.post('/api/board/comments', authMiddleware, (req, res) => {
 
   const comments = safeJsonParse(row.comments_json, []);
 
-  const author = { id: req.user.id, name: req.user.name };
+  const author = { id: req.user.id, name: req.user.name, avatar: req.user.avatar || '' };
   const createdAt = nowISO();
 
   let body = '';
@@ -1204,15 +1925,54 @@ app.post('/api/board/comments/react', authMiddleware, (req, res) => {
 // Messages / Chats
 app.get('/api/messages', authMiddleware, (req, res) => {
   const rows = db.prepare('SELECT * FROM messages ORDER BY datetime(created_at) ASC').all();
-  const out = rows.map((r) => ({
-    id: r.id,
-    threadId: r.thread_id || undefined,
-    body: r.body,
-    sender: safeJsonParse(r.sender_json, null),
-    to: safeJsonParse(r.to_json, []),
-    createdAt: r.created_at,
-  }));
-  res.json(out);
+  const parsed = rows.map((r) => {
+    const sender = safeJsonParse(r.sender_json, null);
+    const to = safeJsonParse(r.to_json, []);
+    return {
+      id: r.id,
+      threadId: r.thread_id || undefined,
+      body: r.body,
+      sender,
+      to,
+      createdAt: r.created_at,
+    };
+  });
+
+  // Overlay latest avatars so identity stays correct even if profile avatars change.
+  try {
+    const ids = new Set();
+    for (const m of parsed) {
+      if (m?.sender?.id) ids.add(String(m.sender.id));
+      if (Array.isArray(m?.to)) {
+        for (const t of m.to) {
+          if (t?.id) ids.add(String(t.id));
+        }
+      }
+    }
+    const idList = Array.from(ids);
+    if (idList.length) {
+      const placeholders = idList.map(() => '?').join(',');
+      const urows = db.prepare(`SELECT id, avatar FROM users WHERE id IN (${placeholders})`).all(...idList);
+      const avatarById = new Map(urows.map((u) => [String(u.id), u.avatar]));
+      for (const m of parsed) {
+        if (m?.sender?.id) {
+          const a = avatarById.get(String(m.sender.id));
+          if (a) m.sender = { ...m.sender, avatar: a };
+        }
+        if (Array.isArray(m?.to)) {
+          m.to = m.to.map((t) => {
+            if (!t?.id) return t;
+            const a = avatarById.get(String(t.id));
+            return a ? { ...t, avatar: a } : t;
+          });
+        }
+      }
+    }
+  } catch (e) {
+    // Non-fatal: messages still return without avatar overlay.
+  }
+
+  res.json(parsed);
 });
 
 app.post('/api/messages', authMiddleware, (req, res) => {
@@ -1223,7 +1983,7 @@ app.post('/api/messages', authMiddleware, (req, res) => {
 
   const id = nanoId();
   const t = nowISO();
-  const sender = req.user ? { id: req.user.id, name: req.user.name } : null;
+  const sender = req.user ? { id: req.user.id, name: req.user.name, avatar: req.user.avatar } : null;
 
   db.prepare('INSERT INTO messages (id, thread_id, body, sender_json, to_json, created_at) VALUES (?,?,?,?,?,?)')
     .run(id, threadId, body, JSON.stringify(sender), JSON.stringify(to), t);

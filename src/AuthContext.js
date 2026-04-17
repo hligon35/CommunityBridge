@@ -1,11 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Api from './Api';
-import { setDebugContext, logger } from './utils/logger';
-import { resetToLogin } from './navigationRef';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
-
-const TOKEN_KEY = 'auth_token';
+import * as Api from './Api';
+import { auth } from './firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { resetToLogin } from './navigationRef';
+import { logger, setDebugContext } from './utils/logger';
 
 const AuthContext = createContext(null);
 
@@ -17,39 +16,52 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState(null);
 
-  // If the API returns 401, clear auth so the app can re-login cleanly.
+  // If Firestore/Rules deny access, clear auth so the app can re-login cleanly.
   useEffect(() => {
     Api.setUnauthorizedHandler(() => {
       try {
-        logger.warn('auth', 'Received 401 from API; clearing auth');
-      } catch (e) {
-        // ignore
-      }
-      // Fire and forget; we don't want to block the interceptor chain.
+        logger.warn('auth', 'Unauthorized from Firebase; signing out');
+      } catch (_) {}
       logout().catch(() => {});
     });
     return () => Api.setUnauthorizedHandler(null);
   }, []);
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
+    const unsub = onAuthStateChanged(auth, async (fbUser) => {
+      setLoading(true);
+      setAuthError(null);
       try {
-        const t = await AsyncStorage.getItem(TOKEN_KEY);
-        const u = await AsyncStorage.getItem('auth_user');
-        if (t && mounted) {
-          setToken(t);
-          Api.setAuthToken(t);
+        if (!fbUser) {
+          setToken(null);
+          setUser(null);
+          return;
         }
-        if (u && mounted) setUser(JSON.parse(u));
+
+        const t = await fbUser.getIdToken();
+        setToken(String(t || ''));
+
+        // Load user profile document (role, etc.)
+        const profile = await Api.me().catch(() => null);
+        setUser(profile || {
+          id: fbUser.uid,
+          name: fbUser.displayName || '',
+          email: fbUser.email || '',
+          role: 'parent',
+        });
       } catch (e) {
-        console.warn('Auth load failed', e.message);
+        setAuthError(e);
+        setToken(null);
+        setUser(null);
       } finally {
-        if (mounted) setLoading(false);
+        setLoading(false);
       }
-    })();
-    return () => { mounted = false; };
+    });
+    return () => {
+      try { unsub && unsub(); } catch (_) {}
+    };
   }, []);
 
   useEffect(() => {
@@ -59,49 +71,44 @@ export function AuthProvider({ children }) {
         role: user?.role,
         hasToken: !!token,
       });
-    } catch (e) {
-      // ignore
-    }
+    } catch (_) {}
   }, [user, token]);
-
-  async function setAuth({ token: nextToken, user: nextUser }) {
-    if (!nextToken) throw new Error('Missing token');
-    await AsyncStorage.setItem(TOKEN_KEY, nextToken);
-    if (nextUser) await AsyncStorage.setItem('auth_user', JSON.stringify(nextUser));
-    setToken(nextToken);
-    Api.setAuthToken(nextToken);
-    if (nextUser) setUser(nextUser);
-  }
 
   async function login(email, password) {
     const res = await Api.login(email, password);
-    if (!res || !res.token) throw new Error('Invalid login response');
-    await setAuth({ token: res.token, user: res.user });
+    // onAuthStateChanged will refresh token/user; still return the API response for screens.
     return res;
   }
 
   async function logout() {
-    await AsyncStorage.removeItem(TOKEN_KEY);
-    await AsyncStorage.removeItem('auth_user');
     try {
-      await SecureStore.deleteItemAsync('bb_bio_token');
-      await SecureStore.deleteItemAsync('bb_bio_user');
-    } catch (e) {
+      await signOut(auth);
+    } catch (_) {
       // ignore
     }
+
+    try {
+      await SecureStore.deleteItemAsync('bb_bio_enabled');
+      await SecureStore.deleteItemAsync('bb_bio_user');
+    } catch (_) {
+      // ignore
+    }
+
     setToken(null);
     setUser(null);
-    Api.setAuthToken(null);
     resetToLogin();
   }
-  const value = { token, user, loading, login, logout };
-  value.setAuth = setAuth;
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  async function setAuth(_) {
+    // Legacy compatibility: REST token injection is not supported with Firebase Auth.
+    const err = new Error('Biometric token sign-in is not supported with Firebase Auth. Please sign in normally.');
+    err.code = 'BB_SET_AUTH_UNSUPPORTED';
+    throw err;
+  }
+
+  const value = useMemo(() => ({ token, user, loading, login, logout, setAuth, authError }), [token, user, loading, authError]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export default AuthContext;

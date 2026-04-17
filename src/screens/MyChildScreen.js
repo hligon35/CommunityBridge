@@ -5,11 +5,21 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import { childHasParent, findLinkedParentId } from '../utils/directoryLinking';
 
 export default function MyChildScreen() {
-  const { children, urgentMemos, sendTimeUpdateAlert, timeChangeProposals, proposeTimeChange, respondToProposal, respondToUrgentMemo } = useData();
-  // Only use real children from context.
-  const childList = (Array.isArray(children) && children.length) ? children : [];
+  const { children, parents, urgentMemos, sendTimeUpdateAlert, timeChangeProposals, proposeTimeChange, respondToProposal, respondToUrgentMemo } = useData();
+  const { user } = useAuth();
+
+  const role = (user?.role || '').toString().toLowerCase();
+  const isParent = role.includes('parent');
+  const linkedParentId = isParent ? (findLinkedParentId(user, parents) || null) : null;
+
+  // Only show linked children for parents; keep existing behavior for other roles.
+  const baseChildList = (Array.isArray(children) && children.length) ? children : [];
+  const childList = isParent
+    ? (linkedParentId ? baseChildList.filter((c) => childHasParent(c, linkedParentId)) : [])
+    : baseChildList;
   const [selectedIndex, setSelectedIndex] = useState(0);
   useEffect(() => {
     if (selectedIndex >= childList.length) setSelectedIndex(0);
@@ -21,7 +31,6 @@ export default function MyChildScreen() {
   const child = childList[selectedIndex] || { id: 'no-child', name: 'No children added', age: '', room: '', avatar: 'https://i.pravatar.cc/120?u=empty', carePlan: '', notes: '' };
 
   // const provided above via single useData call
-  const { user } = useAuth();
   const [showProposeModal, setShowProposeModal] = useState(false);
   const [proposeType, setProposeType] = useState('pickup');
   const [useExactDate, setUseExactDate] = useState(false);

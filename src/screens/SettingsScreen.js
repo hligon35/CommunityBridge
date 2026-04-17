@@ -9,6 +9,8 @@ import { ScreenWrapper } from '../components/ScreenWrapper';
 import { pravatarUriFor, setIdVisibilityEnabled, initIdVisibilityFromStorage } from '../utils/idVisibility';
 import { registerForExpoPushTokenAsync } from '../utils/pushNotifications';
 import * as Api from '../Api';
+import * as Updates from 'expo-updates';
+import Constants from 'expo-constants';
 
 const ARRIVAL_KEY = 'settings_arrival_enabled_v1';
 const PUSH_KEY = 'settings_push_enabled_v1';
@@ -27,6 +29,10 @@ const BUSINESS_ADDR_KEY = 'business_address_v1';
 
 export default function SettingsScreen({ navigation }) {
   const { user, logout, setRole } = useAuth();
+
+  const appVersion = Constants?.expoConfig?.version || Constants?.manifest?.version || '';
+  const iosBuildNumber = Constants?.expoConfig?.ios?.buildNumber || '';
+  const androidVersionCode = Constants?.expoConfig?.android?.versionCode || '';
   const [arrivalEnabled, setArrivalEnabled] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushChats, setPushChats] = useState(true);
@@ -40,6 +46,16 @@ export default function SettingsScreen({ navigation }) {
   const [showEmail, setShowEmail] = useState(true);
   const [showPhone, setShowPhone] = useState(true);
   const [showIds, setShowIds] = useState(false);
+
+  const [updateStatus, setUpdateStatus] = useState({
+    isEnabled: Updates.isEnabled,
+    channel: Updates.channel ?? '',
+    runtimeVersion: Updates.runtimeVersion ?? '',
+    updateId: Updates.updateId ?? '',
+    isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+    createdAt: Updates.createdAt ? String(Updates.createdAt) : '',
+  });
+  const [updateBusy, setUpdateBusy] = useState(false);
 
   // Debounced push preference sync to backend (efficient + consistent).
   const pushSyncTimerRef = useRef(null);
@@ -93,6 +109,64 @@ export default function SettingsScreen({ navigation }) {
     load();
     return () => { mounted = false; };
   }, []);
+
+  useEffect(() => {
+    // Keep display values fresh after reloads/updates.
+    setUpdateStatus({
+      isEnabled: Updates.isEnabled,
+      channel: Updates.channel ?? '',
+      runtimeVersion: Updates.runtimeVersion ?? '',
+      updateId: Updates.updateId ?? '',
+      isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+      createdAt: Updates.createdAt ? String(Updates.createdAt) : '',
+    });
+  }, [Platform.OS]);
+
+  async function checkForOtaUpdate() {
+    if (Platform.OS === 'web') {
+      Alert.alert('Not supported', 'EAS Update is not supported on web.');
+      return;
+    }
+    if (!Updates.isEnabled) {
+      Alert.alert(
+        'Updates disabled',
+        'This build does not have expo-updates enabled (or you are running a dev/Expo Go session). Install an EAS-built binary to receive OTA updates.'
+      );
+      return;
+    }
+
+    try {
+      setUpdateBusy(true);
+      const result = await Updates.checkForUpdateAsync();
+      if (!result.isAvailable) {
+        Alert.alert('Up to date', 'No update is available for this channel/runtime version.');
+        return;
+      }
+
+      const fetched = await Updates.fetchUpdateAsync();
+      setUpdateStatus({
+        isEnabled: Updates.isEnabled,
+        channel: Updates.channel ?? '',
+        runtimeVersion: Updates.runtimeVersion ?? '',
+        updateId: Updates.updateId ?? '',
+        isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+        createdAt: Updates.createdAt ? String(Updates.createdAt) : '',
+      });
+
+      Alert.alert(
+        'Update downloaded',
+        'Restart the app to apply it now.',
+        [
+          { text: 'Later', style: 'cancel' },
+          { text: 'Restart now', onPress: () => Updates.reloadAsync().catch(() => {}) },
+        ]
+      );
+    } catch (e) {
+      Alert.alert('Update check failed', e?.message || String(e));
+    } finally {
+      setUpdateBusy(false);
+    }
+  }
 
   const [businessAddress, setBusinessAddress] = useState('');
 
@@ -504,10 +578,54 @@ export default function SettingsScreen({ navigation }) {
             </View>
           ) : null}
 
-          {/* Empty placeholder tile (kept at bottom of settings card) */}
-          <View style={{ marginTop: 12, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>
-            <View style={{ height: 72 }} />
+          {/* Build / Update footer (fills extra space at bottom) */}
+          <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8 }}>Build & Update</Text>
+            <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
+              Use this to confirm you’re on the expected build and EAS update.
+            </Text>
+            <Text style={{ fontSize: 13, color: '#111827' }}>App version: {appVersion || '(unknown)'}</Text>
+            {Platform.OS === 'ios' ? (
+              <Text style={{ fontSize: 13, color: '#111827' }}>iOS build: {iosBuildNumber || '(unknown)'}</Text>
+            ) : null}
+            {Platform.OS === 'android' ? (
+              <Text style={{ fontSize: 13, color: '#111827' }}>Android versionCode: {androidVersionCode || '(unknown)'}</Text>
+            ) : null}
+            {Platform.OS !== 'web' ? (
+              <View style={{ marginTop: 10 }}>
+                <Text style={{ fontSize: 13, color: '#111827' }}>Channel: {updateStatus.channel || '(unknown)'}</Text>
+                <Text style={{ fontSize: 13, color: '#111827' }}>Runtime: {updateStatus.runtimeVersion || '(unknown)'}</Text>
+                <Text style={{ fontSize: 13, color: '#111827' }}>Update ID: {updateStatus.updateId || '(embedded)'}</Text>
+                <Text style={{ fontSize: 13, color: '#111827' }}>Created at: {updateStatus.createdAt || '(unknown)'}</Text>
+              </View>
+            ) : null}
           </View>
+
+          {/* EAS Update status (useful for verifying OTA updates) */}
+          {Platform.OS !== 'web' ? (
+            <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8 }}>App Update Status</Text>
+              <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
+                Channel and runtime version must match the published EAS update.
+              </Text>
+
+              <View style={{ marginBottom: 10 }}>
+                <Text style={{ fontSize: 13, color: '#111827' }}>Updates enabled: {updateStatus.isEnabled ? 'yes' : 'no'}</Text>
+                <Text style={{ fontSize: 13, color: '#111827' }}>Channel: {updateStatus.channel || '(unknown)'}</Text>
+                <Text style={{ fontSize: 13, color: '#111827' }}>Runtime: {updateStatus.runtimeVersion || '(unknown)'}</Text>
+                <Text style={{ fontSize: 13, color: '#111827' }}>Update ID: {updateStatus.updateId || '(embedded)'}</Text>
+                <Text style={{ fontSize: 13, color: '#111827' }}>Embedded launch: {updateStatus.isEmbeddedLaunch ? 'yes' : 'no'}</Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={checkForOtaUpdate}
+                disabled={updateBusy}
+                style={{ padding: 10, backgroundColor: updateBusy ? '#9ca3af' : '#111827', borderRadius: 8, alignSelf: 'flex-start' }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700' }}>{updateBusy ? 'Checking…' : 'Check for update now'}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
         </View>
         {/* Dev role switcher moved to DevRoleSwitcher (floating) */}

@@ -65,6 +65,25 @@ export default function useArrivalDetector() {
         // default to enabled when not set
         setOrgEnabled(o !== '0');
         if (bRaw) setBusiness(JSON.parse(bRaw));
+
+        // Prefer server-backed org settings when available (keeps all devices consistent).
+        try {
+          const remote = await Api.getOrgSettings();
+          const item = remote && remote.ok ? remote.item : null;
+          if (item && typeof item === 'object') {
+            if (typeof item.orgArrivalEnabled === 'boolean') setOrgEnabled(!!item.orgArrivalEnabled);
+            if (typeof item.lat === 'number' && typeof item.lng === 'number') {
+              setBusiness({
+                address: item.address || '',
+                lat: item.lat,
+                lng: item.lng,
+                dropZoneMiles: typeof item.dropZoneMiles === 'number' ? item.dropZoneMiles : undefined,
+              });
+            }
+          }
+        } catch (e) {
+          // ignore; stay with local settings
+        }
       } catch (e) {
         // ignore
       }

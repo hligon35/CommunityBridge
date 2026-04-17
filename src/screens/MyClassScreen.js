@@ -4,6 +4,7 @@ import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
 import { pravatarUriFor } from '../utils/idVisibility';
+import { findLinkedTherapistId } from '../utils/directoryLinking';
 
 function StudentCard({ student, resolveParents }) {
   return (
@@ -25,24 +26,25 @@ export default function MyClassScreen() {
   const { children = [], therapists = [], parents = [] } = useData();
   const { user } = useAuth();
   const uid = user?.id;
+  const linkedTherapistId = findLinkedTherapistId(user, therapists) || uid;
 
   const role = (user?.role || '').toString().toLowerCase();
   const isBCBA = role.includes('bcba');
   const isTherapist = role.includes('therapist') || isBCBA;
 
   const amStudents = useMemo(
-    () => (children || []).filter((c) => c?.amTherapist && c.amTherapist.id === uid),
-    [children, uid]
+    () => (children || []).filter((c) => c?.amTherapist && c.amTherapist.id === linkedTherapistId),
+    [children, linkedTherapistId]
   );
   const pmStudents = useMemo(
-    () => (children || []).filter((c) => c?.pmTherapist && c.pmTherapist.id === uid),
-    [children, uid]
+    () => (children || []).filter((c) => c?.pmTherapist && c.pmTherapist.id === linkedTherapistId),
+    [children, linkedTherapistId]
   );
 
   const abasManaged = useMemo(() => {
     if (!isBCBA) return [];
-    return (therapists || []).filter((t) => t && t.supervisedBy === uid);
-  }, [therapists, uid, isBCBA]);
+    return (therapists || []).filter((t) => t && t.supervisedBy === linkedTherapistId);
+  }, [therapists, linkedTherapistId, isBCBA]);
 
   const studentsForAba = (abaId) => (children || []).filter((c) => (c?.amTherapist && c.amTherapist.id === abaId) || (c?.pmTherapist && c.pmTherapist.id === abaId));
 

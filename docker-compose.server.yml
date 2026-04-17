@@ -27,5 +27,25 @@ services:
     # Only persist runtime data
     volumes:
       - ${BB_DATA_DIR:-./.data}:/usr/src/app/.data
-    command: node ./scripts/api-server.js
+    environment:
+      # Optional: set to use Postgres instead of SQLite.
+      # Example: postgres://buddyboard:buddyboard@postgres:5432/buddyboard
+      - BB_DATABASE_URL=${BB_DATABASE_URL}
+    command: sh -c "if [ -n \"$BB_DATABASE_URL\" ]; then node ./scripts/api-server-pg.js; else node ./scripts/api-server.js; fi"
     restart: unless-stopped
+
+  postgres:
+    profiles: ["postgres"]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${BB_PG_DATABASE:-buddyboard}
+      - POSTGRES_USER=${BB_PG_USER:-buddyboard}
+      - POSTGRES_PASSWORD=${BB_PG_PASSWORD:-buddyboard}
+    volumes:
+      - ${BB_PGDATA_DIR:-./.data/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20

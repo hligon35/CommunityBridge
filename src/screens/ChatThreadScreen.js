@@ -4,6 +4,7 @@ import { View, Text, FlatList, TextInput, Button, RefreshControl, KeyboardAvoidi
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import { useHeaderHeight } from '@react-navigation/elements';
 
 export default function ChatThreadScreen({ route }) {
   const { threadId, isNew, to: initialTo } = route.params || {};
@@ -11,6 +12,7 @@ export default function ChatThreadScreen({ route }) {
   const [text, setText] = useState('');
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  const headerHeight = useHeaderHeight ? useHeaderHeight() : 0;
 
   const threadMessages = useMemo(() => messages.filter((m) => (m.threadId || m.id) === threadId).sort((a,b)=> new Date(a.createdAt)-new Date(b.createdAt)), [messages, threadId]);
 
@@ -54,14 +56,16 @@ export default function ChatThreadScreen({ route }) {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
         >
           <FlatList
             data={threadMessages}
             keyExtractor={(i) => i.id}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-            keyboardShouldPersistTaps="never"
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 120 }}
             renderItem={({ item }) => {
               const isMine = user && (item.sender?.id === user.id || (item.sender?.name || '').toLowerCase().includes((user.name || '').toLowerCase()));
               return (

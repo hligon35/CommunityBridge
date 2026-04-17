@@ -89,7 +89,7 @@ export default function FacultyDetailScreen() {
         <View style={{ marginLeft: 12, flex: 1 }}>
           <Text style={styles.name}>{getDisplayName(faculty)}</Text>
           <Text style={styles.role}>{faculty.role || 'Staff'}</Text>
-          <Text style={styles.meta}>{formatIdForDisplay(faculty.id, { allow: true })}</Text>
+          <Text style={styles.meta}>{formatIdForDisplay(faculty.id)}</Text>
         </View>
         <View style={styles.headerActionsRight}>
           {faculty.phone ? (

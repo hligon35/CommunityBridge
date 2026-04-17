@@ -8,6 +8,7 @@ import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GOOGLE_PLACES_API_KEY } from '../config';
 import * as FileSystem from 'expo-file-system';
+import * as Api from '../Api';
 
 const APP_BUNDLE_ID = (() => {
   try {
@@ -65,7 +66,12 @@ export default function AdminControlsScreen() {
 
   function HeaderAlertButton() {
     return (
-      <TouchableOpacity onPress={openAlerts} style={styles.headerIconBtn} accessibilityLabel="Open Alerts">
+      <TouchableOpacity
+        onPress={openAlerts}
+        style={styles.headerIconBtn}
+        accessibilityLabel="Open Alerts"
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
         <MaterialIcons name="report" size={22} color="#111827" />
         {pendingAlertCount > 0 ? (
           <View style={styles.headerBadge}>
@@ -79,11 +85,23 @@ export default function AdminControlsScreen() {
   function HeaderRightButtons() {
     return (
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <TouchableOpacity onPress={openImport} style={[styles.headerIconBtn, { marginRight: 10 }]} accessibilityLabel="Import Data">
-          <MaterialIcons name="file-upload" size={22} color="#111827" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setExportModalVisible(true)} style={styles.headerIconBtn} accessibilityLabel="Export Data">
+        <TouchableOpacity
+          onPress={openImport}
+          style={[styles.headerIconBtn, { marginRight: 10 }]}
+          accessibilityLabel="Import Data"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          {/* Import is “bring data into the app” (down arrow) */}
           <MaterialIcons name="file-download" size={22} color="#111827" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setExportModalVisible(true)}
+          style={styles.headerIconBtn}
+          accessibilityLabel="Export Data"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          {/* Export is “send data out of the app” (up arrow) */}
+          <MaterialIcons name="file-upload" size={22} color="#111827" />
         </TouchableOpacity>
       </View>
     );
@@ -194,6 +212,35 @@ export default function AdminControlsScreen() {
     initIdVisibilityFromStorage().then((v) => { if (mounted) setShowIds(!!v); }).catch(() => {});
     (async () => {
       try {
+        // Prefer server-backed org settings when available (keeps all devices in sync).
+        try {
+          const remote = await Api.getOrgSettings();
+          const item = remote && remote.ok ? remote.item : null;
+          if (mounted && item && typeof item === 'object') {
+            if (typeof item.orgArrivalEnabled === 'boolean') setOrgArrivalEnabled(!!item.orgArrivalEnabled);
+            if (item.address) {
+              suppressAutocompleteRef.current = 1;
+              setOrgAddress(String(item.address));
+            }
+            if (typeof item.lat === 'number') setOrgLat(String(item.lat));
+            if (typeof item.lng === 'number') setOrgLng(String(item.lng));
+            if (typeof item.dropZoneMiles === 'number') setDropZoneMiles(String(item.dropZoneMiles));
+            // Cache locally as fallback.
+            try {
+              await AsyncStorage.setItem(ORG_ARRIVAL_KEY, item.orgArrivalEnabled === false ? '0' : '1');
+              await AsyncStorage.setItem(BUSINESS_ADDR_KEY, JSON.stringify({
+                address: item.address,
+                lat: item.lat,
+                lng: item.lng,
+                dropZoneMiles: item.dropZoneMiles,
+              }));
+            } catch (e) {}
+            return;
+          }
+        } catch (e) {
+          // ignore; fall back to AsyncStorage
+        }
+
         const orgRaw = await AsyncStorage.getItem(ORG_ARRIVAL_KEY);
         if (!mounted) return;
         // default to enabled when not set
@@ -245,6 +292,13 @@ export default function AdminControlsScreen() {
     const next = !orgArrivalEnabled;
     setOrgArrivalEnabled(next);
     try {
+      await Api.updateOrgSettings({
+        address: orgAddress,
+        lat: Number.isFinite(Number(orgLat)) ? Number(orgLat) : null,
+        lng: Number.isFinite(Number(orgLng)) ? Number(orgLng) : null,
+        dropZoneMiles: Number.isFinite(Number(dropZoneMiles)) ? Number(dropZoneMiles) : null,
+        orgArrivalEnabled: next,
+      });
       await AsyncStorage.setItem(ORG_ARRIVAL_KEY, next ? '1' : '0');
     } catch (e) {
       // revert on failure
@@ -305,6 +359,7 @@ export default function AdminControlsScreen() {
       dropZoneMiles: milesNum,
     };
     try {
+      await Api.updateOrgSettings({ ...obj, orgArrivalEnabled });
       await AsyncStorage.setItem(BUSINESS_ADDR_KEY, JSON.stringify(obj));
       Alert.alert('Saved', 'Arrival detection controls updated.');
     } catch (e) {
@@ -333,13 +388,36 @@ export default function AdminControlsScreen() {
         });
         const first = Array.isArray(results) ? results[0] : null;
         if (first) {
-          const line1 = [first.streetNumber, first.street].filter(Boolean).join(' ').trim() || String(first.name || '').trim();
-          const cityRegion = [first.city, first.region].filter(Boolean).join(', ').trim();
+          const line1 = [first.streetNumber, first.street]
+            .filter(Boolean)
+            .join(' ')
+            .trim()
+            || String(first.name || '').trim()
+            || String(first.district || '').trim();
+          const cityRegion = [first.city, first.subregion, first.region].filter(Boolean).join(', ').trim();
           const line2 = [cityRegion, first.postalCode].filter(Boolean).join(' ').trim();
           formatted = [line1, line2, first.country].filter(Boolean).join(', ').trim();
         }
       } catch (e) {
         // ignore; fall back to lat/lng
+      }
+
+      // Fallback: if Expo reverse geocode didn't give a useful address, try Google Geocoding API.
+      if (!formatted) {
+        const key = String(GOOGLE_PLACES_API_KEY || '').trim();
+        if (key) {
+          try {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${encodeURIComponent(String(lat))},${encodeURIComponent(String(lng))}&key=${encodeURIComponent(key)}`;
+            const res = await fetch(url);
+            const json = await res.json();
+            const addr = json?.results?.[0]?.formatted_address;
+            if (addr) formatted = String(addr);
+          } catch (e) {
+            // ignore
+          }
+        }
       }
 
       suppressAutocompleteRef.current = 1;
@@ -599,7 +677,16 @@ export default function AdminControlsScreen() {
         </Pressable>
       </Modal>
 
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 96 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingBottom: 180 }]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
 
             <View style={styles.dirGridRow}>
               <TouchableOpacity
@@ -811,8 +898,9 @@ export default function AdminControlsScreen() {
 
         {/* Permissions & Privacy section removed per request */}
 
-        <View style={{ height: 32 }} />
-      </ScrollView>
+          <View style={{ height: 32 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenWrapper>
   );
 }

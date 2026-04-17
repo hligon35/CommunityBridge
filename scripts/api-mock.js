@@ -82,7 +82,7 @@ function consume2faChallenge(challengeId, code) {
   }
   if (String(code || '').trim() !== String(ch.code)) return { ok: false, error: 'invalid code' };
   twoFaChallenges.delete(challengeId);
-  return { ok: true, userId: ch.userId, method: ch.method };
+  return { ok: true, userId: ch.userId, method: ch.method, destination: ch.destination };
 }
 
 if (LOG_REQUESTS) {
@@ -107,6 +107,34 @@ let urgentMemos = [];
 let timeChangeProposals = [];
 let pushTokens = []; // { token, userId, platform, enabled, preferences, updatedAt }
 
+// Stable mock users keyed by normalized email.
+const usersByEmail = new Map();
+
+function normalizeEmail(email) {
+  try {
+    return String(email || '').trim().toLowerCase();
+  } catch (e) {
+    return '';
+  }
+}
+
+function stableUserIdForEmail(email) {
+  // Deterministic, URL-safe-ish id for repeat logins.
+  const e = normalizeEmail(email);
+  const hex = Buffer.from(e).toString('hex').slice(0, 24);
+  return `mock-user-${hex || 'anon'}`;
+}
+
+function getOrCreateUserForEmail(email, { name = 'Mock User', role = 'parent' } = {}) {
+  const norm = normalizeEmail(email);
+  if (!norm) return null;
+  const existing = usersByEmail.get(norm);
+  if (existing) return existing;
+  const user = { id: stableUserIdForEmail(norm), name, email: norm, role };
+  usersByEmail.set(norm, user);
+  return user;
+}
+
 function nanoId() {
   return `id_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -119,12 +147,12 @@ app.post('/api/arrival/ping', (req, res) => {
 });
 
 app.post('/api/auth/login', (req, res) => {
-  const email = (req.body && req.body.email) ? String(req.body.email).trim().toLowerCase() : '';
+  const email = (req.body && req.body.email) ? normalizeEmail(req.body.email) : '';
   const password = (req.body && req.body.password) ? String(req.body.password) : '';
   if (!email || !password) return res.status(400).json({ ok: false, error: 'email and password required' });
 
-  // Mock accepts any credentials and returns a stable token.
-  const user = { id: 'mock', name: 'Mock User', email, role: 'parent' };
+  // Mock accepts any credentials and returns a stable user for this email.
+  const user = getOrCreateUserForEmail(email, { name: 'Mock User', role: 'parent' });
   const token = `mock-token-${Date.now()}`;
   slog.info('auth', 'Login success (mock)', { userId: user.id });
   return res.json({ token, user });
@@ -138,7 +166,7 @@ app.get('/api/auth/me', (req, res) => {
 // Minimal auth endpoints for client end-to-end testing.
 // This mock accepts any signup and uses 2FA verify to mint a fake token.
 app.post('/api/auth/signup', (req, res) => {
-  const email = (req.body && req.body.email) ? String(req.body.email).trim().toLowerCase() : '';
+  const email = (req.body && req.body.email) ? normalizeEmail(req.body.email) : '';
   const name = (req.body && req.body.name) ? String(req.body.name).trim() : '';
   const role = (req.body && req.body.role) ? String(req.body.role).trim() : 'parent';
   const twoFaMethod = (req.body && req.body.twoFaMethod) ? String(req.body.twoFaMethod).trim().toLowerCase() : 'email';
@@ -146,7 +174,11 @@ app.post('/api/auth/signup', (req, res) => {
 
   if (!email || !name) return res.status(400).json({ ok: false, error: 'name and email required' });
 
-  const user = { id: `mock-user-${Date.now()}`, email, name, role };
+  if (usersByEmail.has(email)) {
+    return res.status(409).json({ ok: false, error: 'email already exists' });
+  }
+
+  const user = getOrCreateUserForEmail(email, { name: name || 'Mock User', role });
   const method = (twoFaMethod === 'sms' || twoFaMethod === 'email') ? twoFaMethod : 'email';
   let destination = '';
   if (method === 'sms') {
@@ -171,7 +203,11 @@ app.post('/api/auth/2fa/verify', (req, res) => {
   const result = consume2faChallenge(challengeId, code);
   if (!result.ok) return res.status(401).json({ ok: false, error: result.error || 'verification failed' });
 
-  const user = { id: result.userId, name: 'Mock User', email: 'mock@example.com', role: 'parent' };
+  // If this was an email challenge, the destination is the normalized email.
+  const email = normalizeEmail(result.destination);
+  const user = email
+    ? (getOrCreateUserForEmail(email, { name: 'Mock User', role: 'parent' }) || { id: result.userId, name: 'Mock User', email, role: 'parent' })
+    : { id: result.userId, name: 'Mock User', email: 'mock@example.com', role: 'parent' };
   const token = `mock-token-${Date.now()}`;
   slog.info('auth', '2FA verified (mock); token issued', { userId: user.id, method: result.method });
   return res.json({ ok: true, token, user });

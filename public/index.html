@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BuddyBoard</title>
+    <meta name="description" content="BuddyBoard keeps parents, caregivers, and providers aligned with updates, messages, and schedules." />
+
+    <meta property="og:title" content="BuddyBoard" />
+    <meta property="og:description" content="One place for family updates and therapy schedules." />
+    <meta property="og:type" content="website" />
+
+    <style>
+      :root {
+        --bg: #ffffff;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #16a34a;
+        --accent2: #2563eb;
+        --line: rgba(15, 23, 42, 0.12);
+
+        /* Container (card) theme — matches the previous dark background */
+        --containerBg: #0b1220;
+        --containerText: #e5e7eb;
+        --containerMuted: #94a3b8;
+        --containerLine: rgba(255, 255, 255, 0.12);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+        min-height: 100vh;
+        background:
+          radial-gradient(900px 520px at 18% -10%, rgba(37, 99, 235, 0.16) 0%, rgba(37, 99, 235, 0.0) 62%),
+          radial-gradient(900px 520px at 86% 6%, rgba(22, 163, 74, 0.14) 0%, rgba(22, 163, 74, 0.0) 60%),
+          linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        color: var(--text);
+      }
+      a { color: inherit; }
+
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 44px 18px; }
+      .nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+      .navActions { display: flex; gap: 10px; align-items: center; }
+
+      .brand { display: flex; flex-direction: column; gap: 6px; text-decoration: none; }
+      .brandLogo {
+        height: 64px;
+        width: auto;
+        max-width: min(560px, 100%);
+        display: inline-block;
+        object-fit: contain;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+        box-shadow: none;
+        filter: drop-shadow(0 12px 28px rgba(15, 23, 42, 0.18));
+      }
+      .brandTag {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+        color: var(--muted);
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        text-decoration: none;
+        background: rgba(255, 255, 255, 0.85);
+        color: var(--text);
+      }
+      .btnPrimary {
+        background: var(--accent);
+        border-color: rgba(22, 163, 74, 0.35);
+        color: #ffffff;
+      }
+      .btnGhost { background: transparent; }
+
+      .hero { display: grid; grid-template-columns: 1.15fr .85fr; gap: 18px; margin-top: 30px; }
+      .card {
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)),
+          var(--containerBg);
+        border: 1px solid var(--containerLine);
+        border-radius: 18px;
+        padding: 18px;
+        color: var(--containerText);
+        box-shadow: 0 18px 46px rgba(15, 23, 42, 0.18);
+      }
+      .card p { color: var(--containerMuted); }
+      .card .list { color: var(--containerMuted); }
+      .card .label { color: var(--containerMuted); }
+      .card .mono { color: rgba(229, 231, 235, 0.78); }
+      .card .btn:not(.btnPrimary) {
+        background: rgba(255, 255, 255, 0.07);
+        border-color: rgba(255, 255, 255, 0.14);
+        color: var(--containerText);
+      }
+      .card .btnGhost:not(.btnPrimary) { background: transparent; }
+
+      h1 { margin: 0 0 10px; font-size: 42px; line-height: 1.07; letter-spacing: -0.4px; }
+      p { margin: 0 0 14px; color: var(--muted); line-height: 1.6; }
+      .ctaRow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+
+      .storeRow { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+      .storeBtn {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 14px;
+        border: 1px solid var(--containerLine);
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .storeBtn img { height: 44px; width: auto; display:block; }
+      .storeBtn .label { font-size: 12px; color: var(--containerMuted); }
+
+      .list { margin: 0; padding-left: 18px; color: var(--muted); }
+      .list li { margin: 8px 0; }
+
+      .kpiRow { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--containerLine);
+        border-radius: 999px;
+        padding: 8px 10px;
+        background: rgba(255, 255, 255, 0.06);
+        font-size: 12px;
+        color: var(--containerMuted);
+      }
+      .dot { width: 10px; height: 10px; border-radius: 999px; background: var(--accent); }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+      .heroArt {
+        display: grid;
+        place-items: center;
+        padding: 18px;
+        min-height: 360px;
+        background:
+          radial-gradient(600px 280px at 50% 30%, rgba(22,163,74,.16) 0%, rgba(255,255,255,0) 60%),
+          radial-gradient(600px 280px at 50% 70%, rgba(37,99,235,.12) 0%, rgba(255,255,255,0) 60%);
+      }
+      .heroImg {
+        width: min(320px, 78%);
+        height: auto;
+        display: block;
+        border-radius: 24px;
+        box-shadow: 0 24px 60px rgba(0,0,0,.45);
+      }
+
+      .foot {
+        margin-top: 26px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .links { display: flex; gap: 10px; flex-wrap: wrap; }
+      .links a { color: var(--muted); text-decoration: none; border-bottom: 1px solid rgba(15,23,42,0.0); }
+      .links a:hover { color: var(--text); border-bottom-color: rgba(15,23,42,0.25); }
+
+      @media (max-width: 900px) {
+        .hero { grid-template-columns: 1fr; }
+        h1 { font-size: 34px; }
+        .heroArt { min-height: 280px; }
+
+        .nav { justify-content: center; }
+        .brand { width: 100%; align-items: center; text-align: center; }
+        .navActions { width: 100%; justify-content: center; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="nav">
+        <a class="brand" href="/" aria-label="BuddyBoard home">
+          <img class="brandLogo" src="/TitleTagLogo.png" alt="BuddyBoard" />
+          <div class="brandTag">Family updates • messages • schedules</div>
+        </a>
+
+        <div class="navActions">
+          <a class="btn btnGhost" href="/app-login">App login</a>
+          <a class="btn btnGhost" href="/support">Support</a>
+          <a class="btn btnPrimary" href="#get">Get the app</a>
+        </div>
+      </div>
+
+      <div class="hero">
+        <div class="card">
+          <h1>One place for family updates and therapy schedules.</h1>
+          <p>
+            BuddyBoard helps parents, caregivers, and providers stay aligned with board posts, direct messages,
+            urgent memos, and time-change requests.
+          </p>
+
+          <div class="ctaRow" id="get">
+            <a class="btn btnPrimary" href="/app-login">Sign in</a>
+            <a class="btn" href="#features">See features</a>
+          </div>
+
+          <div class="storeRow" aria-label="App store buttons">
+            <div class="storeBtn" title="Add your iOS App Store link when ready">
+              <img src="/appleStore.png" alt="Download on the App Store" />
+              <div class="label">iOS (link coming)</div>
+            </div>
+            <div class="storeBtn" title="Add your Android Play Store link when ready">
+              <img src="/googleStore.png" alt="Get it on Google Play" />
+              <div class="label">Android (link coming)</div>
+            </div>
+          </div>
+
+          <div class="kpiRow" style="margin-top: 14px;">
+            <span class="pill"><span class="dot" id="netDot"></span><span id="netText">Checking connection…</span></span>
+            <span class="pill">Host: <span class="mono" id="liveHost">—</span></span>
+            <span class="pill">Local time: <span class="mono" id="liveTime">—</span></span>
+          </div>
+
+          <div style="margin-top: 12px; font-size: 12px; color: var(--muted);">
+            App login is intended for existing BuddyBoard accounts. If you’re setting up BuddyBoard for an organization,
+            use the mobile app to onboard users.
+          </div>
+        </div>
+
+        <div class="card" id="features">
+          <div class="heroArt" aria-label="BuddyBoard app icon">
+            <img class="heroImg" src="/hero-icon.png" alt="BuddyBoard app icon" />
+          </div>
+
+          <div style="font-weight: 900; margin-top: 14px; margin-bottom: 10px;">What BuddyBoard includes</div>
+          <ul class="list">
+            <li>Family board posts and announcements</li>
+            <li>Direct messages with an admin inbox</li>
+            <li>Urgent memos and acknowledgements</li>
+            <li>Pickup/dropoff time change proposals</li>
+            <li>Role-based access (admin vs parent)</li>
+          </ul>
+
+          <div style="margin-top: 14px; font-size: 12px; color: var(--containerMuted);">
+            Before public launch, add real App Store/Play links and publish <a href="/privacy">Privacy Policy</a> + <a href="/terms">Terms</a>.
+          </div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <div>© <span id="y"></span> BuddyBoard</div>
+        <div class="links">
+          <a href="/app-login">App login</a>
+          <a href="/support">Support</a>
+          <a href="#features">Features</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const y = document.getElementById('y');
+      const liveHost = document.getElementById('liveHost');
+      const liveTime = document.getElementById('liveTime');
+      const netDot = document.getElementById('netDot');
+      const netText = document.getElementById('netText');
+
+      function updateLive() {
+        y.textContent = String(new Date().getFullYear());
+        liveHost.textContent = window.location.hostname || '(unknown)';
+        liveTime.textContent = new Date().toLocaleString();
+
+        const online = navigator.onLine;
+        netDot.style.background = online ? 'var(--accent)' : 'rgba(239,68,68,0.95)';
+        netText.textContent = online ? 'Online' : 'Offline';
+      }
+
+      updateLive();
+      window.addEventListener('online', updateLive);
+      window.addEventListener('offline', updateLive);
+      setInterval(updateLive, 15_000);
+    </script>
+  </body>
+</html>
