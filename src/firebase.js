@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import { initializeApp, getApp, getApps } from 'firebase/app';
-import { initializeAuth, getAuth } from 'firebase/auth';
-import { getReactNativePersistence } from 'firebase/auth/react-native';
+import { getAuth } from 'firebase/auth';
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth/react-native';
 import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
@@ -98,33 +98,40 @@ const AUTH_GLOBAL_KEY = '__bb_firebase_auth_instance__';
 let authInstance = globalThis?.[AUTH_GLOBAL_KEY];
 
 if (!authInstance) {
-  if (Platform?.OS === 'web') {
-    authInstance = getAuth(firebaseApp);
-  } else {
-    const AsyncStorage = getAsyncStorageModule();
-    if (!AsyncStorage) {
-      try {
-        console.warn('[firebase] AsyncStorage not available; auth persistence will be in-memory only');
-      } catch (_) {}
+  try {
+    if (Platform?.OS === 'web') {
       authInstance = getAuth(firebaseApp);
     } else {
-      try {
-        authInstance = initializeAuth(firebaseApp, {
-          persistence: getReactNativePersistence(AsyncStorage),
-        });
-      } catch (e) {
-        // If Auth was initialized elsewhere (Fast Refresh), reuse it.
-        if (shouldFallbackToGetAuth(e)) {
-          authInstance = getAuth(firebaseApp);
-        } else {
-          // Don't crash the app at import-time. Fall back to non-persistent auth and surface logs.
-          try {
-            console.warn('[firebase] Failed to initializeAuth with persistence', e);
-          } catch (_) {}
-          authInstance = getAuth(firebaseApp);
+      const AsyncStorage = getAsyncStorageModule();
+      if (!AsyncStorage) {
+        try {
+          console.warn('[firebase] AsyncStorage not available; auth persistence will be in-memory only');
+        } catch (_) {}
+        authInstance = getAuth(firebaseApp);
+      } else {
+        try {
+          authInstance = initializeAuth(firebaseApp, {
+            persistence: getReactNativePersistence(AsyncStorage),
+          });
+        } catch (e) {
+          // If Auth was initialized elsewhere (Fast Refresh), reuse it.
+          if (shouldFallbackToGetAuth(e)) {
+            authInstance = getAuth(firebaseApp);
+          } else {
+            try {
+              console.warn('[firebase] Failed to initializeAuth with persistence', e);
+            } catch (_) {}
+            authInstance = getAuth(firebaseApp);
+          }
         }
       }
     }
+  } catch (e) {
+    // Final safety net: never crash the app at import-time due to auth initialization.
+    try {
+      console.warn('[firebase] Auth initialization failed', e);
+    } catch (_) {}
+    authInstance = null;
   }
 
   try {

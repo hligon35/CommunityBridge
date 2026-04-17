@@ -30,6 +30,14 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (!auth) {
+      setAuthError(new Error('Firebase Auth failed to initialize.'));
+      setToken(null);
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       setLoading(true);
       setAuthError(null);
