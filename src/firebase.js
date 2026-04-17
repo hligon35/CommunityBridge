@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import { initializeApp, getApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
@@ -149,8 +149,42 @@ export const firebaseApp = getFirebaseApp();
 
 const AUTH_GLOBAL_KEY = '__bb_firebase_auth_instance__';
 const AUTH_ERROR_GLOBAL_KEY = '__bb_firebase_auth_init_error__';
+const AUTH_INIT_ATTEMPTED_GLOBAL_KEY = '__bb_firebase_auth_init_attempted__';
 let authInstance = globalThis?.[AUTH_GLOBAL_KEY];
 let authInitError = globalThis?.[AUTH_ERROR_GLOBAL_KEY] || null;
+
+function getAsyncStorageMaybe() {
+  try {
+    // eslint-disable-next-line global-require
+    const mod = require('@react-native-async-storage/async-storage');
+    return mod?.default || mod || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function isAuthComponentNotRegisteredError(e) {
+  try {
+    const msg = String(e?.message || '');
+    return msg.includes('Component auth has not been registered yet');
+  } catch (_) {
+    return false;
+  }
+}
+
+function markAuthInitAttempted() {
+  try {
+    if (globalThis) globalThis[AUTH_INIT_ATTEMPTED_GLOBAL_KEY] = true;
+  } catch (_) {}
+}
+
+function hasAuthInitBeenAttempted() {
+  try {
+    return Boolean(globalThis?.[AUTH_INIT_ATTEMPTED_GLOBAL_KEY]);
+  } catch (_) {
+    return false;
+  }
+}
 
 export function getAuthInstance() {
   let inst = null;
@@ -181,8 +215,32 @@ export function getAuthInstance() {
     inst = getAuth(getApp());
     authInitError = null;
   } catch (e1) {
-    authInitError = e1 || new Error('Firebase Auth initialization failed');
-    inst = null;
+    // In some production bundles, firebase/auth can resolve to a web-targeted build,
+    // which will throw: "Component auth has not been registered yet".
+    // Fix by explicitly initializing Auth for this app.
+    if (isAuthComponentNotRegisteredError(e1) && !hasAuthInitBeenAttempted()) {
+      markAuthInitAttempted();
+      try {
+        const storage = getAsyncStorageMaybe();
+        const persistence = (typeof getReactNativePersistence === 'function' && storage)
+          ? getReactNativePersistence(storage)
+          : undefined;
+        inst = initializeAuth(getApp(), persistence ? { persistence } : undefined);
+        authInitError = null;
+      } catch (e2) {
+        // If already initialized (or init fails), fall back to getAuth().
+        try {
+          inst = getAuth(getApp());
+          authInitError = null;
+        } catch (e3) {
+          authInitError = e3 || e2 || e1 || new Error('Firebase Auth initialization failed');
+          inst = null;
+        }
+      }
+    } else {
+      authInitError = e1 || new Error('Firebase Auth initialization failed');
+      inst = null;
+    }
     try {
       console.warn('[firebase] Auth initialization failed', authInitError);
     } catch (_) {}

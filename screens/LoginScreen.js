@@ -4,6 +4,8 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
+import * as Updates from 'expo-updates';
+import Constants from 'expo-constants';
 import SignUpScreen from './SignUpScreen';
 import ForgotPasswordScreen from './ForgotPasswordScreen';
 import { useAuth } from '../src/AuthContext';
@@ -14,6 +16,19 @@ import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportEr
 import { getAuthInitError, getFirebaseAppInitError } from '../src/firebase';
 
 WebBrowser.maybeCompleteAuthSession();
+
+function getExpoExtraValue(key) {
+  try {
+    return (
+      Constants?.expoConfig?.extra?.[key] ??
+      Constants?.easConfig?.extra?.[key] ??
+      Constants?.manifest2?.extra?.[key] ??
+      Constants?.manifest?.extra?.[key]
+    );
+  } catch (_) {
+    return undefined;
+  }
+}
 
 export default function LoginScreen({ navigation, suppressAutoRedirect = false }) {
   const [email, setEmail] = useState('');
@@ -32,9 +47,28 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   const googleEnabled = false;
 
   const SENTRY_OTLP_URL = 'https://o4510654674632704.ingest.us.sentry.io/api/4510654676533248/integration/otlp';
-  const sentryEnv = String(process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT || '').toLowerCase();
-  const sentryDsn = String(process.env.EXPO_PUBLIC_SENTRY_DSN || '');
-  const showSentryTestButton = sentryEnv === 'internal';
+  const sentryEnv = String(
+    process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT ||
+      getExpoExtraValue('EXPO_PUBLIC_SENTRY_ENVIRONMENT') ||
+      ''
+  ).toLowerCase();
+  const sentryDsn = String(
+    process.env.EXPO_PUBLIC_SENTRY_DSN ||
+      getExpoExtraValue('EXPO_PUBLIC_SENTRY_DSN') ||
+      ''
+  );
+  let updatesChannel = '';
+  try {
+    updatesChannel = String(Updates.channel || Updates.releaseChannel || '').toLowerCase();
+  } catch (_) {
+    updatesChannel = '';
+  }
+
+  const showSentryTestButton = (
+    updatesChannel === 'testflight-internal' ||
+    sentryEnv === 'internal' ||
+    sentryEnv === 'testflight-internal'
+  );
 
   const fieldWidthStyle = useMemo(() => ({ width: '100%', maxWidth: 360 }), []);
 
@@ -97,20 +131,30 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       if (!sentryDsn) {
         Alert.alert(
           'Sentry not configured',
-          'EXPO_PUBLIC_SENTRY_DSN is empty in this build. Add it to the EAS internal environment and rebuild.'
+          'Sentry DSN is empty in this build/update. Add EXPO_PUBLIC_SENTRY_DSN to EAS project env (or build profile env) and publish again.'
         );
         return;
       }
 
+      let eventId;
       Sentry.withScope((scope) => {
         scope.setTag('bb_sentry_test', '1');
         scope.setTag('bb_env', sentryEnv || 'unknown');
-        scope.setExtra('apiBaseUrl', '');
+        scope.setExtra('apiBaseUrl', String(process.env.EXPO_PUBLIC_API_BASE_URL || ''));
         scope.setExtra('time', new Date().toISOString());
-        Sentry.captureException(new Error('BuddyBoard Sentry test error (internal build)'));
+        eventId = Sentry.captureException(new Error('First error'));
       });
 
-      Alert.alert('Sent', 'Sent a test error to Sentry. Check Sentry → Issues (environment: internal).');
+      try {
+        await Sentry.flush(2000);
+      } catch (_) {
+        // ignore flush failures
+      }
+
+      Alert.alert(
+        'Sentry test event sent',
+        `Event ID: ${eventId || '(none)'}\n\nCheck Sentry Issues to confirm it arrived:\nhttps://sparq-digital.sentry.io/issues/?project=4511236400873472`
+      );
     } catch (e) {
       Alert.alert('Failed', e?.message || 'Could not send test error.');
     }
@@ -358,6 +402,12 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
           <View style={styles.secondaryActions}>
             {/* Google sign-in disabled */}
             {googleEnabled ? null : null}
+
+            {showSentryTestButton ? (
+              <View style={{ width: '100%', maxWidth: 360, marginTop: 10 }}>
+                <Button title="Try!" onPress={sendInternalSentryTestError} disabled={busy} />
+              </View>
+            ) : null}
 
             <View style={{ width: '100%', maxWidth: 360, marginTop: 10 }}>
               <TouchableOpacity
