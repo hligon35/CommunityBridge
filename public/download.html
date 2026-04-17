@@ -3,6 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script>
+      (function () {
+        var CANONICAL_HOST = 'buddy-board.com';
+        if (window.location.hostname === 'www.' + CANONICAL_HOST) {
+          var target = 'https://' + CANONICAL_HOST + window.location.pathname + window.location.search + window.location.hash;
+          window.location.replace(target);
+        }
+      })();
+    </script>
     <title>BuddyBoard – Download</title>
     <meta name="description" content="Download BuddyBoard for iPhone/iPad and Android." />
     <style>
