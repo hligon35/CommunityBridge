@@ -6,6 +6,9 @@
     "internal": {
       "node": "20.19.4",
       "distribution": "internal",
+      "hooks": {
+        "preInstall": "node -e \"require('fs').rmSync('ios', { recursive: true, force: true })\""
+      },
       "android": {
         "buildType": "apk"
       },
@@ -24,6 +27,9 @@
     "testflight-internal": {
       "node": "20.19.4",
       "distribution": "store",
+      "hooks": {
+        "preInstall": "node -e \"require('fs').rmSync('ios', { recursive: true, force: true })\""
+      },
       "android": {
         "buildType": "app-bundle"
       },
@@ -43,6 +49,9 @@
       "node": "20.19.4",
       "developmentClient": true,
       "distribution": "internal",
+      "hooks": {
+        "preInstall": "node -e \"require('fs').rmSync('ios', { recursive: true, force: true })\""
+      },
       "android": {
         "buildType": "apk"
       },
@@ -61,6 +70,9 @@
     "preview": {
       "node": "20.19.4",
       "distribution": "store",
+      "hooks": {
+        "preInstall": "node -e \"require('fs').rmSync('ios', { recursive: true, force: true })\""
+      },
       "android": {
         "buildType": "app-bundle"
       },
@@ -79,6 +91,9 @@
     "production": {
       "node": "20.19.4",
       "distribution": "store",
+      "hooks": {
+        "preInstall": "node -e \"require('fs').rmSync('ios', { recursive: true, force: true })\""
+      },
       "android": {
         "buildType": "app-bundle"
       },

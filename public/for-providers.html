@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BuddyBoard — For Providers</title>
+    <meta
+      name="description"
+      content="BuddyBoard for ABA therapy programs, special education teams, and school communities."
+    />
+
+    <meta property="og:title" content="BuddyBoard — For Providers" />
+    <meta
+      property="og:description"
+      content="One place for communication, care coordination, and client due diligence."
+    />
+    <meta property="og:type" content="website" />
+
+    <style>
+      :root {
+        --bg: #f8fafc;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #475569;
+        --line: rgba(15, 23, 42, 0.12);
+
+        --darkBg: #0b1220;
+        --darkText: #e5e7eb;
+        --darkMuted: #94a3b8;
+        --darkLine: rgba(255, 255, 255, 0.12);
+
+        --warnBg: #fffbeb;
+        --warnLine: #fde68a;
+        --warnText: #78350f;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+        min-height: 100vh;
+        background:
+          radial-gradient(900px 520px at 18% -10%, rgba(37, 99, 235, 0.12) 0%, rgba(37, 99, 235, 0.0) 62%),
+          radial-gradient(900px 520px at 86% 6%, rgba(15, 23, 42, 0.08) 0%, rgba(15, 23, 42, 0.0) 60%),
+          linear-gradient(180deg, #ffffff 0%, var(--bg) 100%);
+        color: var(--text);
+      }
+      a { color: inherit; }
+
+      .top {
+        background: #ffffff;
+        border-bottom: 1px solid var(--line);
+      }
+      .wrap { max-width: 1120px; margin: 0 auto; padding: 44px 18px; }
+      .heroWrap { padding: 58px 18px; }
+
+      .nav {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .brand {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        text-decoration: none;
+      }
+      .brandLogo {
+        height: 56px;
+        width: auto;
+        max-width: min(560px, 100%);
+        display: inline-block;
+        object-fit: contain;
+        filter: drop-shadow(0 12px 28px rgba(15, 23, 42, 0.12));
+      }
+      .brandTag {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+        color: var(--muted);
+      }
+
+      .navActions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 14px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        text-decoration: none;
+        background: rgba(255, 255, 255, 0.85);
+        color: var(--text);
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .btnPrimary {
+        background: var(--text);
+        border-color: rgba(15, 23, 42, 0.35);
+        color: #ffffff;
+      }
+
+      .gridHero {
+        display: grid;
+        gap: 22px;
+        grid-template-columns: 1.2fr 0.8fr;
+        align-items: center;
+      }
+
+      .pillTag {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid rgba(15, 23, 42, 0.10);
+        background: rgba(15, 23, 42, 0.04);
+        padding: 6px 10px;
+        font-size: 13px;
+        font-weight: 600;
+        color: rgba(15, 23, 42, 0.76);
+      }
+
+      h1 {
+        margin: 10px 0 0;
+        font-size: 46px;
+        line-height: 1.08;
+        letter-spacing: -0.6px;
+      }
+      p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .heroLead { margin-top: 16px; font-size: 17px; max-width: 680px; }
+      .ctaRow { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+      .darkCard {
+        border-radius: 22px;
+        border: 1px solid var(--darkLine);
+        background: var(--darkBg);
+        color: var(--darkText);
+        padding: 18px;
+        box-shadow: 0 18px 46px rgba(15, 23, 42, 0.18);
+      }
+      .darkCardTitle { font-size: 13px; font-weight: 700; color: rgba(148, 163, 184, 0.9); }
+      .darkBlock {
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.10);
+        padding: 14px;
+        margin-top: 12px;
+      }
+      .darkBlockHead { font-size: 13px; font-weight: 700; }
+      .darkBlockBody { margin-top: 6px; font-size: 13px; color: rgba(148, 163, 184, 0.95); line-height: 1.55; }
+
+      .section { max-width: 1120px; margin: 0 auto; padding: 56px 18px; }
+      .sectionBorder { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #ffffff; }
+
+      h2 { margin: 0; font-size: 32px; letter-spacing: -0.4px; }
+      .sub { margin-top: 10px; max-width: 720px; font-size: 15px; }
+
+      .featuresGrid {
+        margin-top: 20px;
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+      .featureCard {
+        border-radius: 22px;
+        border: 1px solid var(--line);
+        background: #ffffff;
+        padding: 16px;
+        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+      }
+      .featureTitle { margin: 0; font-size: 16px; font-weight: 800; }
+      .featureBody { margin-top: 10px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+      .complianceGrid { display: grid; gap: 18px; grid-template-columns: 0.95fr 1.05fr; }
+      .warn {
+        margin-top: 14px;
+        border-radius: 22px;
+        border: 1px solid var(--warnLine);
+        background: var(--warnBg);
+        padding: 14px;
+        color: var(--warnText);
+        font-size: 13px;
+        line-height: 1.6;
+        font-weight: 600;
+      }
+
+      .noteGrid { display: grid; gap: 12px; }
+      .note {
+        border-radius: 22px;
+        border: 1px solid var(--line);
+        background: rgba(15, 23, 42, 0.03);
+        padding: 14px;
+      }
+      .noteHead { font-size: 13px; font-weight: 800; }
+      .noteText { margin-top: 8px; font-size: 13px; line-height: 1.6; }
+
+      .twoCol { margin-top: 18px; display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
+      .listCard {
+        border-radius: 22px;
+        border: 1px solid var(--line);
+        background: rgba(15, 23, 42, 0.03);
+        padding: 16px;
+      }
+      .listTitle { margin: 0; font-size: 18px; font-weight: 900; }
+      .list { margin: 10px 0 0; padding-left: 18px; color: rgba(15, 23, 42, 0.78); font-size: 13px; line-height: 1.65; }
+      .list li { margin: 8px 0; }
+
+      .docsGrid {
+        margin-top: 16px;
+        display: grid;
+        gap: 12px;
+        grid-template-columns: 1fr 0.9fr;
+      }
+      .docCards {
+        margin-top: 14px;
+        display: grid;
+        gap: 12px;
+        grid-template-columns: 1fr 1fr;
+      }
+      .doc {
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: #ffffff;
+        padding: 14px;
+        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+      }
+      .docName { font-size: 13px; font-weight: 900; }
+      .docHint { margin-top: 8px; font-size: 13px; color: rgba(71, 85, 105, 0.9); }
+
+      .request {
+        border-radius: 22px;
+        border: 1px solid var(--darkLine);
+        background: var(--darkBg);
+        color: var(--darkText);
+        padding: 18px;
+        box-shadow: 0 18px 46px rgba(15, 23, 42, 0.18);
+      }
+      .request h3 { margin: 0; font-size: 22px; letter-spacing: -0.2px; }
+      .request p { margin-top: 10px; color: rgba(148, 163, 184, 0.95); font-size: 13px; line-height: 1.6; }
+      .reqItem { margin-top: 10px; border-radius: 18px; padding: 12px; background: rgba(255, 255, 255, 0.10); font-size: 13px; }
+      .reqBtn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        margin-top: 14px;
+        border-radius: 18px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: #ffffff;
+        padding: 12px 14px;
+        text-decoration: none;
+        color: var(--darkBg);
+        font-weight: 900;
+        font-size: 13px;
+      }
+
+      .footer {
+        border-top: 1px solid var(--line);
+        background: #ffffff;
+      }
+      .footerCard {
+        border-radius: 22px;
+        background: rgba(15, 23, 42, 0.03);
+        padding: 18px;
+      }
+      .footerCard h2 { font-size: 22px; margin: 0; }
+      .footerCard p { margin-top: 12px; font-size: 13px; max-width: 900px; }
+
+      @media (max-width: 980px) {
+        .gridHero { grid-template-columns: 1fr; }
+        .featuresGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .complianceGrid { grid-template-columns: 1fr; }
+        .twoCol { grid-template-columns: 1fr; }
+        .docsGrid { grid-template-columns: 1fr; }
+        .docCards { grid-template-columns: 1fr; }
+        h1 { font-size: 38px; }
+      }
+      @media (max-width: 520px) {
+        .featuresGrid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <div class="wrap">
+        <div class="nav">
+          <a class="brand" href="/" aria-label="BuddyBoard home">
+            <img class="brandLogo" src="/TitleTagLogo.png" alt="BuddyBoard" />
+            <div class="brandTag">BuddyBoard for ABA therapy programs, special education teams, and school communities</div>
+          </a>
+
+          <div class="navActions">
+            <a class="btn" href="/app-login">App login</a>
+            <a class="btn" href="/support">Support</a>
+            <a class="btn btnPrimary" href="/download">Get the app</a>
+          </div>
+        </div>
+
+        <div class="heroWrap">
+          <div class="gridHero">
+            <div>
+              <div class="pillTag">BuddyBoard for ABA therapy programs, special education teams, and school communities</div>
+              <h1>One place for communication, care coordination, and client due diligence.</h1>
+              <p class="heroLead">
+                BuddyBoard gives prospective schools and therapy organizations a single page to understand the platform,
+                review key features, and request the security and compliance materials they need for evaluation.
+              </p>
+
+              <div class="ctaRow">
+                <a class="btn btnPrimary" href="#features">Explore features</a>
+                <a class="btn" href="#compliance">Review compliance info</a>
+                <a class="btn" href="#documents">See available documents</a>
+              </div>
+            </div>
+
+            <div class="darkCard">
+              <div class="darkCardTitle">Built for evaluation conversations</div>
+
+              <div class="darkBlock">
+                <div class="darkBlockHead">For administrators</div>
+                <div class="darkBlockBody">Permissions, directories, alerts, memos, moderation, and exports.</div>
+              </div>
+
+              <div class="darkBlock">
+                <div class="darkBlockHead">For clinicians and staff</div>
+                <div class="darkBlockBody">Class-focused workflows, communication, and operational coordination.</div>
+              </div>
+
+              <div class="darkBlock">
+                <div class="darkBlockHead">For parents and caregivers</div>
+                <div class="darkBlockBody">Clear communication, child-centered visibility, and timely updates.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section id="features" class="section">
+      <div style="max-width: 760px;">
+        <h2>Core platform features</h2>
+        <p class="sub">
+          These are the main capabilities currently reflected in the BuddyBoard app structure and supporting project files.
+        </p>
+      </div>
+
+      <div class="featuresGrid" aria-label="Feature list">
+        <div class="featureCard">
+          <h3 class="featureTitle">Community feed and announcements</h3>
+          <div class="featureBody">A shared home experience for school-wide updates, posts, and community communication.</div>
+        </div>
+        <div class="featureCard">
+          <h3 class="featureTitle">Secure role-based access</h3>
+          <div class="featureBody">Separate experiences for administrators, therapists, and parents so each audience sees the tools and information relevant to them.</div>
+        </div>
+        <div class="featureCard">
+          <h3 class="featureTitle">Direct messaging and chat threads</h3>
+          <div class="featureBody">Built-in chats and threaded conversations for family, staff, and team coordination.</div>
+        </div>
+        <div class="featureCard">
+          <h3 class="featureTitle">Urgent memos and alerts</h3>
+          <div class="featureBody">High-priority notifications and memo acknowledgement flows for time-sensitive communication.</div>
+        </div>
+        <div class="featureCard">
+          <h3 class="featureTitle">Student, parent, and faculty directories</h3>
+          <div class="featureBody">Administrative tools for viewing directory information and navigating key profile records.</div>
+        </div>
+        <div class="featureCard">
+          <h3 class="featureTitle">Moderation and admin controls</h3>
+          <div class="featureBody">Admin tools for permissions, post moderation, alerts, memos, user monitoring, and data export workflows.</div>
+        </div>
+        <div class="featureCard">
+          <h3 class="featureTitle">Media and document support</h3>
+          <div class="featureBody">Upload workflows for photos, files, and related content to support day-to-day communication.</div>
+        </div>
+        <div class="featureCard">
+          <h3 class="featureTitle">Flexible deployment and integration</h3>
+          <div class="featureBody">Supports mobile and web experiences, configurable API endpoints, and local or hosted backend setups.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="compliance" class="section sectionBorder">
+      <div class="wrap" style="padding: 0;">
+        <div class="complianceGrid">
+          <div>
+            <h2>Privacy and HIPAA information</h2>
+            <p class="sub">
+              This section helps prospective clients understand how to evaluate BuddyBoard for environments that may involve protected health information.
+            </p>
+            <div class="warn">
+              Important: avoid stating that BuddyBoard is “HIPAA compliant” unless you have completed a legal, technical, and operational review for the exact deployment environment and can provide the supporting documentation.
+            </div>
+          </div>
+
+          <div class="noteGrid">
+            <div class="note">
+              <div class="noteHead">What we can state today</div>
+              <p class="noteText">
+                BuddyBoard includes role-based access patterns, authentication, urgent communications, administrative controls, and data export features designed for operational use in therapy and school environments.
+              </p>
+            </div>
+            <div class="note">
+              <div class="noteHead">What should be reviewed before using for PHI</div>
+              <p class="noteText">
+                Formal HIPAA readiness depends on implementation details outside the app UI alone, including hosting, encryption configuration, access policies, staff procedures, logging, vendor agreements, and signed documentation.
+              </p>
+            </div>
+            <div class="note">
+              <div class="noteHead">Best practice for client conversations</div>
+              <p class="noteText">
+                Present this page as an information hub and pair it with a security packet, BAA workflow, privacy policy, and deployment-specific controls checklist.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="twoCol" aria-label="Due diligence">
+          <div class="listCard">
+            <h3 class="listTitle">Questions a buyer will ask</h3>
+            <ul class="list">
+              <li>How is access restricted by role and organization?</li>
+              <li>How are user accounts authenticated and managed?</li>
+              <li>Where is data stored, and how is it backed up?</li>
+              <li>What logging exists for sensitive actions and exports?</li>
+              <li>Can the vendor sign a Business Associate Agreement?</li>
+              <li>What is the process for incident handling and notification?</li>
+              <li>What data can be exported for continuity or offboarding?</li>
+            </ul>
+          </div>
+          <div class="listCard">
+            <h3 class="listTitle">Documents to make available</h3>
+            <ul class="list">
+              <li>Business Associate Agreement (BAA) availability</li>
+              <li>Security overview and architecture summary</li>
+              <li>Access control and role-permission model</li>
+              <li>Authentication and account protection details</li>
+              <li>Data storage, backup, and retention approach</li>
+              <li>Incident response and breach-notification process</li>
+              <li>Hosting and infrastructure information</li>
+              <li>Vendor and subprocessors list</li>
+              <li>Audit logging and export capabilities</li>
+              <li>Policies for onboarding, offboarding, and account review</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="documents" class="section">
+      <div class="docsGrid">
+        <div>
+          <h2>Client document center</h2>
+          <p class="sub" style="max-width: 680px;">
+            Use this area as the handoff point for procurement, IT review, privacy review, and leadership sign-off.
+          </p>
+
+          <div class="docCards" aria-label="Documents">
+            <div class="doc">
+              <div class="docName">Executive product overview</div>
+              <div class="docHint">Attach file, summary, or request workflow here.</div>
+            </div>
+            <div class="doc">
+              <div class="docName">Security overview PDF</div>
+              <div class="docHint">Attach file, summary, or request workflow here.</div>
+            </div>
+            <div class="doc">
+              <div class="docName">HIPAA / privacy controls checklist</div>
+              <div class="docHint">Attach file, summary, or request workflow here.</div>
+            </div>
+            <div class="doc">
+              <div class="docName">Sample BAA or BAA request workflow</div>
+              <div class="docHint">Attach file, summary, or request workflow here.</div>
+            </div>
+            <div class="doc">
+              <div class="docName">Data flow diagram</div>
+              <div class="docHint">Attach file, summary, or request workflow here.</div>
+            </div>
+            <div class="doc">
+              <div class="docName">Implementation guide for schools and ABA organizations</div>
+              <div class="docHint">Attach file, summary, or request workflow here.</div>
+            </div>
+            <div class="doc">
+              <div class="docName">Parent and staff onboarding guide</div>
+              <div class="docHint">Attach file, summary, or request workflow here.</div>
+            </div>
+            <div class="doc">
+              <div class="docName">Incident response summary</div>
+              <div class="docHint">Attach file, summary, or request workflow here.</div>
+            </div>
+            <div class="doc">
+              <div class="docName">Release and support policy</div>
+              <div class="docHint">Attach file, summary, or request workflow here.</div>
+            </div>
+            <div class="doc">
+              <div class="docName">Subprocessor list</div>
+              <div class="docHint">Attach file, summary, or request workflow here.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="request" aria-label="Request information">
+          <h3>Request information</h3>
+          <p>
+            Ready for a deeper review? Share your organization type, estimated user count, implementation timeline, and any privacy or procurement requirements.
+          </p>
+          <div class="reqItem">Organization name</div>
+          <div class="reqItem">School, clinic, or ABA program type</div>
+          <div class="reqItem">Estimated staff, parent, and student users</div>
+          <div class="reqItem">Required documents: BAA, security packet, privacy policy, architecture, other</div>
+          <div class="reqItem">Target launch date</div>
+
+          <a
+            class="reqBtn"
+            href="mailto:info@buddy-board.com?subject=BuddyBoard%20review%20packet%20request&body=Organization%20name%3A%0D%0AOrganization%20type%3A%0D%0AEstimated%20users%20(staff%2Fparents%2Fstudents)%3A%0D%0ATarget%20launch%20date%3A%0D%0ARequired%20documents%3A%20BAA%2C%20security%20packet%2C%20privacy%20policy%2C%20architecture%2C%20other%0D%0A%0D%0APlease%20share%20the%20appropriate%20materials%20and%20next%20steps."
+          >
+            Contact sales / request review packet
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="footer">
+      <div class="section" style="padding-top: 38px; padding-bottom: 38px;">
+        <div class="footerCard">
+          <h2>Suggested footer note</h2>
+          <p>
+            BuddyBoard supports communication and operational workflows for therapy and school communities. Any statements regarding HIPAA, privacy, or security should reflect the exact deployment configuration, signed agreements, and current administrative safeguards in place.
+          </p>
+        </div>
+      </div>
+    </section>
+  </body>
+</html>
