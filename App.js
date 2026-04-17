@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Platform, StatusBar } from 'react-native';
+import { StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import * as SplashScreen from 'expo-splash-screen';
 // Temporarily remove TailwindProvider if not available at runtime
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -43,14 +42,9 @@ import { HelpButton, LogoutButton, BackButton } from './src/components/TopButton
 import { View, Text } from 'react-native';
 import LogoTitle from './src/components/LogoTitle';
 import LoginScreen from './screens/LoginScreen';
-import VideoSplash from './src/components/VideoSplash';
 import { initSentry, Sentry } from './src/sentry';
 
 initSentry();
-
-SplashScreen.preventAutoHideAsync().catch(() => {
-  // ignore
-});
 
 const RootStack = createNativeStackNavigator();
 const AppStack = createNativeStackNavigator();
@@ -214,40 +208,6 @@ function MainRoutes() {
 function App() {
   const [problem, setProblem] = useState(null);
   const [currentRoute, setCurrentRoute] = useState('Login');
-  const shouldShowVideoSplash = useMemo(() => {
-    // MP4 startup splash can cause native crashes on some iOS devices/builds.
-    // Default OFF in release builds; enable explicitly via env.
-    const raw = process.env.EXPO_PUBLIC_ENABLE_VIDEO_SPLASH;
-    const enabled = raw === '1' || String(raw || '').toLowerCase() === 'true';
-    if (!enabled) return false;
-
-    // iOS is the most crash-prone for AV decode; allow opt-in only.
-    return Platform.OS !== 'web';
-  }, []);
-
-  const [showVideoSplash, setShowVideoSplash] = useState(shouldShowVideoSplash);
-
-  useEffect(() => {
-    if (!showVideoSplash) {
-      // If we are not showing the MP4 overlay, make sure the native splash is dismissed.
-      SplashScreen.hideAsync().catch(() => {
-        // ignore
-      });
-      return;
-    }
-
-    // Hide the native splash ASAP; the MP4 overlay becomes the only thing the user sees.
-    SplashScreen.hideAsync().catch(() => {
-      // ignore
-    });
-
-    // Extra guard: if the video never loads, remove the overlay.
-    const stopOverlay = setTimeout(() => setShowVideoSplash(false), 7000);
-
-    return () => {
-      clearTimeout(stopOverlay);
-    };
-  }, [showVideoSplash]);
 
   useEffect(() => {
     try {
@@ -297,66 +257,51 @@ function App() {
       <SafeAreaProvider>
       <AuthProvider>
         <DataProvider>
-          {showVideoSplash && (
-            <VideoSplash
-              source={require('./assets/splash-icon.mp4')}
-              durationMs={5000}
-              scale={0.9}
-              onReady={() => {
-                SplashScreen.hideAsync().catch(() => {
-                  // ignore
-                });
-              }}
-              onDone={() => setShowVideoSplash(false)}
-            />
-          )}
-          {!showVideoSplash && (
-            <>
-              <NavigationContainer
-                ref={navigationRef}
-                onStateChange={() => {
-                  try {
-                    const r = navigationRef.getCurrentRoute();
-                    if (r && r.name) {
-                      // Map nested route names back to top-level stack keys so BottomNav highlights correctly
-                      const map = {
-                        Main: 'Home',
-                        CommunityMain: 'Home',
-                        PostThread: 'Home',
-                        ChatsList: 'Chats',
-                        ChatThread: 'Chats',
-                        NewThread: 'Chats',
-                        MyChildMain: 'MyChild',
-                        SettingsMain: 'Settings',
-                        MyClassMain: 'MyClass',
-                        ControlsMain: 'Controls',
-                      };
-                      const next = map[r.name] || r.name;
-                      setCurrentRoute(next);
-                      setDebugContext({ route: next });
-                      logger.debug('nav', 'Route change', { route: next });
-                    }
-                  } catch (e) {
-                    // ignore
+          <>
+            <NavigationContainer
+              ref={navigationRef}
+              onStateChange={() => {
+                try {
+                  const r = navigationRef.getCurrentRoute();
+                  if (r && r.name) {
+                    // Map nested route names back to top-level stack keys so BottomNav highlights correctly
+                    const map = {
+                      Main: 'Home',
+                      CommunityMain: 'Home',
+                      PostThread: 'Home',
+                      ChatsList: 'Chats',
+                      ChatThread: 'Chats',
+                      NewThread: 'Chats',
+                      MyChildMain: 'MyChild',
+                      SettingsMain: 'Settings',
+                      MyClassMain: 'MyClass',
+                      ControlsMain: 'Controls',
+                    };
+                    const next = map[r.name] || r.name;
+                    setCurrentRoute(next);
+                    setDebugContext({ route: next });
+                    logger.debug('nav', 'Route change', { route: next });
                   }
-                }}
-              >
-                <AppStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
-                  <AppStack.Screen name="Login">
-                    {(props) => <LoginScreen {...props} suppressAutoRedirect={true} />}
-                  </AppStack.Screen>
-                  <AppStack.Screen name="Main" component={MainRoutes} />
-                </AppStack.Navigator>
-              </NavigationContainer>
-              {currentRoute !== 'Login' && (
-                <>
-                  <BottomNav navigationRef={navigationRef} currentRoute={currentRoute} />
-                  <UrgentMemoOverlay />
-                  <ArrivalDetector />
-                </>
-              )}
-            </>
-          )}
+                } catch (e) {
+                  // ignore
+                }
+              }}
+            >
+              <AppStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
+                <AppStack.Screen name="Login">
+                  {(props) => <LoginScreen {...props} suppressAutoRedirect={true} />}
+                </AppStack.Screen>
+                <AppStack.Screen name="Main" component={MainRoutes} />
+              </AppStack.Navigator>
+            </NavigationContainer>
+            {currentRoute !== 'Login' && (
+              <>
+                <BottomNav navigationRef={navigationRef} currentRoute={currentRoute} />
+                <UrgentMemoOverlay />
+                <ArrivalDetector />
+              </>
+            )}
+          </>
         </DataProvider>
       </AuthProvider>
       </SafeAreaProvider>
