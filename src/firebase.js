@@ -72,30 +72,61 @@ if (missing.length) {
 export const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 const AUTH_GLOBAL_KEY = '__bb_firebase_auth_instance__';
+const AUTH_ERROR_GLOBAL_KEY = '__bb_firebase_auth_init_error__';
 let authInstance = globalThis?.[AUTH_GLOBAL_KEY];
+let authInitError = globalThis?.[AUTH_ERROR_GLOBAL_KEY] || null;
 
-if (!authInstance) {
+export function getAuthInstance() {
+  let inst = null;
   try {
-    // Note: Firebase v10+ no longer exports `firebase/auth/react-native` via package.json
-    // `exports`, so using that import breaks Metro bundling (and EAS builds).
-    // We intentionally use `getAuth()` only; this avoids crash-on-launch and builds reliably.
-    authInstance = getAuth(firebaseApp);
-  } catch (e) {
-    // Final safety net: never crash the app at import-time due to auth initialization.
+    inst = globalThis?.[AUTH_GLOBAL_KEY] || null;
+  } catch (_) {
+    inst = null;
+  }
+  if (inst) return inst;
+
+  // Note: Firebase v10+ no longer exports `firebase/auth/react-native` via package.json
+  // `exports`, so using that import breaks Metro bundling (and EAS builds).
+  // We intentionally use `getAuth()` only; this avoids crash-on-launch and builds reliably.
+  try {
+    inst = getAuth(firebaseApp);
+    authInitError = null;
+  } catch (e1) {
+    // Some edge cases (module duplication / invalid app argument) can throw here.
+    // Try again with the default app getter before giving up.
     try {
-      console.warn('[firebase] Auth initialization failed', e);
-    } catch (_) {}
-    authInstance = null;
+      inst = getAuth();
+      authInitError = null;
+    } catch (e2) {
+      authInitError = e2 || e1 || new Error('Firebase Auth initialization failed');
+      inst = null;
+      try {
+        console.warn('[firebase] Auth initialization failed', authInitError);
+      } catch (_) {}
+    }
   }
 
   try {
-    if (globalThis) globalThis[AUTH_GLOBAL_KEY] = authInstance;
+    if (globalThis) {
+      globalThis[AUTH_GLOBAL_KEY] = inst;
+      globalThis[AUTH_ERROR_GLOBAL_KEY] = authInitError;
+    }
   } catch (_) {
     // ignore
   }
+
+  return inst;
 }
 
-export const auth = authInstance;
+export function getAuthInitError() {
+  try {
+    return globalThis?.[AUTH_ERROR_GLOBAL_KEY] || authInitError || null;
+  } catch (_) {
+    return authInitError || null;
+  }
+}
+
+export const auth = getAuthInstance();
 export const db = getFirestore(firebaseApp);
 export const storage = getStorage(firebaseApp);
 

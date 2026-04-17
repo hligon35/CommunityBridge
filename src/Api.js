@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import { logger } from './utils/logger';
-import { auth, db, storage, functions } from './firebase';
+import { getAuthInstance, getAuthInitError, db, storage, functions } from './firebase';
 
 import {
   GoogleAuthProvider,
@@ -55,13 +55,29 @@ function isoFromMaybeTimestamp(v) {
 }
 
 function requireUser() {
-  const u = auth?.currentUser;
+  const a = getAuthInstance();
+  const u = a?.currentUser;
   if (!u) {
     const err = new Error('Not authenticated');
     err.code = 'BB_NOT_AUTHENTICATED';
     throw err;
   }
   return u;
+}
+
+function requireAuth() {
+  const a = getAuthInstance();
+  if (a) return a;
+
+  const initErr = getAuthInitError();
+  const msg = initErr?.message
+    ? `Firebase Auth is not initialized: ${initErr.message}`
+    : 'Firebase Auth is not initialized.';
+
+  const err = new Error(msg);
+  err.code = 'BB_AUTH_INIT_FAILED';
+  err.cause = initErr || null;
+  throw err;
 }
 
 export const API_BASE_URL = '';
@@ -104,7 +120,8 @@ async function upsertUserProfile(uid, fields) {
 
 export async function login(email, password) {
   const e = normalizeEmailInput(email);
-  const cred = await signInWithEmailAndPassword(auth, e, String(password || ''));
+  const a = requireAuth();
+  const cred = await signInWithEmailAndPassword(a, e, String(password || ''));
   const token = await getIdToken(cred.user, true);
   const profile = (await getUserProfile(cred.user.uid)) || (await upsertUserProfile(cred.user.uid, {
     name: cred.user.displayName || '',
@@ -115,8 +132,9 @@ export async function login(email, password) {
 }
 
 export async function loginWithGoogle(idToken) {
+  const a = requireAuth();
   const credential = GoogleAuthProvider.credential(String(idToken || ''));
-  const cred = await signInWithCredential(auth, credential);
+  const cred = await signInWithCredential(a, credential);
   const token = await getIdToken(cred.user, true);
   const email = normalizeEmailInput(cred.user.email);
   const profile = (await getUserProfile(cred.user.uid)) || (await upsertUserProfile(cred.user.uid, {
@@ -128,12 +146,13 @@ export async function loginWithGoogle(idToken) {
 }
 
 export async function signup(payload) {
+  const a = requireAuth();
   const name = String(payload?.name || '').trim();
   const email = normalizeEmailInput(payload?.email);
   const password = String(payload?.password || '');
   const role = String(payload?.role || 'parent');
 
-  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  const cred = await createUserWithEmailAndPassword(a, email, password);
   try {
     if (name) await updateProfile(cred.user, { displayName: name });
   } catch (_) {
@@ -196,8 +215,9 @@ export async function resend2fa(_) {
 }
 
 export async function requestPasswordReset(email) {
+  const a = requireAuth();
   const e = normalizeEmailInput(email);
-  await sendPasswordResetEmail(auth, e);
+  await sendPasswordResetEmail(a, e);
   return { ok: true };
 }
 

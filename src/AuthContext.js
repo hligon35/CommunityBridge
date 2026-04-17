@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import * as Api from './Api';
-import { auth } from './firebase';
+import { getAuthInstance, getAuthInitError } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { resetToLogin } from './navigationRef';
 import { logger, setDebugContext } from './utils/logger';
@@ -30,15 +30,17 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!auth) {
-      setAuthError(new Error('Firebase Auth failed to initialize.'));
+    const a = getAuthInstance();
+    if (!a) {
+      const initErr = getAuthInitError();
+      setAuthError(initErr || new Error('Firebase Auth failed to initialize.'));
       setToken(null);
       setUser(null);
       setLoading(false);
       return;
     }
 
-    const unsub = onAuthStateChanged(auth, async (fbUser) => {
+    const unsub = onAuthStateChanged(a, async (fbUser) => {
       setLoading(true);
       setAuthError(null);
       try {
@@ -90,7 +92,8 @@ export function AuthProvider({ children }) {
 
   async function logout() {
     try {
-      await signOut(auth);
+      const a = getAuthInstance();
+      if (a) await signOut(a);
     } catch (_) {
       // ignore
     }
