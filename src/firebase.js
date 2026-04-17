@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { initializeApp, getApp, getApps } from 'firebase/app';
-import { getReactNativePersistence, initializeAuth, getAuth } from 'firebase/auth';
+import { initializeAuth, getAuth } from 'firebase/auth';
+import { getReactNativePersistence } from 'firebase/auth/react-native';
 import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
@@ -88,6 +89,8 @@ function shouldFallbackToGetAuth(error) {
   // Fast Refresh / multiple initialization.
   if (code === 'auth/already-initialized') return true;
   if (message.toLowerCase().includes('already been initialized')) return true;
+  // If the auth component isn't registered yet for some reason, don't crash the app.
+  if (message.toLowerCase().includes('component auth has not been registered yet')) return true;
   return false;
 }
 
@@ -114,11 +117,11 @@ if (!authInstance) {
         if (shouldFallbackToGetAuth(e)) {
           authInstance = getAuth(firebaseApp);
         } else {
-          // Don't silently downgrade to in-memory persistence for unknown failures.
+          // Don't crash the app at import-time. Fall back to non-persistent auth and surface logs.
           try {
             console.warn('[firebase] Failed to initializeAuth with persistence', e);
           } catch (_) {}
-          throw e;
+          authInstance = getAuth(firebaseApp);
         }
       }
     }
