@@ -6,7 +6,7 @@
     "sdkVersion": "54.0.0",
     "ios": {
       "bundleIdentifier": "com.azlabs.buddyboard",
-      "buildNumber": "1.0.12",
+      "buildNumber": "1.0.13",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,

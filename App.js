@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StatusBar } from 'react-native';
+import { Platform, StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 // Temporarily remove TailwindProvider if not available at runtime
@@ -214,7 +214,18 @@ function MainRoutes() {
 function App() {
   const [problem, setProblem] = useState(null);
   const [currentRoute, setCurrentRoute] = useState('Login');
-  const [showVideoSplash, setShowVideoSplash] = useState(true);
+  const shouldShowVideoSplash = useMemo(() => {
+    // MP4 startup splash can cause native crashes on some iOS devices/builds.
+    // Default OFF in release builds; enable explicitly via env.
+    const raw = process.env.EXPO_PUBLIC_ENABLE_VIDEO_SPLASH;
+    const enabled = raw === '1' || String(raw || '').toLowerCase() === 'true';
+    if (!enabled) return false;
+
+    // iOS is the most crash-prone for AV decode; allow opt-in only.
+    return Platform.OS !== 'web';
+  }, []);
+
+  const [showVideoSplash, setShowVideoSplash] = useState(shouldShowVideoSplash);
 
   useEffect(() => {
     if (!showVideoSplash) return;
