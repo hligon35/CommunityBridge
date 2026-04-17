@@ -1,21 +1,9 @@
 import { Platform } from 'react-native';
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth/react-native';
 import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
-
-function getAsyncStorageModule() {
-  // AsyncStorage isn't supported on web; avoid importing it there.
-  if (Platform?.OS === 'web') return null;
-  try {
-    // eslint-disable-next-line global-require
-    return require('@react-native-async-storage/async-storage')?.default || null;
-  } catch (_) {
-    return null;
-  }
-}
 
 function getExpoPublicEnv(key) {
   try {
@@ -83,49 +71,15 @@ if (missing.length) {
 
 export const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-function shouldFallbackToGetAuth(error) {
-  const message = String(error?.message || '');
-  const code = String(error?.code || '');
-  // Fast Refresh / multiple initialization.
-  if (code === 'auth/already-initialized') return true;
-  if (message.toLowerCase().includes('already been initialized')) return true;
-  // If the auth component isn't registered yet for some reason, don't crash the app.
-  if (message.toLowerCase().includes('component auth has not been registered yet')) return true;
-  return false;
-}
-
 const AUTH_GLOBAL_KEY = '__bb_firebase_auth_instance__';
 let authInstance = globalThis?.[AUTH_GLOBAL_KEY];
 
 if (!authInstance) {
   try {
-    if (Platform?.OS === 'web') {
-      authInstance = getAuth(firebaseApp);
-    } else {
-      const AsyncStorage = getAsyncStorageModule();
-      if (!AsyncStorage) {
-        try {
-          console.warn('[firebase] AsyncStorage not available; auth persistence will be in-memory only');
-        } catch (_) {}
-        authInstance = getAuth(firebaseApp);
-      } else {
-        try {
-          authInstance = initializeAuth(firebaseApp, {
-            persistence: getReactNativePersistence(AsyncStorage),
-          });
-        } catch (e) {
-          // If Auth was initialized elsewhere (Fast Refresh), reuse it.
-          if (shouldFallbackToGetAuth(e)) {
-            authInstance = getAuth(firebaseApp);
-          } else {
-            try {
-              console.warn('[firebase] Failed to initializeAuth with persistence', e);
-            } catch (_) {}
-            authInstance = getAuth(firebaseApp);
-          }
-        }
-      }
-    }
+    // Note: Firebase v10+ no longer exports `firebase/auth/react-native` via package.json
+    // `exports`, so using that import breaks Metro bundling (and EAS builds).
+    // We intentionally use `getAuth()` only; this avoids crash-on-launch and builds reliably.
+    authInstance = getAuth(firebaseApp);
   } catch (e) {
     // Final safety net: never crash the app at import-time due to auth initialization.
     try {
