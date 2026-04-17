@@ -1,9 +1,20 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getReactNativePersistence, initializeAuth, getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
+
+function getAsyncStorageModule() {
+  // AsyncStorage isn't supported on web; avoid importing it there.
+  if (Platform?.OS === 'web') return null;
+  try {
+    // eslint-disable-next-line global-require
+    return require('@react-native-async-storage/async-storage')?.default || null;
+  } catch (_) {
+    return null;
+  }
+}
 
 function getExpoPublicEnv(key) {
   try {
@@ -71,14 +82,53 @@ if (missing.length) {
 
 export const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-let authInstance;
-try {
-  authInstance = initializeAuth(firebaseApp, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
-} catch (_) {
-  // initializeAuth can throw if called more than once (Fast Refresh) or on web.
-  authInstance = getAuth(firebaseApp);
+function shouldFallbackToGetAuth(error) {
+  const message = String(error?.message || '');
+  const code = String(error?.code || '');
+  // Fast Refresh / multiple initialization.
+  if (code === 'auth/already-initialized') return true;
+  if (message.toLowerCase().includes('already been initialized')) return true;
+  return false;
+}
+
+const AUTH_GLOBAL_KEY = '__bb_firebase_auth_instance__';
+let authInstance = globalThis?.[AUTH_GLOBAL_KEY];
+
+if (!authInstance) {
+  if (Platform?.OS === 'web') {
+    authInstance = getAuth(firebaseApp);
+  } else {
+    const AsyncStorage = getAsyncStorageModule();
+    if (!AsyncStorage) {
+      try {
+        console.warn('[firebase] AsyncStorage not available; auth persistence will be in-memory only');
+      } catch (_) {}
+      authInstance = getAuth(firebaseApp);
+    } else {
+      try {
+        authInstance = initializeAuth(firebaseApp, {
+          persistence: getReactNativePersistence(AsyncStorage),
+        });
+      } catch (e) {
+        // If Auth was initialized elsewhere (Fast Refresh), reuse it.
+        if (shouldFallbackToGetAuth(e)) {
+          authInstance = getAuth(firebaseApp);
+        } else {
+          // Don't silently downgrade to in-memory persistence for unknown failures.
+          try {
+            console.warn('[firebase] Failed to initializeAuth with persistence', e);
+          } catch (_) {}
+          throw e;
+        }
+      }
+    }
+  }
+
+  try {
+    if (globalThis) globalThis[AUTH_GLOBAL_KEY] = authInstance;
+  } catch (_) {
+    // ignore
+  }
 }
 
 export const auth = authInstance;
