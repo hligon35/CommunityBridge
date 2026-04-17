@@ -228,7 +228,13 @@ function App() {
   const [showVideoSplash, setShowVideoSplash] = useState(shouldShowVideoSplash);
 
   useEffect(() => {
-    if (!showVideoSplash) return;
+    if (!showVideoSplash) {
+      // If we are not showing the MP4 overlay, make sure the native splash is dismissed.
+      SplashScreen.hideAsync().catch(() => {
+        // ignore
+      });
+      return;
+    }
 
     // Hide the native splash ASAP; the MP4 overlay becomes the only thing the user sees.
     SplashScreen.hideAsync().catch(() => {
