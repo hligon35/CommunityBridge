@@ -1,8 +1,5 @@
 {
   "expo": {
-    "cli": {
-      "appVersionSource": "local"
-    },
     "name": "BuddyBoard",
     "slug": "buddyboard-mobile",
     "version": "1.0.1",
@@ -70,9 +67,7 @@
       }
     },
     "owner": "azlab-corp",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.1",
     "updates": {
       "url": "https://u.expo.dev/38ed77a1-3892-42c8-b7cf-9cebe6d98545"
     }

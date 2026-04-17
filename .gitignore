@@ -24,6 +24,10 @@ set*.png
 # Build outputs
 /build
 
+# Local build/export artifacts
+/tmp
+/web
+
 # Local env files (never commit)
 .env
 .env.*

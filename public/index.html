@@ -192,7 +192,7 @@
         <div class="navActions">
           <a class="btn btnGhost" href="/app-login">App login</a>
           <a class="btn btnGhost" href="/support">Support</a>
-          <a class="btn btnPrimary" href="#get">Get the app</a>
+          <a class="btn btnPrimary" href="/download">Get the app</a>
         </div>
       </div>
 
@@ -210,14 +210,28 @@
           </div>
 
           <div class="storeRow" aria-label="App store buttons">
-            <div class="storeBtn" title="Add your iOS App Store link when ready">
+            <a
+              class="storeBtn"
+              href="https://testflight.apple.com/join/REPLACE_ME"
+              target="_blank"
+              rel="noopener"
+              title="TestFlight link for iPhone/iPad testers"
+            >
               <img src="/appleStore.png" alt="Download on the App Store" />
-              <div class="label">iOS (link coming)</div>
-            </div>
-            <div class="storeBtn" title="Add your Android Play Store link when ready">
+              <div class="label">iPhone/iPad (TestFlight)</div>
+            </a>
+            <a
+              class="storeBtn"
+              href="/downloads/buddyboard-android.apk"
+              title="Android APK for testers"
+            >
               <img src="/googleStore.png" alt="Get it on Google Play" />
-              <div class="label">Android (link coming)</div>
-            </div>
+              <div class="label">Android (APK download)</div>
+            </a>
+          </div>
+
+          <div style="margin-top: 10px; font-size: 12px; color: var(--containerMuted);">
+            iOS installs use TestFlight. Android installs download an APK from this site.
           </div>
 
           <div class="kpiRow" style="margin-top: 14px;">
