@@ -137,7 +137,8 @@ service cloud.firestore {
     }
 
     match /orgSettings/{id} {
-      allow read, write: if isAdmin();
+      allow read: if signedIn();
+      allow write: if isAdmin();
     }
 
     match /meta/{id} {
