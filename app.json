@@ -37,7 +37,7 @@
         "@sentry/react-native/expo",
         {
           "url": "https://sentry.io/",
-          "project": "sparqplug",
+          "project": "buddyboard",
           "organization": "sparq-digital"
         }
       ]
