@@ -14,6 +14,7 @@
       },
       "env": {
         "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "internal",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://2dfd13b6f80e20096c7d4d613052814c@o4510654674632704.ingest.us.sentry.io/4511236400873472",
         "SENTRY_ORG": "sparq-digital",
         "SENTRY_PROJECT": "sparqplug",
         "SENTRY_ALLOW_FAILURE": "true",
@@ -32,6 +33,7 @@
       },
       "env": {
         "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "testflight-internal",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://2dfd13b6f80e20096c7d4d613052814c@o4510654674632704.ingest.us.sentry.io/4511236400873472",
         "SENTRY_ORG": "sparq-digital",
         "SENTRY_PROJECT": "sparqplug",
         "SENTRY_ALLOW_FAILURE": "true",
