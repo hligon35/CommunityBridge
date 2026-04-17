@@ -294,18 +294,18 @@ Production HTTPS (recommended)
 For App Store / Play Store builds (and iOS reliability), use a stable HTTPS domain.
 
 This repo includes a minimal Caddy reverse-proxy setup:
-- [Caddyfile](Caddyfile) proxies `https://buddyboard.getsparqd.com` to the `api` service.
+- [Caddyfile](Caddyfile) proxies `https://buddy-board.com` to the `api` service.
 - [docker-compose.prod.yml](docker-compose.prod.yml) runs Caddy and prevents exposing the API port directly.
 
 DNS / networking requirements:
-- Create a DNS A record for `buddyboard.getsparqd.com` pointing to your *public/WAN* IPv4 address (not the server's `10.x.x.x` LAN IP).
+- Create a DNS A record for `buddy-board.com` pointing to your *public/WAN* IPv4 address (not the server's `10.x.x.x` LAN IP).
 - Forward ports `80` and `443` on your router/firewall to the server.
 
 Add these to your server `.env`:
 
 ```env
-EXPO_PUBLIC_API_BASE_URL=https://buddyboard.getsparqd.com
-BB_PUBLIC_BASE_URL=https://buddyboard.getsparqd.com
+EXPO_PUBLIC_API_BASE_URL=https://buddy-board.com
+BB_PUBLIC_BASE_URL=https://buddy-board.com
 ```
 
 Start production services:
@@ -332,12 +332,12 @@ docker network connect buddyboard_default caddy-central
 ```
 
 3) Add BuddyBoard routing to your central Caddyfile. A ready-to-copy snippet is included here:
-- [caddy-central.buddyboard.getsparqd.com.caddy](caddy-central.buddyboard.getsparqd.com.caddy)
+- [caddy-central.buddy-board.com.caddy](caddy-central.buddy-board.com.caddy)
 
 After updating caddy-central's config, reload it and verify:
 
 ```sh
-curl -i https://buddyboard.getsparqd.com/api/health
+curl -i https://buddy-board.com/api/health
 ```
 
 Server deploy: always match GitHub

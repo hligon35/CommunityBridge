@@ -1,4 +1,4 @@
-buddyboard.getsparqd.com {
+buddy-board.com {
   @api path /api/* /uploads/*
   handle @api {
     reverse_proxy api:3005

@@ -46,8 +46,8 @@ set*.png
 google-play-service-account.json
 appstore_connect.json
 
-# Local Caddy state
-caddy-central.buddyboard.getsparqd.com.caddy
+# Local Expo web export output (generated)
+/dist
 
 
 .env.local

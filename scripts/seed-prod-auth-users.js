@@ -3,7 +3,7 @@
   Seed a small set of auth users via the public API.
 
   Default target:
-    SERVER_URL=https://buddyboard.getsparqd.com
+    SERVER_URL=https://buddy-board.com
 
   Usage:
     node scripts/seed-prod-auth-users.js
@@ -18,7 +18,7 @@ const { URL } = require('url');
 const https = require('https');
 const http = require('http');
 
-const DEFAULT_SERVER_URL = 'https://buddyboard.getsparqd.com';
+const DEFAULT_SERVER_URL = 'https://buddy-board.com';
 
 const USERS = [
   // NOTE: Fill in the passwords before running this script.

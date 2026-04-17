@@ -45,7 +45,7 @@ function envFlag(value, defaultValue = false) {
 // This repo is intended to run against the public domain below. Keeping a
 // production fallback prevents "Network Error" caused by a missing build-time
 // env var in release builds.
-const DEFAULT_PROD_BASE_URL = 'https://buddyboard.getsparqd.com';
+const DEFAULT_PROD_BASE_URL = 'https://buddy-board.com';
 //
 // Dev convenience:
 // If EXPO_PUBLIC_API_BASE_URL is not set, try to infer the host IP from Expo/Metro

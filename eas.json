@@ -20,7 +20,7 @@
         "SENTRY_ORG": "sparq-digital",
         "SENTRY_PROJECT": "sparqplug",
         "SENTRY_ALLOW_FAILURE": "true",
-        "EXPO_PUBLIC_API_BASE_URL": "https://buddyboard.getsparqd.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://buddy-board.com"
       },
       "channel": "internal"
     },
@@ -41,7 +41,7 @@
         "SENTRY_ORG": "sparq-digital",
         "SENTRY_PROJECT": "sparqplug",
         "SENTRY_ALLOW_FAILURE": "true",
-        "EXPO_PUBLIC_API_BASE_URL": "https://buddyboard.getsparqd.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://buddy-board.com"
       },
       "channel": "testflight-internal"
     },
@@ -63,7 +63,7 @@
         "SENTRY_ORG": "sparq-digital",
         "SENTRY_PROJECT": "sparqplug",
         "SENTRY_ALLOW_FAILURE": "true",
-        "EXPO_PUBLIC_API_BASE_URL": "https://buddyboard.getsparqd.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://buddy-board.com"
       },
       "channel": "development"
     },
@@ -84,7 +84,7 @@
         "SENTRY_ORG": "sparq-digital",
         "SENTRY_PROJECT": "sparqplug",
         "SENTRY_ALLOW_FAILURE": "true",
-        "EXPO_PUBLIC_API_BASE_URL": "https://buddyboard.getsparqd.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://buddy-board.com"
       },
       "channel": "preview"
     },
@@ -105,7 +105,7 @@
         "SENTRY_ORG": "sparq-digital",
         "SENTRY_PROJECT": "sparqplug",
         "SENTRY_ALLOW_FAILURE": "true",
-        "EXPO_PUBLIC_API_BASE_URL": "https://buddyboard.getsparqd.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://buddy-board.com"
       },
       "channel": "production"
     }
