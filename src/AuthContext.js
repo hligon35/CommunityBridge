@@ -5,6 +5,7 @@ import { getAuthInstance, getAuthInitError } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { resetToLogin } from './navigationRef';
 import { logger, setDebugContext } from './utils/logger';
+import { reportErrorToSentry } from './utils/reportError';
 
 const AuthContext = createContext(null);
 
@@ -33,6 +34,13 @@ export function AuthProvider({ children }) {
     const a = getAuthInstance();
     if (!a) {
       const initErr = getAuthInitError();
+      try {
+        reportErrorToSentry(initErr || new Error('Firebase Auth failed to initialize.'), {
+          area: 'firebase',
+          action: 'auth_init',
+          hasAuthInstance: false,
+        });
+      } catch (_) {}
       setAuthError(initErr || new Error('Firebase Auth failed to initialize.'));
       setToken(null);
       setUser(null);

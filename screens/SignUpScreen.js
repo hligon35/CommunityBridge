@@ -16,6 +16,8 @@ import {
 import * as SecureStore from 'expo-secure-store';
 import * as Api from '../src/Api';
 import { logger } from '../src/utils/logger';
+import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportError';
+import { getAuthInitError, getFirebaseAppInitError } from '../src/firebase';
 
 export default function SignUpScreen({ onDone, onCancel }) {
   const [name, setName] = useState('');
@@ -51,8 +53,22 @@ export default function SignUpScreen({ onDone, onCancel }) {
       Alert.alert('Success', 'Account created');
       if (onDone) onDone({ authed: true });
     } catch (e) {
-      logger.warn('auth', 'Signup failed', { message: e?.message || String(e) });
-      Alert.alert('Error', e?.message || 'Signup failed');
+      const code = e?.code ? String(e.code) : '';
+      const msg = e?.message || String(e) || 'Signup failed';
+      const fbAppErr = getFirebaseAppInitError();
+      const fbAuthErr = getAuthInitError();
+
+      logger.warn('auth', 'Signup failed', { code, message: msg });
+
+      const eventId = reportErrorToSentry(e, {
+        area: 'auth',
+        action: 'signup',
+        errorCode: code,
+        firebaseAppInitError: fbAppErr ? String(fbAppErr?.message || fbAppErr) : '',
+        firebaseAuthInitError: fbAuthErr ? String(fbAuthErr?.message || fbAuthErr) : '',
+      });
+
+      Alert.alert('Error', `${msg}${formatSupportDetails({ code, eventId })}`);
     } finally {
       setBusy(false);
     }

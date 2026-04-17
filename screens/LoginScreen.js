@@ -10,6 +10,8 @@ import { useAuth } from '../src/AuthContext';
 import LogoTitle from '../src/components/LogoTitle';
 import { logger } from '../src/utils/logger';
 import { Sentry } from '../src/sentry';
+import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportError';
+import { getAuthInitError, getFirebaseAppInitError } from '../src/firebase';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -59,8 +61,25 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       } catch (_) {}
       navigation.replace('Main');
     } catch (e) {
-      logger.warn('auth', 'Login failed', { message: e?.message || String(e) });
-      Alert.alert('Login failed', e?.message || 'Please check your credentials and try again.');
+      const code = e?.code ? String(e.code) : '';
+      const msg = e?.message || String(e) || 'Please check your credentials and try again.';
+      const fbAppErr = getFirebaseAppInitError();
+      const fbAuthErr = getAuthInitError();
+
+      logger.warn('auth', 'Login failed', { code, message: msg });
+
+      const eventId = reportErrorToSentry(e, {
+        area: 'auth',
+        action: 'login',
+        errorCode: code,
+        firebaseAppInitError: fbAppErr ? String(fbAppErr?.message || fbAppErr) : '',
+        firebaseAuthInitError: fbAuthErr ? String(fbAuthErr?.message || fbAuthErr) : '',
+      });
+
+      Alert.alert(
+        'Login failed',
+        `${msg}${formatSupportDetails({ code, eventId })}`
+      );
     } finally {
       setBusy(false);
     }
