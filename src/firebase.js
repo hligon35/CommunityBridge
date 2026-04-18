@@ -1,9 +1,21 @@
 import { Platform } from 'react-native';
 import { initializeApp, getApp, getApps } from 'firebase/app';
-import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { getAuth, initializeAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
+
+function getReactNativePersistenceFactoryMaybe() {
+  // Firebase recommends importing from `firebase/auth/react-native`.
+  // We load it dynamically to avoid bundler/export edge cases.
+  try {
+    // eslint-disable-next-line global-require
+    const mod = require('firebase/auth/react-native');
+    return typeof mod?.getReactNativePersistence === 'function' ? mod.getReactNativePersistence : null;
+  } catch (_) {
+    return null;
+  }
+}
 
 function getExpoPublicEnv(key) {
   // IMPORTANT: Expo inlines EXPO_PUBLIC_* vars only for *static* references.
@@ -207,38 +219,36 @@ export function getAuthInstance() {
     return null;
   }
 
-  // Note: Firebase v10+ no longer exports `firebase/auth/react-native` via package.json
-  // `exports`, so using that import breaks Metro bundling (and EAS builds).
-  // We intentionally use `getAuth()` only; this avoids crash-on-launch and builds reliably.
   try {
-    // Use the *actual* default app instance (getApp()) to avoid any "no-app" surprises.
-    inst = getAuth(getApp());
-    authInitError = null;
-  } catch (e1) {
-    // In some production bundles, firebase/auth can resolve to a web-targeted build,
-    // which will throw: "Component auth has not been registered yet".
-    // Fix by explicitly initializing Auth for this app.
-    if (isAuthComponentNotRegisteredError(e1) && !hasAuthInitBeenAttempted()) {
-      markAuthInitAttempted();
-      try {
-        const storage = getAsyncStorageMaybe();
-        const persistence = (typeof getReactNativePersistence === 'function' && storage)
-          ? getReactNativePersistence(storage)
-          : undefined;
-        inst = initializeAuth(getApp(), persistence ? { persistence } : undefined);
-        authInitError = null;
-      } catch (e2) {
-        // If already initialized (or init fails), fall back to getAuth().
-        try {
-          inst = getAuth(getApp());
-          authInitError = null;
-        } catch (e3) {
-          authInitError = e3 || e2 || e1 || new Error('Firebase Auth initialization failed');
-          inst = null;
-        }
+    // Prefer explicit React Native Auth initialization to avoid web-targeted builds
+    // throwing: "Component auth has not been registered yet".
+    if (Platform.OS !== 'web') {
+      const storage = getAsyncStorageMaybe();
+      const getReactNativePersistence = getReactNativePersistenceFactoryMaybe();
+      const persistence = (getReactNativePersistence && storage)
+        ? getReactNativePersistence(storage)
+        : undefined;
+
+      if (persistence) {
+        inst = initializeAuth(getApp(), { persistence });
+      } else {
+        // Fallback: attempt default auth. (This may still fail on some bundles.)
+        inst = getAuth(getApp());
       }
     } else {
-      authInitError = e1 || new Error('Firebase Auth initialization failed');
+      inst = getAuth(getApp());
+    }
+    authInitError = null;
+  } catch (e1) {
+    // If already initialized (or init fails), fall back to getAuth().
+    if (isAuthComponentNotRegisteredError(e1) && !hasAuthInitBeenAttempted()) {
+      markAuthInitAttempted();
+    }
+    try {
+      inst = getAuth(getApp());
+      authInitError = null;
+    } catch (e2) {
+      authInitError = e2 || e1 || new Error('Firebase Auth initialization failed');
       inst = null;
     }
     try {

@@ -61,18 +61,25 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       ''
   );
 
+  // Prefer platform-specific client IDs, but allow web client ID as a fallback.
+  // (This keeps the button available even if only the web client ID is configured.)
+  const fallbackClientId = webGoogleClientId || iosGoogleClientId || androidGoogleClientId;
   const googleEnabled = Boolean(
-    (Platform.OS === 'ios' && iosGoogleClientId) ||
-      (Platform.OS === 'android' && androidGoogleClientId) ||
-      (Platform.OS === 'web' && webGoogleClientId)
+    (Platform.OS === 'ios' && (iosGoogleClientId || fallbackClientId)) ||
+      (Platform.OS === 'android' && (androidGoogleClientId || fallbackClientId)) ||
+      (Platform.OS === 'web' && (webGoogleClientId || fallbackClientId))
   );
 
-  const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest({
+  // IMPORTANT:
+  // - On native (iOS/Android), Google AuthSession defaults to ResponseType.Code and will
+  //   exchange for tokens (including idToken) without requiring us to force an implicit flow.
+  // - Forcing ResponseType.IdToken on native commonly results in Google 400 errors.
+  const [googleRequest, googleResponse, googlePromptAsync] = Google.useIdTokenAuthRequest({
     iosClientId: iosGoogleClientId || undefined,
     androidClientId: androidGoogleClientId || undefined,
     webClientId: webGoogleClientId || undefined,
+    clientId: fallbackClientId || undefined,
     scopes: ['profile', 'email'],
-    responseType: 'id_token',
   });
 
   const SENTRY_OTLP_URL = 'https://o4510654674632704.ingest.us.sentry.io/api/4510654676533248/integration/otlp';
@@ -183,6 +190,22 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleResponse]);
+
+  useEffect(() => {
+    if (!googleResponse) return;
+    if (googleResponse.type === 'success') return;
+
+    // Surface useful details for debugging OAuth 400s.
+    const err = String(googleResponse?.error?.message || googleResponse?.error || '').trim();
+    const desc = String(googleResponse?.params?.error_description || '').trim();
+    const code = String(googleResponse?.params?.error || '').trim();
+    if (googleResponse.type === 'error') {
+      Alert.alert(
+        'Google sign-in failed',
+        `${desc || err || 'Google OAuth error.'}${code ? `\n\nCode: ${code}` : ''}`
+      );
+    }
   }, [googleResponse]);
 
   async function sendInternalSentryTestError() {

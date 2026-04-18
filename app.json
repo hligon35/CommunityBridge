@@ -24,7 +24,8 @@
     ],
     "scheme": [
       "buddyboard",
-      "communitybridge"
+      "communitybridge",
+      "com.azlabs.buddyboard"
     ],
     "orientation": "portrait",
     "plugins": [
