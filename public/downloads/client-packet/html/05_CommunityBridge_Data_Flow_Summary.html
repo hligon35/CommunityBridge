@@ -1,11 +1,11 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/png" href="/favicon.png" sizes="any" />
     <link rel="apple-touch-icon" href="/favicon.png" />
-    <title>BuddyBoard Incident Response Summary — BuddyBoard Client Packet</title>
+    <title>CommunityBridge Data Flow Summary — CommunityBridge Client Packet</title>
     <meta name="robots" content="noindex" />
     <style>
       :root {
@@ -111,25 +111,26 @@
       <div class="wrap">
         <div class="titleRow">
           <div>
-            <div class="kicker">BuddyBoard — Client Packet</div>
-            <h1>BuddyBoard Incident Response Summary</h1>
+            <div class="kicker">CommunityBridge — Client Packet</div>
+            <h1>CommunityBridge Data Flow Summary</h1>
           </div>
           <div class="btnRow">
             <a class="btn" href="/for-providers#documents">Back to For Providers</a>
-            <a class="btn btnPrimary" href="../docx/08_BuddyBoard_Incident_Response_Summary.docx" download>Download DOCX</a>
+            <a class="btn btnPrimary" href="../docx/05_CommunityBridge_Data_Flow_Summary.docx" download>Download DOCX</a>
           </div>
         </div>
 
         <div class="warn">
-          Note: These materials are provided for evaluation and due diligence. Do not represent BuddyBoard as “HIPAA compliant” without a deployment-specific legal/technical review and signed agreements.
+          Note: These materials are provided for evaluation and due diligence. Do not represent CommunityBridge as “HIPAA compliant” without a deployment-specific legal/technical review and signed agreements.
         </div>
       </div>
     </div>
 
     <div class="content">
       <div class="card doc">
-        <p>BuddyBoard Incident Response Summary</p><p><em>Client-facing summary template. Finalize with the operating team before distribution.</em></p><table><tr><td></td></tr></table><h1>Purpose</h1><p>This summary is designed to explain at a high level how the BuddyBoard team would triage, investigate, communicate, and remediate incidents affecting service availability, data handling, or customer trust.</p><h1>Recommended summary structure</h1><table><tr><td><p><strong>Stage</strong></p></td><td><p><strong>Description</strong></p></td></tr><tr><td><p>Detection</p></td><td><p>Identify reported issues through support, monitoring, or internal review.</p></td></tr><tr><td><p>Triage</p></td><td><p>Assess severity, scope, affected systems, and immediate containment needs.</p></td></tr><tr><td><p>Response</p></td><td><p>Coordinate engineering, operations, and leadership actions to stabilize the issue.</p></td></tr><tr><td><p>Communication</p></td><td><p>Notify the appropriate internal owners and, where applicable, impacted customers according to policy and contract requirements.</p></td></tr><tr><td><p>Recovery</p></td><td><p>Restore service, validate system stability, and document remediation steps.</p></td></tr><tr><td><p>Review</p></td><td><p>Capture lessons learned, preventive actions, and follow-up work.</p></td></tr></table><h1>Items to finalize before release</h1><ul><li>Severity definitions and response-time expectations</li><li>Customer communication triggers and approval paths</li><li>Escalation owners across engineering, support, leadership, and legal</li><li>Retention of incident records and post-incident reviews</li></ul>
+        <p>CommunityBridge Data Flow Summary</p><p><em>High-level data flow for prospect discussions. Update with environment-specific architecture details as needed.</em></p><table><tr><td></td></tr></table><h1>Overview</h1><p>CommunityBridge is presented as a communication and coordination platform with mobile and web-facing surfaces, user authentication, role-based experiences, messaging, directories, notifications, uploads, and administrative workflows. The exact production architecture should be confirmed before external distribution.</p><h1>Illustrative flow</h1><table><tr><td><p><strong>Step</strong></p></td><td><p><strong>System</strong></p></td><td><p><strong>Example data or action</strong></p></td></tr><tr><td><p>1</p></td><td><p>End user device</p></td><td><p>Parent, therapist, staff member, or admin opens CommunityBridge on mobile or web.</p></td></tr><tr><td><p>2</p></td><td><p>Application interface</p></td><td><p>User signs in and navigates role-based screens, chats, memos, directories, and settings.</p></td></tr><tr><td><p>3</p></td><td><p>Application services</p></td><td><p>The app exchanges data for authentication, posts, messaging, notifications, uploads, and admin actions.</p></td></tr><tr><td><p>4</p></td><td><p>Configured storage and backend</p></td><td><p>Data is stored and retrieved according to the deployed environment and configuration.</p></td></tr><tr><td><p>5</p></td><td><p>Support and operations</p></td><td><p>Support, monitoring, and administrative review processes are applied by the operating team.</p></td></tr></table><table><tr><td><p><strong>Note: </strong>This summary is intentionally high level. Replace this with a finalized architecture diagram once the production system of record, hosting provider, storage locations, and supporting vendors are confirmed.</p></td></tr></table><h1>Prospect discussion points</h1><ul><li>What user types access the system?</li><li>What kinds of communication and records flow through the system?</li><li>What hosting, storage, and support components are part of the actual production deployment?</li><li>What monitoring, backup, and incident processes apply to that deployment?</li></ul>
       </div>
     </div>
   </body>
 </html>
+

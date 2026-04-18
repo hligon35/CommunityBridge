@@ -35,7 +35,7 @@ function wrapHtml({ title, originalHtml, docxHref }) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${escapeHtml(title)} — BuddyBoard Client Packet</title>
+    <title>${escapeHtml(title)} — CommunityBridge Client Packet</title>
     <meta name="robots" content="noindex" />
     <style>
       :root {
@@ -141,7 +141,7 @@ function wrapHtml({ title, originalHtml, docxHref }) {
       <div class="wrap">
         <div class="titleRow">
           <div>
-            <div class="kicker">BuddyBoard — Client Packet</div>
+            <div class="kicker">CommunityBridge — Client Packet</div>
             <h1>${escapeHtml(title)}</h1>
           </div>
           <div class="btnRow">
@@ -151,7 +151,7 @@ function wrapHtml({ title, originalHtml, docxHref }) {
         </div>
 
         <div class="warn">
-          Note: These materials are provided for evaluation and due diligence. Do not represent BuddyBoard as “HIPAA compliant” without a deployment-specific legal/technical review and signed agreements.
+          Note: These materials are provided for evaluation and due diligence. Do not represent CommunityBridge as “HIPAA compliant” without a deployment-specific legal/technical review and signed agreements.
         </div>
       </div>
     </div>
