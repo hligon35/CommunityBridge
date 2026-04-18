@@ -49,11 +49,10 @@ appstore_connect.json
 
 # Local Expo web export output (generated)
 /dist
+/web-dist
 
 # Accidental nested clone of this same repo (avoid confusion)
 /BuddyBoard
 
-
-.env.local
 
 .env.local

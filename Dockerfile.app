@@ -14,6 +14,10 @@ RUN npm ci --no-audit --no-fund --progress=false
 # Copy app source
 COPY . .
 
+# Build the exported web app bundle for app.communitybridge.app
+# Output: /usr/src/app/web-dist
+RUN npm run -s build:web
+
 # Cloud Run routes traffic to $PORT (defaults to 8080)
 EXPOSE 8080
 

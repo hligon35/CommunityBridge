@@ -8,7 +8,15 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const Database = require('better-sqlite3');
+let SqliteDatabase = null;
+function getSqliteDatabaseCtor() {
+  if (SqliteDatabase) return SqliteDatabase;
+  // Lazy require so the server can still boot in environments where
+  // better-sqlite3 native bindings are unavailable (e.g. local Node mismatch).
+  // eslint-disable-next-line global-require
+  SqliteDatabase = require('better-sqlite3');
+  return SqliteDatabase;
+}
 const multer = require('multer');
 let twilioLib = null;
 function getTwilioLib() {
@@ -63,6 +71,9 @@ const DEBUG_2FA_RETURN_CODE = envFlag(process.env.BB_DEBUG_2FA_RETURN_CODE, fals
 // Keep disabled in production by default to avoid leaking implementation details.
 const DEBUG_2FA_DELIVERY_ERRORS = envFlag(process.env.BB_DEBUG_2FA_DELIVERY_ERRORS, false);
 const LOG_REQUESTS = envFlag(process.env.BB_DEBUG_REQUESTS, true);
+// When enabled, allow the server to start without a DB (static hosting only).
+// This is intended for local debugging and should not be used for real app traffic.
+const ALLOW_NO_DB = envFlag(process.env.BB_ALLOW_NO_DB, false);
 
 // 2FA delivery toggles
 // Default: email enabled, SMS disabled.
@@ -319,7 +330,20 @@ function nanoId() {
 }
 
 ensureDir(path.dirname(DB_PATH));
-const db = new Database(DB_PATH);
+let db = null;
+let dbInitError = null;
+try {
+  const DatabaseCtor = getSqliteDatabaseCtor();
+  db = new DatabaseCtor(DB_PATH);
+} catch (e) {
+  db = null;
+  dbInitError = e || new Error('SQLite initialization failed');
+  if (!ALLOW_NO_DB) throw dbInitError;
+  try {
+    console.warn('[api] SQLite unavailable; continuing without DB because BB_ALLOW_NO_DB=1');
+    console.warn('[api] SQLite error:', dbInitError && dbInitError.message ? dbInitError.message : String(dbInitError));
+  } catch (_) {}
+}
 
 const UPLOAD_DIR = process.env.BB_UPLOAD_DIR
   ? String(process.env.BB_UPLOAD_DIR)
@@ -327,9 +351,10 @@ const UPLOAD_DIR = process.env.BB_UPLOAD_DIR
 
 ensureDir(UPLOAD_DIR);
 
-db.pragma('journal_mode = WAL');
+if (db) {
+  db.pragma('journal_mode = WAL');
 
-db.exec(`
+  db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
@@ -468,6 +493,7 @@ CREATE TABLE IF NOT EXISTS password_resets (
   created_at TEXT NOT NULL
 );
 `);
+}
 
 try {
   db.exec('CREATE INDEX IF NOT EXISTS aba_supervision_bcba_idx ON aba_supervision (bcba_id)');
@@ -534,6 +560,7 @@ function requireAdmin(req, res, next) {
 }
 
 function ensureUserProfileColumns() {
+  if (!db) return;
   try {
     const cols = db.prepare("PRAGMA table_info('users')").all();
     const names = new Set((cols || []).map((c) => String(c.name || '').toLowerCase()));
@@ -555,6 +582,7 @@ function ensureUserProfileColumns() {
 ensureUserProfileColumns();
 
 function ensureUserEmailCaseInsensitiveUniqueness() {
+  if (!db) return;
   try {
     // If duplicates already exist (older DBs), creating a unique index will fail.
     const dups = db
@@ -575,14 +603,16 @@ function ensureUserEmailCaseInsensitiveUniqueness() {
 ensureUserEmailCaseInsensitiveUniqueness();
 
 // Lightweight migrations for older databases.
-try {
-  const cols = db.prepare("PRAGMA table_info('urgent_memos')").all().map((c) => String(c.name));
-  const ensureCol = (name, ddl) => { if (!cols.includes(name)) db.exec(ddl); };
-  ensureCol('memo_json', "ALTER TABLE urgent_memos ADD COLUMN memo_json TEXT");
-  ensureCol('status', "ALTER TABLE urgent_memos ADD COLUMN status TEXT");
-  ensureCol('responded_at', "ALTER TABLE urgent_memos ADD COLUMN responded_at TEXT");
-} catch (e) {
-  slog.warn('db', 'urgent_memos migration skipped', { message: e?.message || String(e) });
+if (db) {
+  try {
+    const cols = db.prepare("PRAGMA table_info('urgent_memos')").all().map((c) => String(c.name));
+    const ensureCol = (name, ddl) => { if (!cols.includes(name)) db.exec(ddl); };
+    ensureCol('memo_json', "ALTER TABLE urgent_memos ADD COLUMN memo_json TEXT");
+    ensureCol('status', "ALTER TABLE urgent_memos ADD COLUMN status TEXT");
+    ensureCol('responded_at', "ALTER TABLE urgent_memos ADD COLUMN responded_at TEXT");
+  } catch (e) {
+    slog.warn('db', 'urgent_memos migration skipped', { message: e?.message || String(e) });
+  }
 }
 
 function safeJsonParse(text, fallback) {
@@ -890,7 +920,7 @@ requireJwtConfigured();
 
 // Seed admin user if configured
 try {
-  if (ADMIN_EMAIL && ADMIN_PASSWORD) {
+  if (db && ADMIN_EMAIL && ADMIN_PASSWORD) {
     const normalizedAdminEmail = String(ADMIN_EMAIL).trim().toLowerCase();
     const existing = db.prepare('SELECT id FROM users WHERE lower(email) = ?').get(normalizedAdminEmail);
     if (!existing) {
@@ -935,6 +965,7 @@ const upload = multer({
 });
 
 function authMiddleware(req, res, next) {
+  if (!db) return res.status(503).json({ ok: false, error: 'Database unavailable' });
   const header = req.headers.authorization || req.headers.Authorization || '';
   const token = String(header).startsWith('Bearer ') ? String(header).slice(7) : '';
 
@@ -1002,7 +1033,7 @@ function childHasParentId(child, parentId) {
 }
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, uptime: process.uptime() });
+  res.json({ ok: true, uptime: process.uptime(), db: Boolean(db), dbError: db ? null : (dbInitError ? String(dbInitError.message || dbInitError) : 'unavailable') });
 });
 
 // Directory (SQLite-backed). Admin-only for now.
@@ -2282,6 +2313,38 @@ app.post('/api/media/upload', authMiddleware, upload.single('file'), (req, res) 
 const PUBLIC_DIR = path.resolve(__dirname, '..', 'public');
 const PUBLIC_DIR_PREFIX = `${PUBLIC_DIR}${path.sep}`;
 
+// Optional: exported Expo web app bundle.
+// Build it with `npm run build:web` (outputs to /web-dist).
+const WEB_DIST_DIR = path.resolve(__dirname, '..', 'web-dist');
+const WEB_DIST_DIR_PREFIX = `${WEB_DIST_DIR}${path.sep}`;
+
+function getRequestHost(req) {
+  try {
+    const xfHost = req.headers['x-forwarded-host'];
+    const raw = String(xfHost || req.headers.host || '').split(',')[0].trim();
+    return raw.toLowerCase();
+  } catch (_) {
+    return '';
+  }
+}
+
+function shouldServeWebApp(req) {
+  // If BB_SERVE_WEB_APP is set, always serve the web app.
+  if (String(process.env.BB_SERVE_WEB_APP || '') === '1') return true;
+
+  const host = getRequestHost(req);
+  return host.startsWith('app.');
+}
+
+function dirExists(p) {
+  try {
+    const st = fs.statSync(p);
+    return st && st.isDirectory();
+  } catch (_) {
+    return false;
+  }
+}
+
 function fileExists(p) {
   try {
     const st = fs.statSync(p);
@@ -2329,9 +2392,66 @@ function resolvePublicFileForRequestPath(reqPath) {
   return null;
 }
 
+function resolveWebDistFileForRequestPath(reqPath) {
+  try {
+    if (!dirExists(WEB_DIST_DIR)) return null;
+    if (!reqPath) return null;
+    if (reqPath.startsWith('/api/') || reqPath === '/api') return null;
+    if (reqPath.startsWith('/uploads/') || reqPath === '/uploads') return null;
+
+    const decoded = decodeURIComponent(String(reqPath));
+    const normalized = decoded.replace(/\\/g, '/');
+    if (normalized.includes('..') || normalized.includes('\u0000')) return null;
+
+    // Root -> SPA entry.
+    if (normalized === '/' || normalized === '') {
+      const p = path.resolve(WEB_DIST_DIR, 'index.html');
+      return fileExists(p) ? p : null;
+    }
+
+    const rel = normalized.replace(/^\/+/, '');
+
+    // Static file.
+    let candidate = path.resolve(WEB_DIST_DIR, rel);
+    if (!candidate.startsWith(WEB_DIST_DIR_PREFIX) && candidate !== WEB_DIST_DIR) return null;
+    if (fileExists(candidate)) return candidate;
+
+    // Directory index.
+    candidate = path.resolve(WEB_DIST_DIR, rel, 'index.html');
+    if (candidate.startsWith(WEB_DIST_DIR_PREFIX) && fileExists(candidate)) return candidate;
+
+    // SPA fallback for clean routes (no file extension).
+    if (!rel.includes('.')) {
+      candidate = path.resolve(WEB_DIST_DIR, 'index.html');
+      return fileExists(candidate) ? candidate : null;
+    }
+  } catch (_) {
+    // ignore
+  }
+  return null;
+}
+
 // Express 5 uses path-to-regexp v6+, where `"*"` is not a valid path pattern.
 // Use a regex catch-all to keep Cloud Run from crashing at startup.
 app.get(/.*/, (req, res, next) => {
+  // On the app subdomain, serve the exported web app if present.
+  if (shouldServeWebApp(req)) {
+    // Keep the browser login helper on the app subdomain.
+    if (req.path === '/app-login' || req.path.startsWith('/app-login/')) {
+      const pLogin = resolvePublicFileForRequestPath(req.path);
+      if (pLogin) return res.sendFile(pLogin);
+    }
+
+    const pWeb = resolveWebDistFileForRequestPath(req.path);
+    if (pWeb) return res.sendFile(pWeb);
+
+    // Fallback to public assets (favicon, support pages) if needed.
+    const pPublic = resolvePublicFileForRequestPath(req.path);
+    if (pPublic) return res.sendFile(pPublic);
+
+    return next();
+  }
+
   const p = resolvePublicFileForRequestPath(req.path);
   if (!p) return next();
   return res.sendFile(p);

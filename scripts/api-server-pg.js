@@ -11,6 +11,37 @@ const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const multer = require('multer');
 
+const PUBLIC_DIR = path.resolve(__dirname, '..', 'public');
+const PUBLIC_DIR_PREFIX = `${PUBLIC_DIR}${path.sep}`;
+// Optional: exported Expo web app bundle.
+// Build it with `npm run build:web` (outputs to /web-dist).
+const WEB_DIST_DIR = path.resolve(__dirname, '..', 'web-dist');
+const WEB_DIST_DIR_PREFIX = `${WEB_DIST_DIR}${path.sep}`;
+
+function getRequestHost(req) {
+  try {
+    const xfHost = req.headers['x-forwarded-host'];
+    const raw = String(xfHost || req.headers.host || '').split(',')[0].trim();
+    return raw.toLowerCase();
+  } catch (_) {
+    return '';
+  }
+}
+
+function shouldServeWebApp(req) {
+  if (String(process.env.BB_SERVE_WEB_APP || '') === '1') return true;
+  const host = getRequestHost(req);
+  return host.startsWith('app.');
+}
+
+function dirExists(p) {
+  try {
+    const st = fs.statSync(p);
+    return st && st.isDirectory();
+  } catch (_) {
+    return false;
+  }
+}
 let twilioLib = null;
 function getTwilioLib() {
   if (twilioLib) return twilioLib;
@@ -2207,10 +2238,7 @@ app.post('/api/media/upload', authMiddleware, upload.single('file'), (req, res) 
 });
 
 // If this service is mounted directly on a custom domain (e.g. app.communitybridge.app),
-// serve the static site from /public for non-API routes.
-// This prevents the default Express "Cannot GET /" response on the root path.
-const PUBLIC_DIR = path.resolve(__dirname, '..', 'public');
-const PUBLIC_DIR_PREFIX = `${PUBLIC_DIR}${path.sep}`;
+// serve static files for non-API routes.
 
 function fileExists(p) {
   try {
@@ -2224,7 +2252,6 @@ function fileExists(p) {
 function resolvePublicFileForRequestPath(reqPath) {
   try {
     if (!reqPath) return null;
-    // Never handle API routes here.
     if (reqPath.startsWith('/api/') || reqPath === '/api') return null;
     if (reqPath.startsWith('/uploads/') || reqPath === '/uploads') return null;
 
@@ -2232,13 +2259,11 @@ function resolvePublicFileForRequestPath(reqPath) {
     const normalized = decoded.replace(/\\/g, '/');
     if (normalized.includes('..') || normalized.includes('\u0000')) return null;
 
-    // Root.
     if (normalized === '/' || normalized === '') {
       const p = path.resolve(PUBLIC_DIR, 'index.html');
       return fileExists(p) ? p : null;
     }
 
-    // Trim leading slashes.
     const rel = normalized.replace(/^\/+/, '');
 
     // 1) Direct file (/favicon.png)
@@ -2259,7 +2284,62 @@ function resolvePublicFileForRequestPath(reqPath) {
   return null;
 }
 
-app.get('*', (req, res, next) => {
+function resolveWebDistFileForRequestPath(reqPath) {
+  try {
+    if (!dirExists(WEB_DIST_DIR)) return null;
+    if (!reqPath) return null;
+    if (reqPath.startsWith('/api/') || reqPath === '/api') return null;
+    if (reqPath.startsWith('/uploads/') || reqPath === '/uploads') return null;
+
+    const decoded = decodeURIComponent(String(reqPath));
+    const normalized = decoded.replace(/\\/g, '/');
+    if (normalized.includes('..') || normalized.includes('\u0000')) return null;
+
+    if (normalized === '/' || normalized === '') {
+      const p = path.resolve(WEB_DIST_DIR, 'index.html');
+      return fileExists(p) ? p : null;
+    }
+
+    const rel = normalized.replace(/^\/+/, '');
+
+    // Static file.
+    let candidate = path.resolve(WEB_DIST_DIR, rel);
+    if (!candidate.startsWith(WEB_DIST_DIR_PREFIX) && candidate !== WEB_DIST_DIR) return null;
+    if (fileExists(candidate)) return candidate;
+
+    // Directory index.
+    candidate = path.resolve(WEB_DIST_DIR, rel, 'index.html');
+    if (candidate.startsWith(WEB_DIST_DIR_PREFIX) && fileExists(candidate)) return candidate;
+
+    // SPA fallback for clean routes (no file extension).
+    if (!rel.includes('.')) {
+      candidate = path.resolve(WEB_DIST_DIR, 'index.html');
+      return fileExists(candidate) ? candidate : null;
+    }
+  } catch (_) {
+    // ignore
+  }
+  return null;
+}
+
+// Express 5 uses path-to-regexp v6+, where `"*"` is not a valid path pattern.
+app.get(/.*/, (req, res, next) => {
+  if (shouldServeWebApp(req)) {
+    // Keep the browser login helper on the app subdomain.
+    if (req.path === '/app-login' || req.path.startsWith('/app-login/')) {
+      const pLogin = resolvePublicFileForRequestPath(req.path);
+      if (pLogin) return res.sendFile(pLogin);
+    }
+
+    const pWeb = resolveWebDistFileForRequestPath(req.path);
+    if (pWeb) return res.sendFile(pWeb);
+
+    const pPublic = resolvePublicFileForRequestPath(req.path);
+    if (pPublic) return res.sendFile(pPublic);
+
+    return next();
+  }
+
   const p = resolvePublicFileForRequestPath(req.path);
   if (!p) return next();
   return res.sendFile(p);
