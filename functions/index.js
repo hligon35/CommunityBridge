@@ -2,24 +2,6 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
 
-let nodemailer = null;
-let twilioFactory = null;
-try {
-  // Optional dependency: used for email-based 2FA.
-  // eslint-disable-next-line global-require
-  nodemailer = require('nodemailer');
-} catch (_) {
-  nodemailer = null;
-}
-
-try {
-  // Optional dependency: used for SMS-based 2FA.
-  // eslint-disable-next-line global-require
-  twilioFactory = require('twilio');
-} catch (_) {
-  twilioFactory = null;
-}
-
 admin.initializeApp();
 
 function safeString(v) {
@@ -198,7 +180,13 @@ async function sendEmailOtp({ to, code }) {
     err.code = 'BB_MFA_EMAIL_NOT_CONFIGURED';
     throw err;
   }
-  if (!nodemailer) {
+
+  let nodemailer;
+  try {
+    // Lazy-load to keep deploy analysis fast.
+    // eslint-disable-next-line global-require
+    nodemailer = require('nodemailer');
+  } catch (_) {
     const err = new Error('Email 2FA dependency missing (nodemailer).');
     err.code = 'BB_MFA_EMAIL_DEP_MISSING';
     throw err;
@@ -225,7 +213,13 @@ async function sendSmsOtp({ to, code }) {
     err.code = 'BB_MFA_SMS_NOT_CONFIGURED';
     throw err;
   }
-  if (!twilioFactory) {
+
+  let twilioFactory;
+  try {
+    // Lazy-load to keep deploy analysis fast.
+    // eslint-disable-next-line global-require
+    twilioFactory = require('twilio');
+  } catch (_) {
     const err = new Error('SMS 2FA dependency missing (twilio).');
     err.code = 'BB_MFA_SMS_DEP_MISSING';
     throw err;
