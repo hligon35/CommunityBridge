@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/png" href="/favicon.png" sizes="any" />
-    <link rel="apple-touch-icon" href="/favicon.png" />
+    <link rel="icon" type="image/png" href="/icon.png" sizes="any" />
+    <link rel="apple-touch-icon" href="/icon.png" />
     <script>
       (function () {
         var CANONICAL_HOST = 'buddy-board.com';
@@ -13,6 +13,37 @@
           window.location.replace(target);
         }
       })();
+    </script>
+
+    <script type="module">
+      // If already signed in on this origin, go straight to the app.
+      // This keeps communitybridge.app as marketing, and communitybridge.app/home as the web app.
+      try {
+        const path = String(window.location.pathname || '/');
+        if (path === '/' || path === '/index.html') {
+          const [{ initializeApp }, { getAuth, onAuthStateChanged }] = await Promise.all([
+            import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js'),
+            import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js'),
+          ]);
+
+          const firebaseConfig = {
+            apiKey: 'AIzaSyDp-yfw3d7uzs43tf5SaJd0czIBcWwNpDc',
+            authDomain: 'buddyboard-7acda.firebaseapp.com',
+            projectId: 'buddyboard-7acda',
+            storageBucket: 'buddyboard-7acda.firebasestorage.app',
+            messagingSenderId: '870175047052',
+            appId: '1:870175047052:android:ff966198b531ee97a9eaa9'
+          };
+
+          const app = initializeApp(firebaseConfig);
+          const auth = getAuth(app);
+          onAuthStateChanged(auth, (user) => {
+            if (user) window.location.replace('/home');
+          });
+        }
+      } catch (_) {
+        // ignore
+      }
     </script>
     <title>CommunityBridge</title>
     <meta name="description" content="CommunityBridge keeps parents, caregivers, and providers aligned with updates, messages, and schedules." />
@@ -200,7 +231,7 @@
         </a>
 
         <div class="navActions">
-          <a class="btn btnGhost" href="https://app.communitybridge.app/app-login">App login</a>
+          <a class="btn btnGhost" href="/app-login">App login</a>
           <a class="btn btnGhost" href="/support">Support</a>
           <a class="btn btnPrimary" href="/download">Get the app</a>
         </div>
@@ -217,7 +248,7 @@
               </p>
 
               <div class="ctaRow" id="get">
-                <a class="btn btnPrimary" href="https://app.communitybridge.app/app-login">Sign in</a>
+                <a class="btn btnPrimary" href="/app-login">Sign in</a>
                 <a class="btn" href="#features">See features</a>
               </div>
 
@@ -264,7 +295,7 @@
       <div class="foot">
         <div>© <span id="y"></span> CommunityBridge</div>
         <div class="links">
-          <a href="https://app.communitybridge.app/app-login">App login</a>
+          <a href="/app-login">App login</a>
           <a href="/support">Support</a>
           <a href="#features">Features</a>
           <a href="/for-providers">For Providers</a>

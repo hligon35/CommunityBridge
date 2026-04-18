@@ -29,25 +29,42 @@ config.resolver.unstable_conditionNames = Array.from(
 // within the `firebase` package.
 const RN_AUTH_ENTRY = path.join(__dirname, 'node_modules', 'firebase', 'node_modules', '@firebase', 'auth', 'dist', 'rn', 'index.js');
 const RN_AUTH_INTERNAL_ENTRY = path.join(__dirname, 'node_modules', 'firebase', 'node_modules', '@firebase', 'auth', 'dist', 'rn', 'internal.js');
+const WEB_AUTH_ENTRY = path.join(__dirname, 'node_modules', 'firebase', 'node_modules', '@firebase', 'auth', 'dist', 'esm2017', 'index.js');
+const WEB_AUTH_INTERNAL_ENTRY = path.join(__dirname, 'node_modules', 'firebase', 'node_modules', '@firebase', 'auth', 'dist', 'esm2017', 'internal.js');
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
 	try {
+		const isNative = platform === 'ios' || platform === 'android';
+
 		// Force Firebase Auth public entrypoints to the React Native build.
 		// Firebase 10.x does not export `firebase/auth/react-native`, and the default
 		// `firebase/auth` export chain can select the web build in some Metro setups.
 		// This mapping ensures Auth registers its component on native.
-		if (moduleName === 'firebase/auth' && fs.existsSync(RN_AUTH_ENTRY)) {
+		if (isNative && moduleName === 'firebase/auth' && fs.existsSync(RN_AUTH_ENTRY)) {
 			return { type: 'sourceFile', filePath: RN_AUTH_ENTRY };
 		}
-		if (moduleName === 'firebase/auth/internal' && fs.existsSync(RN_AUTH_INTERNAL_ENTRY)) {
+		if (isNative && moduleName === 'firebase/auth/internal' && fs.existsSync(RN_AUTH_INTERNAL_ENTRY)) {
 			return { type: 'sourceFile', filePath: RN_AUTH_INTERNAL_ENTRY };
 		}
 
-		if (moduleName === '@firebase/auth' && fs.existsSync(RN_AUTH_ENTRY)) {
-			return { type: 'sourceFile', filePath: RN_AUTH_ENTRY };
+		// Force @firebase/auth to the appropriate build:
+		// - native (iOS/Android): RN build (registers Auth component)
+		// - everything else (web/export/etc): web ESM build
+		if (moduleName === '@firebase/auth') {
+			if (isNative && fs.existsSync(RN_AUTH_ENTRY)) {
+				return { type: 'sourceFile', filePath: RN_AUTH_ENTRY };
+			}
+			if (fs.existsSync(WEB_AUTH_ENTRY)) {
+				return { type: 'sourceFile', filePath: WEB_AUTH_ENTRY };
+			}
 		}
-		if (moduleName === '@firebase/auth/internal' && fs.existsSync(RN_AUTH_INTERNAL_ENTRY)) {
-			return { type: 'sourceFile', filePath: RN_AUTH_INTERNAL_ENTRY };
+		if (moduleName === '@firebase/auth/internal') {
+			if (isNative && fs.existsSync(RN_AUTH_INTERNAL_ENTRY)) {
+				return { type: 'sourceFile', filePath: RN_AUTH_INTERNAL_ENTRY };
+			}
+			if (fs.existsSync(WEB_AUTH_INTERNAL_ENTRY)) {
+				return { type: 'sourceFile', filePath: WEB_AUTH_INTERNAL_ENTRY };
+			}
 		}
 	} catch (_) {
 		// fall through to default resolver

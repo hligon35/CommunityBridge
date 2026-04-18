@@ -100,7 +100,8 @@
     "@babel/core": "^7.26.0",
     "@react-native-community/cli": "latest",
     "@react-native-community/cli-server-api": "^20.0.2",
-    "expo-module-scripts": "^5.0.8"
+    "expo-module-scripts": "^5.0.8",
+    "png-to-ico": "^3.0.1"
   },
   "overrides": {
     "react-native-renderer": "19.1.0",

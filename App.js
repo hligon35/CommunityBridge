@@ -319,7 +319,7 @@ function App() {
       >
         <AppStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
           <AppStack.Screen name="Login">
-            {(props) => <LoginScreen {...props} suppressAutoRedirect={true} />}
+            {(props) => <LoginScreen {...props} suppressAutoRedirect={false} />}
           </AppStack.Screen>
           <AppStack.Screen
             name="TwoFactor"

@@ -14,8 +14,7 @@
       "public": "public",
       "ignore": [
         "firebase.json",
-        "**/.*",
-        "**/node_modules/**"
+        "**/.*"
       ],
       "headers": [
         {
@@ -30,6 +29,31 @@
       ],
       "cleanUrls": true,
       "trailingSlash": false
+      ,
+      "rewrites": [
+        {
+          "source": "/api/**",
+          "run": {
+            "serviceId": "buddyboard",
+            "region": "us-east5"
+          }
+        },
+        {
+          "source": "/uploads/**",
+          "run": {
+            "serviceId": "buddyboard",
+            "region": "us-east5"
+          }
+        },
+        {
+          "source": "/home",
+          "destination": "/home/index.html"
+        },
+        {
+          "source": "/home/**",
+          "destination": "/home/index.html"
+        }
+      ]
     },
     {
       "site": "buddyboard-app",
