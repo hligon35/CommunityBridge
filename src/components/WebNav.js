@@ -10,7 +10,12 @@ export default function WebNav() {
   const role = (user && user.role) ? (user.role || '').toString().toLowerCase() : 'parent';
 
   function navTo(route) {
-    if (navigation && navigation.navigate) navigation.navigate(route);
+    // WebNav is rendered inside nested stacks (Home/Chats/Settings stacks).
+    // Those child navigators don't know sibling routes like "Chats" or "Settings".
+    // Navigate via the parent (root) navigator so these top-level links work.
+    const parent = navigation?.getParent?.();
+    if (parent?.navigate) parent.navigate(route);
+    else if (navigation?.navigate) navigation.navigate(route);
   }
 
   return (
