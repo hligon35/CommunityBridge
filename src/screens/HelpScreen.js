@@ -9,9 +9,9 @@ const SUPPORT_EMAIL = (() => {
     const v = (typeof process !== 'undefined' && process.env && process.env.EXPO_PUBLIC_SUPPORT_EMAIL)
       ? String(process.env.EXPO_PUBLIC_SUPPORT_EMAIL)
       : '';
-    return v.trim() || 'support@buddyboard.getsparqd.com';
+    return v.trim() || 'info@communitybridge.app';
   } catch (e) {
-    return 'support@buddyboard.getsparqd.com';
+    return 'info@communitybridge.app';
   }
 })();
 
@@ -29,7 +29,7 @@ export default function HelpScreen() {
         <Text style={styles.sectionTitle}>Push Notifications</Text>
         <Text style={styles.paragraph}>
           Use the Push Notifications settings to control which notifications you receive (chats, timeline posts,
-          mentions, comments, and reminders). If notifications are disabled in your device, enable them from Settings → Apps → BuddyBoard → Notifications.
+          mentions, comments, and reminders). If notifications are disabled in your device, enable them from Settings → Apps → CommunityBridge → Notifications.
         </Text>
 
         <Text style={styles.sectionTitle}>Chats</Text>
@@ -49,7 +49,7 @@ export default function HelpScreen() {
           To sign out, use the Logout button in the top-right. For account issues or to request help, tap the button below to email support.
         </Text>
 
-        <TouchableOpacity style={styles.contact} onPress={() => Linking.openURL(`mailto:${encodeURIComponent(SUPPORT_EMAIL)}?subject=${encodeURIComponent('BuddyBoard Support')}`) }>
+        <TouchableOpacity style={styles.contact} onPress={() => Linking.openURL(`mailto:${encodeURIComponent(SUPPORT_EMAIL)}?subject=${encodeURIComponent('CommunityBridge Support')}`) }>
           <MaterialIcons name="email" size={20} color="#fff" style={{ marginRight: 8 }} />
           <Text style={styles.contactText}>Email Support</Text>
         </TouchableOpacity>

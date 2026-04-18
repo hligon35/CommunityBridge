@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Modal, Platform, ImageBackground, KeyboardAvoidingView, ScrollView, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Modal, Platform, Image, KeyboardAvoidingView, ScrollView, TouchableWithoutFeedback, Keyboard, useWindowDimensions } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -9,7 +9,6 @@ import Constants from 'expo-constants';
 import SignUpScreen from './SignUpScreen';
 import ForgotPasswordScreen from './ForgotPasswordScreen';
 import { useAuth } from '../src/AuthContext';
-import LogoTitle from '../src/components/LogoTitle';
 import { logger } from '../src/utils/logger';
 import { Sentry } from '../src/sentry';
 import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportError';
@@ -31,6 +30,8 @@ function getExpoExtraValue(key) {
 }
 
 export default function LoginScreen({ navigation, suppressAutoRedirect = false }) {
+  const { height: windowHeight } = useWindowDimensions();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -171,7 +172,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       }
 
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Unlock BuddyBoard',
+        promptMessage: 'Unlock CommunityBridge',
         cancelLabel: 'Cancel',
         disableDeviceFallback: false,
       });
@@ -251,24 +252,16 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     return () => { mounted = false; };
   }, [auth.loading, showSignUp]);
 
+  const brandSectionMinHeight = Math.max(180, Math.round(windowHeight * 0.33));
+
   if (auth.loading) return (
-    <ImageBackground
-      source={require('../assets/bbbg.png')}
-      resizeMode="cover"
-      style={{ flex: 1, backgroundColor: '#fff' }}
-      imageStyle={{ transform: [{ scale: 0.92 }] }}
-    >
-      <View style={styles.container}><ActivityIndicator size="large" /></View>
-    </ImageBackground>
+    <View style={[styles.screen, { alignItems: 'center', justifyContent: 'center' }]}>
+      <ActivityIndicator size="large" />
+    </View>
   );
 
   return (
-    <ImageBackground
-      source={require('../assets/bbbg.png')}
-      resizeMode="cover"
-      style={{ flex: 1, backgroundColor: '#fff' }}
-      imageStyle={{ transform: [{ scale: 0.92 }] }}
-    >
+    <View style={styles.screen}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -276,12 +269,16 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <ScrollView
-            contentContainerStyle={styles.container}
+            contentContainerStyle={styles.scrollContainer}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
-            <View style={styles.logoWrap}>
-              <LogoTitle width={450} height={135} />
+            <View style={[styles.brandSection, { minHeight: brandSectionMinHeight }]}>
+              <Image
+                source={require('../public/logo.png')}
+                accessibilityLabel="CommunityBridge"
+                style={[styles.loginLogo, { height: Math.min(180, Math.round(brandSectionMinHeight * 0.65)) }]}
+              />
             </View>
             <View style={styles.formCard}>
               <View style={fieldWidthStyle}>
@@ -432,13 +429,15 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
             </ScrollView>
           </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
-      </ImageBackground>
+      </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, justifyContent: 'center' },
-  logoWrap: { alignItems: 'center', marginBottom: 18 },
+  screen: { flex: 1, backgroundColor: '#fff' },
+  scrollContainer: { flexGrow: 1, padding: 20, alignItems: 'center', justifyContent: 'flex-start' },
+  brandSection: { width: '100%', maxWidth: 420, alignItems: 'center', justifyContent: 'center' },
+  loginLogo: { width: '100%', maxWidth: 320, resizeMode: 'contain' },
   formCard: { width: '100%', maxWidth: 420, alignSelf: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 20 },
   input: { borderWidth: 1, borderColor: '#ccc', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12, borderRadius: 10, backgroundColor: '#fff' },

@@ -16,9 +16,9 @@ export default function ForgotPasswordScreen({ onDone, onCancel }) {
       const v = (typeof process !== 'undefined' && process.env && process.env.EXPO_PUBLIC_SUPPORT_EMAIL)
         ? String(process.env.EXPO_PUBLIC_SUPPORT_EMAIL)
         : '';
-      return v.trim() || 'support@buddyboard.getsparqd.com';
+      return v.trim() || 'info@communitybridge.app';
     } catch (_) {
-      return 'support@buddyboard.getsparqd.com';
+      return 'info@communitybridge.app';
     }
   }, []);
 
@@ -44,7 +44,7 @@ export default function ForgotPasswordScreen({ onDone, onCancel }) {
   }
 
   function openSupportEmail() {
-    const url = `mailto:${encodeURIComponent(supportEmail)}?subject=${encodeURIComponent('BuddyBoard Password Reset')}`;
+    const url = `mailto:${encodeURIComponent(supportEmail)}?subject=${encodeURIComponent('CommunityBridge Password Reset')}`;
     Linking.openURL(url).catch(() => {
       Alert.alert('Contact support', `Please email ${supportEmail} for help resetting your password.`);
     });

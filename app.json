@@ -1,20 +1,20 @@
 {
   "expo": {
-    "name": "BuddyBoard",
+    "name": "CommunityBridge",
     "slug": "buddyboard-mobile",
     "version": "1.0.1",
     "sdkVersion": "54.0.0",
     "ios": {
       "bundleIdentifier": "com.azlabs.buddyboard",
-      "buildNumber": "1.0.19",
+      "buildNumber": "19",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSFaceIDUsageDescription": "BuddyBoard uses Face ID / Touch ID to help you securely sign in on this device.",
-        "NSLocationWhenInUseUsageDescription": "BuddyBoard uses your location to support arrival detection and location-based features.",
-        "NSCameraUsageDescription": "BuddyBoard needs camera access to let you capture photos for posts and messages.",
-        "NSPhotoLibraryUsageDescription": "BuddyBoard needs photo library access to let you choose images for posts and messages.",
-        "NSPhotoLibraryAddUsageDescription": "BuddyBoard needs permission to save images to your photo library when you choose to download media."
+        "NSFaceIDUsageDescription": "CommunityBridge uses Face ID / Touch ID to help you securely sign in on this device.",
+        "NSLocationWhenInUseUsageDescription": "CommunityBridge uses your location to support arrival detection and location-based features.",
+        "NSCameraUsageDescription": "CommunityBridge needs camera access to let you capture photos for posts and messages.",
+        "NSPhotoLibraryUsageDescription": "CommunityBridge needs photo library access to let you choose images for posts and messages.",
+        "NSPhotoLibraryAddUsageDescription": "CommunityBridge needs permission to save images to your photo library when you choose to download media."
       }
     },
     "platforms": [

@@ -26,7 +26,7 @@ export default function ExportDataScreen(){
       const childrenCsv = toCSV((children || []).map(c => ({ name: c.name, age: c.age, room: c.room, notes: c.notes })));
 
       const payload = `--- Posts ---\n${postsCsv}\n\n--- Messages ---\n${messagesCsv}\n\n--- Children ---\n${childrenCsv}`;
-      await Share.share({ message: payload, title: 'BuddyBoard export' });
+      await Share.share({ message: payload, title: 'CommunityBridge export' });
     } catch (e) {
       Alert.alert('Export failed', e?.message || String(e));
     }

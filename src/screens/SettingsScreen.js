@@ -347,7 +347,7 @@ export default function SettingsScreen({ navigation }) {
         const result = await registerForExpoPushTokenAsync();
         if (!result.ok) {
           const msg = result.reason === 'permission-denied'
-            ? 'Notification permission was not granted. Enable notifications in iOS Settings for BuddyBoard, then try again.'
+            ? 'Notification permission was not granted. Enable notifications in iOS Settings for CommunityBridge, then try again.'
             : (result.reason === 'not-device'
               ? 'Push notifications require a physical device (not a simulator).'
               : (result.message || 'Could not enable push notifications.'));

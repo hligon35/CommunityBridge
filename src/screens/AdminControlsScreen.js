@@ -126,7 +126,7 @@ export default function AdminControlsScreen() {
   async function doExportShare() {
     try {
       const payload = buildExportPayload();
-      await Share.share({ message: payload, title: 'BuddyBoard export' });
+      await Share.share({ message: payload, title: 'CommunityBridge export' });
       setExportModalVisible(false);
     } catch (e) {
       Alert.alert('Export failed', e?.message || String(e));
@@ -141,7 +141,7 @@ export default function AdminControlsScreen() {
 
       const payload = buildExportPayload();
       const ts = new Date().toISOString().replace(/[:.]/g, '-');
-      const fileName = `buddyboard_export_${ts}.txt`;
+      const fileName = `communitybridge_export_${ts}.txt`;
 
       const perm = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
       if (!perm.granted || !perm.directoryUri) return;
