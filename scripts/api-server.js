@@ -2329,7 +2329,9 @@ function resolvePublicFileForRequestPath(reqPath) {
   return null;
 }
 
-app.get('*', (req, res, next) => {
+// Express 5 uses path-to-regexp v6+, where `"*"` is not a valid path pattern.
+// Use a regex catch-all to keep Cloud Run from crashing at startup.
+app.get(/.*/, (req, res, next) => {
   const p = resolvePublicFileForRequestPath(req.path);
   if (!p) return next();
   return res.sendFile(p);
