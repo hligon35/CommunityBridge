@@ -26,8 +26,8 @@ async function ensureSquarePng({ srcPng, destPng }) {
 }
 
 async function generateFaviconIco({ srcPng, destIcoPaths }) {
-  const pngToIcoModule = require('png-to-ico');
-  const pngToIco = pngToIcoModule?.default ?? pngToIcoModule;
+  const pngToIcoModule = await import('png-to-ico');
+  const pngToIco = pngToIcoModule.default;
 
   if (!fs.existsSync(srcPng)) {
     throw new Error(`Source PNG not found: ${srcPng}`);
