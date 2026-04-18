@@ -2206,6 +2206,65 @@ app.post('/api/media/upload', authMiddleware, upload.single('file'), (req, res) 
   });
 });
 
+// If this service is mounted directly on a custom domain (e.g. app.communitybridge.app),
+// serve the static site from /public for non-API routes.
+// This prevents the default Express "Cannot GET /" response on the root path.
+const PUBLIC_DIR = path.resolve(__dirname, '..', 'public');
+const PUBLIC_DIR_PREFIX = `${PUBLIC_DIR}${path.sep}`;
+
+function fileExists(p) {
+  try {
+    const st = fs.statSync(p);
+    return st && st.isFile();
+  } catch (_) {
+    return false;
+  }
+}
+
+function resolvePublicFileForRequestPath(reqPath) {
+  try {
+    if (!reqPath) return null;
+    // Never handle API routes here.
+    if (reqPath.startsWith('/api/') || reqPath === '/api') return null;
+    if (reqPath.startsWith('/uploads/') || reqPath === '/uploads') return null;
+
+    const decoded = decodeURIComponent(String(reqPath));
+    const normalized = decoded.replace(/\\/g, '/');
+    if (normalized.includes('..') || normalized.includes('\u0000')) return null;
+
+    // Root.
+    if (normalized === '/' || normalized === '') {
+      const p = path.resolve(PUBLIC_DIR, 'index.html');
+      return fileExists(p) ? p : null;
+    }
+
+    // Trim leading slashes.
+    const rel = normalized.replace(/^\/+/, '');
+
+    // 1) Direct file (/favicon.png)
+    let candidate = path.resolve(PUBLIC_DIR, rel);
+    if (!candidate.startsWith(PUBLIC_DIR_PREFIX) && candidate !== PUBLIC_DIR) return null;
+    if (fileExists(candidate)) return candidate;
+
+    // 2) Directory index (/app-login -> /app-login/index.html)
+    candidate = path.resolve(PUBLIC_DIR, rel, 'index.html');
+    if (candidate.startsWith(PUBLIC_DIR_PREFIX) && fileExists(candidate)) return candidate;
+
+    // 3) Clean URL (/support -> /support.html)
+    candidate = path.resolve(PUBLIC_DIR, `${rel}.html`);
+    if (candidate.startsWith(PUBLIC_DIR_PREFIX) && fileExists(candidate)) return candidate;
+  } catch (_) {
+    // ignore
+  }
+  return null;
+}
+
+app.get('*', (req, res, next) => {
+  const p = resolvePublicFileForRequestPath(req.path);
+  if (!p) return next();
+  return res.sendFile(p);
+});
+
 async function main() {
   await initDb();
   await seedAdminUser();

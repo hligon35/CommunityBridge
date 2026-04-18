@@ -162,8 +162,40 @@ export const firebaseApp = getFirebaseApp();
 const AUTH_GLOBAL_KEY = '__bb_firebase_auth_instance__';
 const AUTH_ERROR_GLOBAL_KEY = '__bb_firebase_auth_init_error__';
 const AUTH_INIT_ATTEMPTED_GLOBAL_KEY = '__bb_firebase_auth_init_attempted__';
+const AUTH_REGISTERED_GLOBAL_KEY = '__bb_firebase_auth_registered__';
 let authInstance = globalThis?.[AUTH_GLOBAL_KEY];
 let authInitError = globalThis?.[AUTH_ERROR_GLOBAL_KEY] || null;
+
+function ensureReactNativeAuthRegistered() {
+  // In Firebase 10.x, `firebase/auth/react-native` is not exported.
+  // The Auth component is registered by the RN build of `@firebase/auth`.
+  // Our metro.config.js aliases `@firebase/auth` -> the RN entry, so requiring it
+  // here guarantees registerAuth(...) runs before we call getAuth().
+  if (Platform.OS === 'web') return true;
+
+  try {
+    if (globalThis?.[AUTH_REGISTERED_GLOBAL_KEY]) return true;
+  } catch (_) {}
+
+  try {
+    // eslint-disable-next-line global-require
+    require('@firebase/auth');
+    try {
+      if (globalThis) globalThis[AUTH_REGISTERED_GLOBAL_KEY] = true;
+    } catch (_) {}
+    return true;
+  } catch (e) {
+    const err = e || new Error('Failed to load @firebase/auth RN entry');
+    try {
+      console.warn('[firebase] Failed to register React Native Auth component', err);
+    } catch (_) {}
+    authInitError = err;
+    try {
+      if (globalThis) globalThis[AUTH_ERROR_GLOBAL_KEY] = err;
+    } catch (_) {}
+    return false;
+  }
+}
 
 function getAsyncStorageMaybe() {
   try {
@@ -218,6 +250,9 @@ export function getAuthInstance() {
     } catch (_) {}
     return null;
   }
+
+  // Ensure Auth is registered before calling getAuth()/initializeAuth.
+  ensureReactNativeAuthRegistered();
 
   try {
     // Prefer explicit React Native Auth initialization to avoid web-targeted builds
