@@ -76,7 +76,7 @@ export default function SignUpScreen({ onDone, onCancel }) {
 
   return (
     <ImageBackground
-      source={require('../assets/bbbg.png')}
+      source={require('../assets/banner.png')}
       resizeMode="cover"
       style={{ flex: 1, backgroundColor: '#fff' }}
       imageStyle={{ transform: [{ scale: 0.92 }] }}

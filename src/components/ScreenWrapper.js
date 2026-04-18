@@ -34,7 +34,7 @@ export function ScreenWrapper({ children, style, hideBanner = false, bannerShowB
 
   return (
     <ImageBackground
-      source={require('../../assets/bbbg.png')}
+      source={require('../../assets/banner.png')}
       resizeMode="cover"
       style={{ flex: 1, width: '100%', backgroundColor: '#fff' }}
     >

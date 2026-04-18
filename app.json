@@ -22,7 +22,10 @@
       "ios",
       "web"
     ],
-    "scheme": "buddyboard",
+    "scheme": [
+      "buddyboard",
+      "communitybridge"
+    ],
     "orientation": "portrait",
     "plugins": [
       [
@@ -44,7 +47,7 @@
     ],
     "icon": "./assets/icon.png",
     "splash": {
-      "image": "./assets/splash-blank.png",
+      "image": "./assets/favicon.png",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
@@ -59,7 +62,7 @@
       }
     },
     "web": {
-      "favicon": "./assets/icon.png"
+      "favicon": "./assets/logo.png"
     },
     "extra": {
       "eas": {
