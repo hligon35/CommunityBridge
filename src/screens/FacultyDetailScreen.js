@@ -6,7 +6,7 @@ import { useAuth } from '../AuthContext';
 import { MaterialIcons } from '@expo/vector-icons';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
-import { formatIdForDisplay, pravatarUriFor } from '../utils/idVisibility';
+import { avatarSourceFor, formatIdForDisplay } from '../utils/idVisibility';
 
 function AssignedChildrenList({ facultyId }) {
   const { children = [] } = useData();
@@ -28,7 +28,7 @@ function AssignedChildrenList({ facultyId }) {
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 8 }}>
       {assigned.map((c) => (
         <TouchableOpacity key={c.id} style={styles.childTile} onPress={() => { try { navigation.push('ChildDetail', { childId: c.id }); } catch (e) { navigation.navigate('ChildDetail', { childId: c.id }); } }}>
-          <Image source={{ uri: c.avatar }} style={styles.childAvatarSmall} />
+          <Image source={avatarSourceFor(c)} style={styles.childAvatarSmall} />
           <Text numberOfLines={1} style={styles.childTileName}>{c.name}</Text>
           <Text numberOfLines={1} style={{ color: '#6b7280', marginTop: 4 }}>{c.age}</Text>
         </TouchableOpacity>
@@ -82,10 +82,7 @@ export default function FacultyDetailScreen() {
       <ScrollView contentContainerStyle={{ padding: 16 }} style={{ flex: 1 }}>
 
       <View style={styles.header}>
-        {(() => {
-          const avatarUri = (faculty.avatar && !String(faculty.avatar).includes('pravatar.cc')) ? faculty.avatar : pravatarUriFor(faculty, 120);
-          return <Image source={{ uri: avatarUri }} style={styles.avatar} />;
-        })()}
+        <Image source={avatarSourceFor(faculty)} style={styles.avatar} />
         <View style={{ marginLeft: 12, flex: 1 }}>
           <Text style={styles.name}>{getDisplayName(faculty)}</Text>
           <Text style={styles.role}>{faculty.role || 'Staff'}</Text>

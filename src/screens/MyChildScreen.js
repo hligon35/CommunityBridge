@@ -6,6 +6,7 @@ import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { childHasParent, findLinkedParentId } from '../utils/directoryLinking';
+import { avatarSourceFor } from '../utils/idVisibility';
 
 export default function MyChildScreen() {
   const { children, parents, urgentMemos, sendTimeUpdateAlert, timeChangeProposals, proposeTimeChange, respondToProposal, respondToUrgentMemo } = useData();
@@ -28,7 +29,7 @@ export default function MyChildScreen() {
   useEffect(() => {
     if (childList.length > 1 && selectedIndex === 0) setSelectedIndex(1);
   }, [childList.length]);
-  const child = childList[selectedIndex] || { id: 'no-child', name: 'No children added', age: '', room: '', avatar: 'https://i.pravatar.cc/120?u=empty', carePlan: '', notes: '' };
+  const child = childList[selectedIndex] || { id: 'no-child', name: 'No children added', age: '', room: '', avatar: null, carePlan: '', notes: '' };
 
   // const provided above via single useData call
   const [showProposeModal, setShowProposeModal] = useState(false);
@@ -217,7 +218,7 @@ export default function MyChildScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} pagingEnabled={false}>
           {childList.map((c, i) => (
             <TouchableOpacity key={c.id || i} onPress={() => setSelectedIndex(i)} style={[styles.selectorItem, selectedIndex === i && styles.selectorActive]}>
-              <Image source={{ uri: c.avatar }} style={styles.selectorAvatar} />
+              <Image source={avatarSourceFor(c)} style={styles.selectorAvatar} />
               <Text style={styles.selectorName}>{shortName(c.name, 12)}</Text>
             </TouchableOpacity>
           ))}
@@ -226,7 +227,7 @@ export default function MyChildScreen() {
       {/* Developer action moved to DevRoleSwitcher */}
       
       <View style={styles.card}>
-        <Image source={{ uri: child.avatar }} style={styles.avatar} />
+        <Image source={avatarSourceFor(child)} style={styles.avatar} />
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={styles.name}>{shortName(child.name, 20)}</Text>
           <Text style={styles.meta}>{child.age} • {child.room}</Text>
@@ -508,7 +509,7 @@ export default function MyChildScreen() {
         <View style={[styles.card, { marginTop: 8, alignItems: 'center' }]}>
           {child.bcaTherapist ? (
             <>
-              <Image source={{ uri: child.bcaTherapist.avatar }} style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#eee' }} />
+              <Image source={avatarSourceFor(child.bcaTherapist)} style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#eee' }} />
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.name}>{shortName(child.bcaTherapist.name, 20)}</Text>
                 <Text style={styles.meta}>{child.bcaTherapist.role}</Text>
@@ -535,7 +536,7 @@ export default function MyChildScreen() {
             <Text style={styles.therapistTitle}>AM Therapist</Text>
             {child.amTherapist ? (
               <View style={styles.therapistInner}>
-                <Image source={{ uri: child.amTherapist.avatar }} style={styles.therapistAvatar} />
+                <Image source={avatarSourceFor(child.amTherapist)} style={styles.therapistAvatar} />
                 <View style={{ flex: 1, marginLeft: 8, alignItems: 'center' }}>
                   <Text style={styles.therapistName}>{shortName(child.amTherapist.name, 18)}</Text>
                   <Text style={styles.therapistRole}>{child.amTherapist.role}</Text>
@@ -558,7 +559,7 @@ export default function MyChildScreen() {
             <Text style={styles.therapistTitle}>PM Therapist</Text>
             {child.pmTherapist ? (
               <View style={styles.therapistInner}>
-                <Image source={{ uri: child.pmTherapist.avatar }} style={styles.therapistAvatar} />
+                <Image source={avatarSourceFor(child.pmTherapist)} style={styles.therapistAvatar} />
                 <View style={{ flex: 1, marginLeft: 8, alignItems: 'center' }}>
                   <Text style={styles.therapistName}>{shortName(child.pmTherapist.name, 18)}</Text>
                   <Text style={styles.therapistRole}>{child.pmTherapist.role}</Text>

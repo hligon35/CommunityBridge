@@ -3,26 +3,31 @@ import {
   View,
   Text,
   TextInput,
-  Button,
   StyleSheet,
   Alert,
-  ImageBackground,
   KeyboardAvoidingView,
   Platform,
+  Image,
   ScrollView,
   TouchableWithoutFeedback,
   Keyboard,
+  TouchableOpacity,
+  useWindowDimensions,
 } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as Api from '../src/Api';
 import { logger } from '../src/utils/logger';
 import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportError';
 import { getAuthInitError, getFirebaseAppInitError } from '../src/firebase';
+import { MaterialIcons } from '@expo/vector-icons';
 
 export default function SignUpScreen({ onDone, onCancel }) {
+  const { height: windowHeight } = useWindowDimensions();
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
@@ -74,13 +79,10 @@ export default function SignUpScreen({ onDone, onCancel }) {
     }
   };
 
+  const brandSectionMinHeight = Math.max(180, Math.round(windowHeight * 0.33));
+
   return (
-    <ImageBackground
-      source={require('../assets/banner.png')}
-      resizeMode="cover"
-      style={{ flex: 1, backgroundColor: '#fff' }}
-      imageStyle={{ transform: [{ scale: 0.92 }] }}
-    >
+    <View style={styles.screen}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -88,14 +90,32 @@ export default function SignUpScreen({ onDone, onCancel }) {
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <ScrollView
-            contentContainerStyle={{ flexGrow: 1, padding: 20, justifyContent: 'center' }}
+            contentContainerStyle={styles.scrollContainer}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
+            <View style={[styles.brandSection, { minHeight: brandSectionMinHeight }]}>
+              <Image
+                source={require('../public/logo.png')}
+                accessibilityLabel="CommunityBridge"
+                style={[styles.logo, { height: Math.min(180, Math.round(brandSectionMinHeight * 0.65)) }]}
+              />
+            </View>
+
             <View style={styles.formCard}>
-              <View>
-                <Text style={{ fontSize: 20, fontWeight: '700', marginBottom: 12 }}>Sign Up</Text>
-                <TextInput placeholder="Full name" value={name} onChangeText={setName} style={styles.input} />
+              <Text style={styles.title}>Register</Text>
+
+              <View style={styles.fieldWidth}>
+                <TextInput
+                  placeholder="Full name"
+                  value={name}
+                  onChangeText={setName}
+                  style={styles.input}
+                  autoCapitalize="words"
+                />
+              </View>
+
+              <View style={styles.fieldWidth}>
                 <TextInput
                   placeholder="Email"
                   value={email}
@@ -104,37 +124,73 @@ export default function SignUpScreen({ onDone, onCancel }) {
                   autoCapitalize="none"
                   style={styles.input}
                 />
-                <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
-                  <Button title="Cancel" onPress={() => { if (onCancel) onCancel(); }} />
-                  <Button title={busy ? 'Submitting...' : 'Submit'} onPress={submit} disabled={busy} />
-                </View>
+              </View>
+
+              <View style={[styles.fieldWidth, styles.passwordFieldWrap]}>
+                <TextInput
+                  placeholder="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textContentType="newPassword"
+                  style={[styles.input, styles.passwordInput]}
+                />
+                <TouchableOpacity
+                  style={styles.peekIconBtn}
+                  onPress={() => setShowPassword((v) => !v)}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color="#2563eb" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.actionsRow}>
+                <TouchableOpacity
+                  onPress={() => { if (onCancel) onCancel(); }}
+                  accessibilityRole="button"
+                  style={[styles.secondaryPushBtn, busy ? { opacity: 0.7 } : null]}
+                  disabled={busy}
+                >
+                  <Text style={styles.secondaryPushBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={submit}
+                  accessibilityRole="button"
+                  accessibilityLabel="Create account"
+                  style={[styles.primaryPushBtn, busy ? { opacity: 0.7 } : null]}
+                  disabled={busy}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.primaryPushBtnText}>{busy ? 'Creating…' : 'Create account'}</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
-    </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  formCard: {
-    width: '100%',
-    maxWidth: 420,
-    alignSelf: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    padding: 10,
-    marginBottom: 12,
-    borderRadius: 6,
-    backgroundColor: '#fff',
-  },
+  screen: { flex: 1, backgroundColor: '#fff' },
+  scrollContainer: { flexGrow: 1, padding: 20, alignItems: 'center', justifyContent: 'flex-start' },
+  brandSection: { width: '100%', maxWidth: 420, alignItems: 'center', justifyContent: 'center' },
+  logo: { width: '100%', maxWidth: 320, resizeMode: 'contain' },
+  formCard: { width: '100%', maxWidth: 420, alignSelf: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
+  title: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
+  fieldWidth: { width: '100%', maxWidth: 360 },
+  input: { borderWidth: 1, borderColor: '#ccc', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12, borderRadius: 10, backgroundColor: '#fff' },
+  passwordFieldWrap: { position: 'relative' },
+  passwordInput: { paddingRight: 42 },
+  peekIconBtn: { position: 'absolute', right: 10, top: 10, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  actionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', maxWidth: 360 },
+  primaryPushBtn: { backgroundColor: '#2563eb', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, minWidth: 160, alignItems: 'center' },
+  primaryPushBtnText: { color: '#fff', fontWeight: '800' },
+  secondaryPushBtn: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, minWidth: 120, alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc', marginRight: 10 },
+  secondaryPushBtnText: { color: '#111827', fontWeight: '800' },
 });

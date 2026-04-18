@@ -3,14 +3,14 @@ import { View, Text, ScrollView, StyleSheet, Image } from 'react-native';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
-import { pravatarUriFor } from '../utils/idVisibility';
+import { avatarSourceFor } from '../utils/idVisibility';
 import { findLinkedTherapistId } from '../utils/directoryLinking';
 
 function StudentCard({ student, resolveParents }) {
   return (
     <View style={styles.studentCard}>
       <View style={styles.rowSmall}>
-        <Image source={{ uri: student.avatar }} style={styles.tinyAvatar} />
+        <Image source={avatarSourceFor(student)} style={styles.tinyAvatar} />
         <View style={{ flex: 1, marginLeft: 10 }}>
           <Text style={styles.nameSmall}>{student.name}</Text>
           <Text style={styles.metaSmall}>{student.age} • {student.room}</Text>
@@ -102,7 +102,7 @@ export default function MyClassScreen() {
                 return (
                   <View key={aba.id} style={styles.card}>
                     <View style={styles.row}>
-                      <Image source={{ uri: aba.avatar || pravatarUriFor(aba, 64) }} style={styles.avatar} />
+                      <Image source={avatarSourceFor(aba)} style={styles.avatar} />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.name}>{aba.name}</Text>
                         <Text style={styles.meta}>{aba.role || 'ABA'}</Text>

@@ -6,6 +6,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { Linking } from 'react-native';
+import { avatarSourceFor } from '../utils/idVisibility';
 
 export default function FacultyDirectoryScreen() {
   const { therapists = [] } = useData();
@@ -21,7 +22,7 @@ export default function FacultyDirectoryScreen() {
   const renderItem = ({ item }) => (
     <View style={styles.row}>
       <TouchableOpacity style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }} onPress={() => { try { navigation.navigate('FacultyDetail', { facultyId: item.id }); } catch (e) {} }}>
-        <Image source={{ uri: item.avatar }} style={styles.avatar} />
+        <Image source={avatarSourceFor(item)} style={styles.avatar} />
         <View style={styles.info}>
           <Text style={styles.name}>{item.name || (item.firstName ? `${item.firstName} ${item.lastName}` : (item.role || 'Staff'))}</Text>
           <Text style={styles.meta}>{item.role || 'Staff'}</Text>

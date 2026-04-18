@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, Image, StyleSheet, Alert, ScrollView, TouchableWithoutFeedback } from 'react-native';
 import { useData } from '../DataContext';
-import { pravatarUriFor } from '../utils/idVisibility';
+import { avatarSourceFor } from '../utils/idVisibility';
 import ScreenHeader from '../components/ScreenHeader';
 
 export default function AdminMemosScreen() {
@@ -113,7 +113,7 @@ export default function AdminMemosScreen() {
     const selected = selectedIds.includes(item.id);
     return (
       <TouchableOpacity style={[styles.recipientRow, selected ? styles.recipientRowSelected : null]} onPress={() => handleToggle(item.id)}>
-        <Image source={{ uri: pravatarUriFor(item, 60) }} style={styles.avatar} />
+        <Image source={avatarSourceFor(item)} style={styles.avatar} />
         <View style={{ flex: 1, paddingRight: 8 }}>
           <Text style={styles.recipientName}>{name}</Text>
           <Text style={styles.recipientRole}>{item.role === 'therapist' ? 'Faculty' : 'Parent'}</Text>

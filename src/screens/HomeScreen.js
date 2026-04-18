@@ -7,7 +7,7 @@ import { useAuth } from '../AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { useData } from '../DataContext';
 import devWallFlag from '../utils/devWallFlag';
-import { pravatarUriFor } from '../utils/idVisibility';
+import { avatarSourceFor } from '../utils/idVisibility';
 import * as Api from '../Api';
 import PostCard from '../components/PostCard';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -254,7 +254,7 @@ export default function HomeScreen() {
                 <Text style={{ fontSize: 18, fontWeight: '700' }}>Post Board</Text>
               </View>
               <View style={styles.inputTileCompact}>
-                <Image source={{ uri: (user?.avatar && !String(user.avatar).includes('pravatar.cc')) ? user.avatar : pravatarUriFor(user, 80) }} style={styles.inputAvatarCompact} />
+                <Image source={avatarSourceFor(user)} style={styles.inputAvatarCompact} />
 
                 <TextInput
                   placeholder="Share something..."
@@ -340,7 +340,7 @@ export default function HomeScreen() {
               <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
             </TouchableWithoutFeedback>
             <View style={[styles.modalContent, { alignItems: 'center' }]}>
-              <Image source={{ uri: (selectedUser?.avatar && !String(selectedUser.avatar).includes('pravatar.cc')) ? selectedUser.avatar : pravatarUriFor(selectedUser, 120) }} style={{ width: 120, height: 120, borderRadius: 60, marginBottom: 12 }} />
+              <Image source={avatarSourceFor(selectedUser)} style={{ width: 120, height: 120, borderRadius: 60, marginBottom: 12 }} />
               <Text style={{ fontWeight: '700', fontSize: 18, marginBottom: 6 }}>{selectedUser.name || 'Unknown'}</Text>
               {selectedUser.email && selectedUser.showEmail !== false ? (
                 <Text style={{ color: '#374151', marginBottom: 4 }}>{selectedUser.email}</Text>

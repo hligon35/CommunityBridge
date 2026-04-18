@@ -6,7 +6,7 @@ import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import ScreenWrapper from '../components/ScreenWrapper';
-import { formatIdForDisplay, pravatarUriFor } from '../utils/idVisibility';
+import { avatarSourceFor, formatIdForDisplay } from '../utils/idVisibility';
 
 export default function ParentDetailScreen() {
   const route = useRoute();
@@ -96,10 +96,7 @@ export default function ParentDetailScreen() {
     <ScreenWrapper bannerTitle="Parent Profile" style={styles.container}>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <View style={styles.header}>
-          {(() => {
-            const avatarUri = (parent.avatar && !String(parent.avatar).includes('pravatar.cc')) ? parent.avatar : pravatarUriFor(parent, 120);
-            return <Image source={{ uri: avatarUri }} style={styles.avatar} />;
-          })()}
+          <Image source={avatarSourceFor(parent)} style={styles.avatar} />
           <View style={{ marginLeft: 12, flex: 1 }}>
               <Text style={styles.name}>{parent.firstName ? `${parent.firstName} ${parent.lastName}` : parent.name}</Text>
              <Text style={styles.meta}>{formatIdForDisplay(parent.id)}</Text>
@@ -187,7 +184,7 @@ export default function ParentDetailScreen() {
             <View key={c.id} style={styles.childCard}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }} onPress={() => { try { navigation.push('ChildDetail', { childId: c.id }); } catch (e) { navigation.navigate('ChildDetail', { childId: c.id }); } }}>
-                  <Image source={{ uri: c.avatar }} style={styles.smallAvatar} />
+                  <Image source={avatarSourceFor(c)} style={styles.smallAvatar} />
                   <View style={{ marginLeft: 12, flex: 1 }}>
                     <Text style={{ fontWeight: '700' }}>{c.name}</Text>
                     <Text style={{ color: '#6b7280' }}>{c.age} • {c.room}</Text>
@@ -210,7 +207,7 @@ export default function ParentDetailScreen() {
                       {/* BCBA full-width */}
                       {bca ? (
                         <TouchableOpacity key={bca.id} style={[styles.therapistGridItem, styles.therapistGridItemFull, { marginBottom: 8 }]} onPress={() => { try { navigation.push('FacultyDetail', { facultyId: bca.id }); } catch (e) { navigation.navigate('FacultyDetail', { facultyId: bca.id }); } }}>
-                          <Image source={{ uri: bca.avatar }} style={{ width: 56, height: 56, borderRadius: 28 }} />
+                          <Image source={avatarSourceFor(bca)} style={{ width: 56, height: 56, borderRadius: 28 }} />
                           <View style={{ marginLeft: 12, flex: 1, overflow: 'hidden' }}>
                             <Text style={styles.nameText} numberOfLines={1} ellipsizeMode="tail">{getDisplayName(bca)}</Text>
                             <Text style={styles.roleText} numberOfLines={1} ellipsizeMode="tail">{bca.role}</Text>
@@ -239,7 +236,7 @@ export default function ParentDetailScreen() {
                         <View key={`row-${rIdx}`} style={{ flexDirection: 'row', marginTop: rIdx === 0 ? 0 : 8 }}>
                           {row.map((t, i) => (
                             <TouchableOpacity key={t.id} style={[styles.therapistGridItem, { flex: 1, marginRight: i === 0 && row.length === 2 ? 8 : 0 }]} onPress={() => { try { navigation.push('FacultyDetail', { facultyId: t.id }); } catch (e) { navigation.navigate('FacultyDetail', { facultyId: t.id }); } }}>
-                              <Image source={{ uri: t.avatar }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+                              <Image source={avatarSourceFor(t)} style={{ width: 44, height: 44, borderRadius: 22 }} />
                               <View style={{ marginLeft: 10, flex: 1, overflow: 'hidden' }}>
                                   <Text style={styles.nameText} numberOfLines={1} ellipsizeMode="tail">{getDisplayName(t)}</Text>
                                   <Text style={styles.roleText} numberOfLines={1} ellipsizeMode="tail">{t.role}</Text>

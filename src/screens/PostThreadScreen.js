@@ -6,7 +6,7 @@ import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import PostCard from '../components/PostCard';
 import { ScreenWrapper } from '../components/ScreenWrapper';
-import { pravatarUriFor } from '../utils/idVisibility';
+import { avatarSourceFor } from '../utils/idVisibility';
 
 export default function PostThreadScreen() {
   const route = useRoute();
@@ -183,7 +183,7 @@ export default function PostThreadScreen() {
               <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
             </TouchableWithoutFeedback>
             <View style={{ width: '90%', backgroundColor: '#fff', padding: 14, borderRadius: 10, alignItems: 'center' }}>
-                <Image source={{ uri: (selectedUser?.avatar && !String(selectedUser.avatar).includes('pravatar.cc')) ? selectedUser.avatar : pravatarUriFor(selectedUser, 120) }} style={{ width: 120, height: 120, borderRadius: 60, marginBottom: 12 }} />
+                <Image source={avatarSourceFor(selectedUser)} style={{ width: 120, height: 120, borderRadius: 60, marginBottom: 12 }} />
               <Text style={{ fontWeight: '700', fontSize: 18, marginBottom: 6 }}>{selectedUser.name || 'Unknown'}</Text>
               {selectedUser.email && selectedUser.showEmail !== false ? (
                 <Text style={{ color: '#374151', marginBottom: 4 }}>{selectedUser.email}</Text>

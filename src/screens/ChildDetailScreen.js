@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useData } from '../DataContext';
-import { pravatarUriFor } from '../utils/idVisibility';
+import { avatarSourceFor } from '../utils/idVisibility';
 import { MaterialIcons } from '@expo/vector-icons';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
@@ -28,10 +28,7 @@ export default function ChildDetailScreen() {
       <ScrollView contentContainerStyle={{ padding: 16 }} style={{ flex: 1 }}>
 
       <View style={styles.header}>
-        {(() => {
-          const avatarUri = (child.avatar && !String(child.avatar).includes('pravatar.cc')) ? child.avatar : pravatarUriFor(child, 120);
-          return <Image source={{ uri: avatarUri }} style={styles.avatar} />;
-        })()}
+        <Image source={avatarSourceFor(child)} style={styles.avatar} />
         <View style={{ marginLeft: 12 }}>
           <Text style={styles.name}>{child.name}</Text>
           <Text style={styles.meta}>{child.age} • {child.room}</Text>
@@ -61,7 +58,7 @@ export default function ChildDetailScreen() {
             {(child.parents || []).map((p) => (
               <TouchableOpacity key={p.id} style={[styles.personRow, { justifyContent: 'space-between' }]} onPress={() => navigation.navigate('ParentDetail', { parentId: p.id })}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Image source={{ uri: (p?.avatar && !String(p.avatar).includes('pravatar.cc')) ? p.avatar : pravatarUriFor(p, 80) }} style={styles.smallAvatar} />
+                  <Image source={avatarSourceFor(p)} style={styles.smallAvatar} />
                   <View style={{ marginLeft: 8 }}>
                     <Text style={{ fontWeight: '700' }}>{p.name}</Text>
                     <Text style={{ color: '#6b7280' }}>{p.phone || ''}</Text>
@@ -98,7 +95,7 @@ export default function ChildDetailScreen() {
         <Text style={styles.sectionTitle}>Therapists</Text>
         {child.amTherapist ? (
           <TouchableOpacity style={styles.personRow} onPress={() => navigation.navigate('FacultyDetail', { facultyId: child.amTherapist.id })}>
-            <Image source={{ uri: child.amTherapist.avatar }} style={styles.smallAvatar} />
+            <Image source={avatarSourceFor(child.amTherapist)} style={styles.smallAvatar} />
             <View style={{ marginLeft: 8 }}>
               <Text style={{ fontWeight: '700' }}>{child.amTherapist.name}</Text>
               <Text style={{ color: '#6b7280' }}>{child.amTherapist.role}</Text>
@@ -107,7 +104,7 @@ export default function ChildDetailScreen() {
         ) : null}
         {child.pmTherapist ? (
           <TouchableOpacity style={styles.personRow} onPress={() => navigation.navigate('FacultyDetail', { facultyId: child.pmTherapist.id })}>
-            <Image source={{ uri: child.pmTherapist.avatar }} style={styles.smallAvatar} />
+            <Image source={avatarSourceFor(child.pmTherapist)} style={styles.smallAvatar} />
             <View style={{ marginLeft: 8 }}>
               <Text style={{ fontWeight: '700' }}>{child.pmTherapist.name}</Text>
               <Text style={{ color: '#6b7280' }}>{child.pmTherapist.role}</Text>
@@ -116,7 +113,7 @@ export default function ChildDetailScreen() {
         ) : null}
         {child.bcaTherapist ? (
           <TouchableOpacity style={styles.personRow} onPress={() => navigation.navigate('FacultyDetail', { facultyId: child.bcaTherapist.id })}>
-            <Image source={{ uri: child.bcaTherapist.avatar }} style={styles.smallAvatar} />
+            <Image source={avatarSourceFor(child.bcaTherapist)} style={styles.smallAvatar} />
             <View style={{ marginLeft: 8 }}>
               <Text style={{ fontWeight: '700' }}>{child.bcaTherapist.name}</Text>
               <Text style={{ color: '#6b7280' }}>{child.bcaTherapist.role}</Text>

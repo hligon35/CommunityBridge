@@ -5,7 +5,7 @@ import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
 import * as Api from '../Api';
 import * as ImagePicker from 'expo-image-picker';
-import { pravatarUriFor } from '../utils/idVisibility';
+import { avatarSourceFor } from '../utils/idVisibility';
 
 function passwordPolicy(pw) {
   const v = String(pw || '');
@@ -166,7 +166,7 @@ export default function EditProfileScreen({ navigation }) {
           <Text style={styles.label}>Profile photo</Text>
           <View style={styles.avatarRow}>
             <Image
-              source={{ uri: (avatar && !String(avatar).includes('pravatar.cc')) ? avatar : pravatarUriFor(user, 120) }}
+              source={avatarSourceFor({ avatar: avatar || user?.avatar || user?.photoURL })}
               style={styles.avatar}
             />
             <TouchableOpacity

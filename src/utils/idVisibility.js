@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SHOW_IDS_KEY = 'settings_show_ids_v1';
 
+export const DEFAULT_AVATAR_SOURCE = require('../../assets/avatar.png');
+
 let idVisibilityEnabled = false; // module-level cache
 
 export async function initIdVisibilityFromStorage() {
@@ -44,10 +46,27 @@ export function pravatarUriFor(user, size = 80) {
   return `https://i.pravatar.cc/${size}?u=${seed}`;
 }
 
+// Prefer an explicit avatar URL, otherwise fall back to a bundled local image.
+// Treat pravatar.cc (seeded placeholders) as "no avatar".
+export function avatarSourceFor(user) {
+  try {
+    const raw = user?.avatar || user?.photoURL || null;
+    if (raw && typeof raw === 'string') {
+      const uri = raw.trim();
+      if (uri && !uri.includes('pravatar.cc')) return { uri };
+    }
+  } catch (_) {
+    // ignore
+  }
+  return DEFAULT_AVATAR_SOURCE;
+}
+
 export default {
   formatIdForDisplay,
   avatarSeed,
   pravatarUriFor,
+  avatarSourceFor,
+  DEFAULT_AVATAR_SOURCE,
   setIdVisibilityEnabled,
   initIdVisibilityFromStorage,
 };

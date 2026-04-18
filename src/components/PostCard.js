@@ -5,7 +5,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
 import * as Api from '../Api';
 import { logPress } from '../utils/logger';
-import { pravatarUriFor } from '../utils/idVisibility';
+import { avatarSourceFor } from '../utils/idVisibility';
 
 function detectFirstUrl(text) {
   const re = /(https?:\/\/[^\s]+)/i;
@@ -27,8 +27,6 @@ function timeAgo(iso) {
 export default function PostCard({ post, onLike, onComment, onShare, onAvatarPress }) {
   const [preview, setPreview] = useState(null);
 
-  const avatarUri = post?.author?.avatar ? post.author.avatar : pravatarUriFor(post?.author, 100);
-
   useEffect(() => {
     const url = detectFirstUrl(post.body || '');
     let mounted = true;
@@ -42,7 +40,7 @@ export default function PostCard({ post, onLike, onComment, onShare, onAvatarPre
     <View style={pcStyles.card}>
       <View style={pcStyles.header}>
         <TouchableOpacity onPress={() => { logPress('PostCard:Avatar', { postId: post?.id, authorId: post?.author?.id }); onAvatarPress && onAvatarPress(post.author); }}>
-          <Image source={{ uri: avatarUri }} style={pcStyles.avatar} />
+          <Image source={avatarSourceFor(post?.author)} style={pcStyles.avatar} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={pcStyles.author}>{post.author?.name || 'Anonymous'}</Text>

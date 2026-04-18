@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Platform, ImageBackground } from 'react-native';
+import { View, Platform } from 'react-native';
 import ScreenHeader from './ScreenHeader';
 import WebNav from './WebNav';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -33,21 +33,15 @@ export function ScreenWrapper({ children, style, hideBanner = false, bannerShowB
   const showBack = (typeof bannerShowBack === 'boolean') ? bannerShowBack : computedShowBack;
 
   return (
-    <ImageBackground
-      source={require('../../assets/banner.png')}
-      resizeMode="cover"
-      style={{ flex: 1, width: '100%', backgroundColor: '#fff' }}
-    >
-      <View style={[{ flex: 1, width: '100%', backgroundColor: '#fff' }, style]}>
-        {/* web: show top WebNav; mobile: show ScreenHeader */}
-        {Platform.OS === 'web'
-          ? <WebNav />
-          : (!hideBanner && <ScreenHeader title={title} showBack={showBack} left={bannerLeft} right={bannerRight} />)}
-        {children}
-        {/* spacer to prevent bottom nav from overlapping content (smaller on web) */}
-        <View style={{ height: Platform.OS === 'web' ? 24 : 88 }} accessibilityElementsHidden importantForAccessibility="no" />
-      </View>
-    </ImageBackground>
+    <View style={[{ flex: 1, width: '100%', backgroundColor: '#fff' }, style]}>
+      {/* web: show top WebNav; mobile: show ScreenHeader */}
+      {Platform.OS === 'web'
+        ? <WebNav />
+        : (!hideBanner && <ScreenHeader title={title} showBack={showBack} left={bannerLeft} right={bannerRight} />)}
+      {children}
+      {/* spacer to prevent bottom nav from overlapping content (smaller on web) */}
+      <View style={{ height: Platform.OS === 'web' ? 24 : 88 }} accessibilityElementsHidden importantForAccessibility="no" />
+    </View>
   );
 }
 

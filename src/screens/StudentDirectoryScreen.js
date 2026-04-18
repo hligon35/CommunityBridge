@@ -4,6 +4,7 @@ import { useData } from '../DataContext';
 import { useNavigation } from '@react-navigation/native';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import { avatarSourceFor } from '../utils/idVisibility';
 
 export default function StudentDirectoryScreen() {
   const { children } = useData();
@@ -12,7 +13,7 @@ export default function StudentDirectoryScreen() {
   const renderItem = ({ item }) => (
     <View style={styles.row}>
       <TouchableOpacity style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }} onPress={() => navigation.navigate('ChildDetail', { childId: item.id })}>
-        <Image source={{ uri: item.avatar }} style={styles.avatar} />
+        <Image source={avatarSourceFor(item)} style={styles.avatar} />
         <View style={styles.info}>
           <Text style={styles.name}>{item.name}</Text>
           <Text style={styles.meta}>{item.age} • {item.room}</Text>

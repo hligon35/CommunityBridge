@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { MaterialIcons } from '@expo/vector-icons';
-import { pravatarUriFor } from '../utils/idVisibility';
+import { avatarSourceFor } from '../utils/idVisibility';
 
 export default function ParentDirectoryScreen() {
   const { parents = [], children = [] } = useData();
@@ -27,7 +27,7 @@ export default function ParentDirectoryScreen() {
           }
         }}
       >
-        <Image source={{ uri: (item?.avatar && !String(item.avatar).includes('pravatar.cc')) ? item.avatar : pravatarUriFor(item, 80) }} style={styles.avatar} />
+        <Image source={avatarSourceFor(item)} style={styles.avatar} />
         <View style={styles.info}>
           <Text style={styles.name}>{item.firstName ? `${item.firstName} ${item.lastName}` : item.name}</Text>
           {/* show children assigned to this parent, stacked */}
