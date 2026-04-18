@@ -105,6 +105,7 @@ async function getUserProfile(uid) {
     ...data,
     createdAt: isoFromMaybeTimestamp(data.createdAt) || data.createdAt || null,
     updatedAt: isoFromMaybeTimestamp(data.updatedAt) || data.updatedAt || null,
+    mfaVerifiedAt: isoFromMaybeTimestamp(data.mfaVerifiedAt) || data.mfaVerifiedAt || null,
   };
 }
 
@@ -215,13 +216,46 @@ export async function signup(payload) {
 }
 
 export async function verify2fa(_) {
-  // Legacy compatibility: Firebase signup does not use this flow.
-  return { ok: true };
+  requireUser();
+  if (!functions) {
+    const err = new Error('Firebase Functions is not initialized.');
+    err.code = 'BB_FUNCTIONS_INIT_FAILED';
+    throw err;
+  }
+
+  const code = (typeof _ === 'string') ? _ : String(_?.code || '').trim();
+  if (!code) {
+    const err = new Error('Missing verification code.');
+    err.code = 'BB_MFA_CODE_REQUIRED';
+    throw err;
+  }
+
+  const fn = httpsCallable(functions, 'mfaVerifyCode');
+  await fn({ code });
+
+  // Refresh the Firebase ID token (claims may change) and then reload user profile.
+  try {
+    const a = getAuthInstance();
+    await a?.currentUser?.getIdToken(true);
+  } catch (_) {}
+
+  const profile = await me().catch(() => null);
+  return { ok: true, user: profile || null };
 }
 
 export async function resend2fa(_) {
-  // Legacy compatibility: Firebase signup does not use this flow.
-  return { ok: true };
+  requireUser();
+  if (!functions) {
+    const err = new Error('Firebase Functions is not initialized.');
+    err.code = 'BB_FUNCTIONS_INIT_FAILED';
+    throw err;
+  }
+
+  const method = String(_?.method || _?.channel || _?.type || 'email').trim().toLowerCase();
+  const phone = _?.phone != null ? String(_?.phone).trim() : '';
+  const fn = httpsCallable(functions, 'mfaSendCode');
+  const resp = await fn({ method: method === 'sms' ? 'sms' : 'email', ...(phone ? { phone } : {}) });
+  return { ok: true, ...(resp?.data || {}) };
 }
 
 export async function requestPasswordReset(email) {

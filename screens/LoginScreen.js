@@ -6,6 +6,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
+import * as Google from 'expo-auth-session/providers/google';
 import SignUpScreen from './SignUpScreen';
 import ForgotPasswordScreen from './ForgotPasswordScreen';
 import { useAuth } from '../src/AuthContext';
@@ -44,8 +45,35 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const auth = useAuth();
 
-  // Google sign-in is currently disabled per product decision.
-  const googleEnabled = false;
+  const iosGoogleClientId = String(
+    process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
+      getExpoExtraValue('EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID') ||
+      ''
+  );
+  const androidGoogleClientId = String(
+    process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
+      getExpoExtraValue('EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID') ||
+      ''
+  );
+  const webGoogleClientId = String(
+    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+      getExpoExtraValue('EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID') ||
+      ''
+  );
+
+  const googleEnabled = Boolean(
+    (Platform.OS === 'ios' && iosGoogleClientId) ||
+      (Platform.OS === 'android' && androidGoogleClientId) ||
+      (Platform.OS === 'web' && webGoogleClientId)
+  );
+
+  const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest({
+    iosClientId: iosGoogleClientId || undefined,
+    androidClientId: androidGoogleClientId || undefined,
+    webClientId: webGoogleClientId || undefined,
+    scopes: ['profile', 'email'],
+    responseType: 'id_token',
+  });
 
   const SENTRY_OTLP_URL = 'https://o4510654674632704.ingest.us.sentry.io/api/4510654676533248/integration/otlp';
   const sentryEnv = String(
@@ -94,7 +122,8 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
         await SecureStore.setItemAsync('bb_bio_user', JSON.stringify(res?.user || auth?.user || {}));
         setHasBiometricAuthStored(true);
       } catch (_) {}
-      navigation.replace('Main');
+      const gate = await auth.refreshMfaState();
+      navigation.replace(gate?.needsMfa ? 'TwoFactor' : 'Main');
     } catch (e) {
       const code = e?.code ? String(e.code) : '';
       const msg = e?.message || String(e) || 'Please check your credentials and try again.';
@@ -126,6 +155,35 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       'Missing the Google Client ID for this platform.\n\nFor EAS builds, add these to your build profile env (or EAS project env vars):\n- EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID\n- EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID\n- EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID\n\nThen rebuild the app binary.'
     );
   }
+
+  useEffect(() => {
+    if (!googleResponse) return;
+    if (googleResponse.type !== 'success') return;
+
+    const idToken =
+      googleResponse?.authentication?.idToken ||
+      googleResponse?.params?.id_token ||
+      '';
+
+    if (!idToken) {
+      Alert.alert('Google sign-in failed', 'Missing Google ID token.');
+      return;
+    }
+
+    (async () => {
+      setBusy(true);
+      try {
+        await auth.loginWithGoogle(idToken);
+        const gate = await auth.refreshMfaState();
+        navigation.replace(gate?.needsMfa ? 'TwoFactor' : 'Main');
+      } catch (e) {
+        Alert.alert('Google sign-in failed', e?.message || 'Please try again.');
+      } finally {
+        setBusy(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleResponse]);
 
   async function sendInternalSentryTestError() {
     try {
@@ -182,7 +240,8 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
           Alert.alert('Biometric unlock', 'Please sign in with email and password.');
           return;
         }
-        navigation.replace('Main');
+        const gate = await auth.refreshMfaState();
+        navigation.replace(gate?.needsMfa ? 'TwoFactor' : 'Main');
         return;
       }
 
@@ -382,7 +441,11 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
             <SignUpScreen
               onDone={(result) => {
                 setShowSignUp(false);
-                if (result && result.authed) navigation.replace('Main');
+                    if (result && result.authed) {
+                      auth.refreshMfaState()
+                        .then((gate) => navigation.replace(gate?.needsMfa ? 'TwoFactor' : 'Main'))
+                        .catch(() => navigation.replace('Main'));
+                    }
               }}
               onCancel={() => setShowSignUp(false)}
             />
@@ -397,8 +460,28 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
           {/* Google sign-in at the bottom of the form */}
           <View style={styles.secondaryActions}>
-            {/* Google sign-in disabled */}
-            {googleEnabled ? null : null}
+            {googleEnabled ? (
+              <View style={{ width: '100%', maxWidth: 360 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (!googleRequest) {
+                      showGoogleConfigHelp();
+                      return;
+                    }
+                    googlePromptAsync().catch(() => {
+                      Alert.alert('Google sign-in failed', 'Could not start sign-in.');
+                    });
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Continue with Google"
+                  style={[styles.secondaryBtn, busy ? { opacity: 0.7 } : null]}
+                  disabled={busy}
+                >
+                  <MaterialIcons name="g-translate" size={18} color="#2563eb" />
+                  <Text style={styles.secondaryBtnText}>Continue with Google</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
 
             {showSentryTestButton ? (
               <View style={{ width: '100%', maxWidth: 360, marginTop: 10 }}>

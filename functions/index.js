@@ -1,5 +1,24 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const crypto = require('crypto');
+
+let nodemailer = null;
+let twilioFactory = null;
+try {
+  // Optional dependency: used for email-based 2FA.
+  // eslint-disable-next-line global-require
+  nodemailer = require('nodemailer');
+} catch (_) {
+  nodemailer = null;
+}
+
+try {
+  // Optional dependency: used for SMS-based 2FA.
+  // eslint-disable-next-line global-require
+  twilioFactory = require('twilio');
+} catch (_) {
+  twilioFactory = null;
+}
 
 admin.initializeApp();
 
@@ -132,6 +151,112 @@ function extractTitle(html) {
   return m && m[1] ? String(m[1]).trim() : '';
 }
 
+function nowMs() {
+  return Date.now();
+}
+
+function randomDigits(len) {
+  const n = Number(len) || 6;
+  const max = 10 ** n;
+  const v = crypto.randomInt(0, max);
+  return String(v).padStart(n, '0');
+}
+
+function sha256Hex(input) {
+  return crypto.createHash('sha256').update(String(input || '')).digest('hex');
+}
+
+function getMfaSecret() {
+  // Use an env var (preferred). Fallback keeps dev/test usable but should be set in prod.
+  const fromEnv = safeString(process.env.BB_MFA_CODE_SECRET).trim();
+  if (fromEnv) return fromEnv;
+  const fromProject = safeString(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT).trim();
+  return fromProject || 'bb_mfa_default_secret';
+}
+
+function normalizeMethod(method) {
+  const m = safeString(method).trim().toLowerCase();
+  if (m === 'sms') return 'sms';
+  return 'email';
+}
+
+function normalizePhone(phone) {
+  // Minimal normalization. Prefer storing E.164 in user profile.
+  const p = safeString(phone).trim();
+  return p;
+}
+
+function getDisplayEmail(email) {
+  const e = safeString(email).trim();
+  return e;
+}
+
+async function sendEmailOtp({ to, code }) {
+  const smtpUrl = safeString(process.env.BB_SMTP_URL).trim();
+  if (!smtpUrl) {
+    const err = new Error('Email 2FA is not configured (missing BB_SMTP_URL).');
+    err.code = 'BB_MFA_EMAIL_NOT_CONFIGURED';
+    throw err;
+  }
+  if (!nodemailer) {
+    const err = new Error('Email 2FA dependency missing (nodemailer).');
+    err.code = 'BB_MFA_EMAIL_DEP_MISSING';
+    throw err;
+  }
+
+  const from = safeString(process.env.BB_EMAIL_FROM || process.env.BB_SMTP_FROM || 'info@communitybridge.app').trim();
+  const transporter = nodemailer.createTransport(smtpUrl);
+  const subject = 'CommunityBridge verification code';
+  const text = `Your CommunityBridge verification code is: ${code}\n\nThis code expires in 10 minutes.`;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject,
+    text,
+  });
+}
+
+async function sendSmsOtp({ to, code }) {
+  const sid = safeString(process.env.BB_TWILIO_ACCOUNT_SID).trim();
+  const token = safeString(process.env.BB_TWILIO_AUTH_TOKEN).trim();
+  if (!sid || !token) {
+    const err = new Error('SMS 2FA is not configured (missing BB_TWILIO_ACCOUNT_SID/BB_TWILIO_AUTH_TOKEN).');
+    err.code = 'BB_MFA_SMS_NOT_CONFIGURED';
+    throw err;
+  }
+  if (!twilioFactory) {
+    const err = new Error('SMS 2FA dependency missing (twilio).');
+    err.code = 'BB_MFA_SMS_DEP_MISSING';
+    throw err;
+  }
+
+  const from = safeString(process.env.BB_TWILIO_FROM).trim();
+  const messagingServiceSid = safeString(process.env.BB_TWILIO_MESSAGING_SERVICE_SID).trim();
+  if (!from && !messagingServiceSid) {
+    const err = new Error('SMS 2FA missing BB_TWILIO_FROM or BB_TWILIO_MESSAGING_SERVICE_SID.');
+    err.code = 'BB_MFA_SMS_FROM_MISSING';
+    throw err;
+  }
+
+  const client = twilioFactory(sid, token);
+  const body = `CommunityBridge verification code: ${code} (expires in 10 minutes)`;
+  const msg = { to, body };
+  if (messagingServiceSid) msg.messagingServiceSid = messagingServiceSid;
+  else msg.from = from;
+  await client.messages.create(msg);
+}
+
+function sanitizeChallengeForClient(ch) {
+  if (!ch || typeof ch !== 'object') return null;
+  return {
+    method: ch.method || null,
+    to: ch.to || null,
+    expiresAt: ch.expiresAt || null,
+    sentAt: ch.sentAt || null,
+  };
+}
+
 // Optional callable used by the mobile app. Safe no-op stub.
 exports.linkPreview = functions.https.onCall(async (data, context) => {
   // Signed-in only (mirrors old authMiddleware behavior).
@@ -167,6 +292,157 @@ exports.linkPreview = functions.https.onCall(async (data, context) => {
   } catch (_) {
     return null;
   }
+});
+
+// Send a one-time verification code (email by default; sms optional).
+exports.mfaSendCode = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  const uid = safeString(context.auth.uid).trim();
+  if (!uid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  const method = normalizeMethod(data?.method);
+  const email = getDisplayEmail(context.auth.token?.email);
+
+  // Destination: for email use auth email; for sms use user profile phone (or explicit override).
+  let destination = null;
+  if (method === 'email') {
+    destination = email;
+    if (!destination) {
+      throw new functions.https.HttpsError('failed-precondition', 'No email address on account.');
+    }
+  } else {
+    const phoneOverride = normalizePhone(data?.phone);
+    if (phoneOverride) destination = phoneOverride;
+    if (!destination) {
+      const userSnap = await admin.firestore().collection('users').doc(uid).get();
+      const userData = userSnap.exists ? (userSnap.data() || {}) : {};
+      destination = normalizePhone(userData.phone || userData.phoneNumber || userData.mobile || '');
+    }
+    if (!destination) {
+      throw new functions.https.HttpsError('failed-precondition', 'No phone number on profile.');
+    }
+  }
+
+  const ref = admin.firestore().collection('mfaChallenges').doc(uid);
+  const now = admin.firestore.Timestamp.now();
+  const cooldownMs = 60 * 1000;
+  const ttlMs = 10 * 60 * 1000;
+
+  // Basic rate-limit: one send per minute per user.
+  const existing = await ref.get();
+  if (existing.exists) {
+    const prev = existing.data() || {};
+    const prevSentAt = prev.sentAt && typeof prev.sentAt.toMillis === 'function' ? prev.sentAt.toMillis() : 0;
+    if (prevSentAt && (nowMs() - prevSentAt) < cooldownMs) {
+      const waitSec = Math.ceil((cooldownMs - (nowMs() - prevSentAt)) / 1000);
+      throw new functions.https.HttpsError('resource-exhausted', `Please wait ${waitSec}s before resending.`);
+    }
+  }
+
+  const code = randomDigits(6);
+  const secret = getMfaSecret();
+  const codeHash = sha256Hex(`${uid}:${code}:${secret}`);
+  const expiresAt = admin.firestore.Timestamp.fromMillis(now.toMillis() + ttlMs);
+
+  // Persist challenge before sending (so verify works even if send is slow).
+  await ref.set(
+    {
+      uid,
+      method,
+      to: destination,
+      codeHash,
+      attempts: 0,
+      maxAttempts: 5,
+      sentAt: now,
+      expiresAt,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+
+  try {
+    if (method === 'sms') {
+      await sendSmsOtp({ to: destination, code });
+    } else {
+      await sendEmailOtp({ to: destination, code });
+    }
+  } catch (e) {
+    // Best-effort cleanup: if delivery failed, remove challenge so user can retry.
+    try { await ref.delete(); } catch (_) {}
+    const msg = safeString(e?.message || e) || 'Failed to send verification code.';
+    throw new functions.https.HttpsError('internal', msg);
+  }
+
+  return { ok: true, challenge: sanitizeChallengeForClient({ method, to: destination, sentAt: now, expiresAt }) };
+});
+
+// Verify a submitted code; on success, mark the user as MFA-verified.
+exports.mfaVerifyCode = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  const uid = safeString(context.auth.uid).trim();
+  if (!uid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  const code = safeString(data?.code).trim();
+  if (!/^[0-9]{4,8}$/.test(code)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid code.');
+  }
+
+  const ref = admin.firestore().collection('mfaChallenges').doc(uid);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('failed-precondition', 'No active verification challenge.');
+  }
+
+  const ch = snap.data() || {};
+  const expiresAtMs = ch.expiresAt && typeof ch.expiresAt.toMillis === 'function' ? ch.expiresAt.toMillis() : 0;
+  if (!expiresAtMs || nowMs() > expiresAtMs) {
+    try { await ref.delete(); } catch (_) {}
+    throw new functions.https.HttpsError('deadline-exceeded', 'Verification code expired.');
+  }
+
+  const attempts = Number.isFinite(Number(ch.attempts)) ? Number(ch.attempts) : 0;
+  const maxAttempts = Number.isFinite(Number(ch.maxAttempts)) ? Number(ch.maxAttempts) : 5;
+  if (attempts >= maxAttempts) {
+    try { await ref.delete(); } catch (_) {}
+    throw new functions.https.HttpsError('resource-exhausted', 'Too many attempts. Request a new code.');
+  }
+
+  const secret = getMfaSecret();
+  const expected = safeString(ch.codeHash).trim();
+  const actual = sha256Hex(`${uid}:${code}:${secret}`);
+  if (!expected || expected !== actual) {
+    await ref.set(
+      { attempts: attempts + 1, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    throw new functions.https.HttpsError('permission-denied', 'Incorrect code.');
+  }
+
+  // Mark user verified (timestamp in profile). Keep claims optional for future use.
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  await admin.firestore().collection('users').doc(uid).set(
+    { mfaVerifiedAt: now },
+    { merge: true }
+  );
+
+  try {
+    await admin.auth().setCustomUserClaims(uid, { bb_mfa: true });
+  } catch (_) {
+    // Claims are best-effort; Firestore rules primarily rely on mfaVerifiedAt.
+  }
+
+  try { await ref.delete(); } catch (_) {}
+  return { ok: true };
 });
 
 exports.onArrivalPingCreate = functions.firestore

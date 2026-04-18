@@ -19,6 +19,52 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
 
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaVerified, setMfaVerified] = useState(false);
+  const [mfaLoading, setMfaLoading] = useState(false);
+
+  function isMfaFresh(profile) {
+    try {
+      const iso = profile?.mfaVerifiedAt;
+      if (!iso) return false;
+      const ts = Date.parse(String(iso));
+      if (!Number.isFinite(ts)) return false;
+      const days30 = 30 * 24 * 60 * 60 * 1000;
+      return Date.now() - ts < days30;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function refreshMfaState() {
+    const a = getAuthInstance();
+    const fbUser = a?.currentUser || null;
+    if (!fbUser) {
+      setMfaRequired(false);
+      setMfaVerified(false);
+      return { required: false, verified: false, needsMfa: false };
+    }
+
+    setMfaLoading(true);
+    try {
+      // Ensure token is current.
+      const t = await fbUser.getIdToken();
+      setToken(String(t || ''));
+
+      const profile = await Api.me().catch(() => null);
+      if (profile) setUser(profile);
+
+      const org = await Api.getOrgSettings().catch(() => null);
+      const required = Boolean(org?.item?.mfaEnabled);
+      const verified = !required || isMfaFresh(profile);
+      setMfaRequired(required);
+      setMfaVerified(verified);
+      return { required, verified, needsMfa: required && !verified };
+    } finally {
+      setMfaLoading(false);
+    }
+  }
+
   // If Firestore/Rules deny access, clear auth so the app can re-login cleanly.
   useEffect(() => {
     Api.setUnauthorizedHandler(() => {
@@ -55,6 +101,8 @@ export function AuthProvider({ children }) {
         if (!fbUser) {
           setToken(null);
           setUser(null);
+          setMfaRequired(false);
+          setMfaVerified(false);
           return;
         }
 
@@ -69,10 +117,24 @@ export function AuthProvider({ children }) {
           email: fbUser.email || '',
           role: 'parent',
         });
+
+        // Compute MFA gate (based on orgSettings + profile.mfaVerifiedAt)
+        try {
+          const org = await Api.getOrgSettings().catch(() => null);
+          const required = Boolean(org?.item?.mfaEnabled);
+          const verified = !required || isMfaFresh(profile);
+          setMfaRequired(required);
+          setMfaVerified(verified);
+        } catch (_) {
+          setMfaRequired(false);
+          setMfaVerified(false);
+        }
       } catch (e) {
         setAuthError(e);
         setToken(null);
         setUser(null);
+        setMfaRequired(false);
+        setMfaVerified(false);
       } finally {
         setLoading(false);
       }
@@ -95,6 +157,11 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     const res = await Api.login(email, password);
     // onAuthStateChanged will refresh token/user; still return the API response for screens.
+    return res;
+  }
+
+  async function loginWithGoogle(idToken) {
+    const res = await Api.loginWithGoogle(idToken);
     return res;
   }
 
@@ -125,9 +192,26 @@ export function AuthProvider({ children }) {
     throw err;
   }
 
-  const value = useMemo(() => ({ token, user, loading, login, logout, setAuth, authError }), [token, user, loading, authError]);
+  const valueWithMfa = useMemo(
+    () => ({
+      token,
+      user,
+      loading,
+      login,
+      loginWithGoogle,
+      logout,
+      setAuth,
+      authError,
+      mfaRequired,
+      mfaVerified,
+      mfaLoading,
+      needsMfa: Boolean(mfaRequired && !mfaVerified),
+      refreshMfaState,
+    }),
+    [token, user, loading, authError, mfaRequired, mfaVerified, mfaLoading]
+  );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={valueWithMfa}>{children}</AuthContext.Provider>;
 }
 
 export default AuthContext;

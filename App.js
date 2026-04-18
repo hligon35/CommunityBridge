@@ -42,7 +42,9 @@ import { HelpButton, LogoutButton, BackButton } from './src/components/TopButton
 import { View, Text } from 'react-native';
 import LogoTitle from './src/components/LogoTitle';
 import LoginScreen from './screens/LoginScreen';
+import TwoFactorScreen from './screens/TwoFactorScreen';
 import { initSentry, Sentry } from './src/sentry';
+import { CommonActions } from '@react-navigation/native';
 
 initSentry();
 
@@ -250,61 +252,95 @@ function App() {
     );
   }
 
+  function MainShell() {
+    return (
+      <DataProvider>
+        <MainRoutes />
+        <BottomNav navigationRef={navigationRef} currentRoute={currentRoute} />
+        <UrgentMemoOverlay />
+        <ArrivalDetector />
+      </DataProvider>
+    );
+  }
+
+  function AppNavigator() {
+    const auth = useAuth();
+
+    useEffect(() => {
+      try {
+        if (!navigationRef.isReady()) return;
+        if (auth?.loading) return;
+        if (!auth?.token) return;
+
+        // If orgSettings turns on MFA (or the user isn't verified), prevent access to Main.
+        if (auth?.needsMfa) {
+          const r = navigationRef.getCurrentRoute();
+          const name = r?.name ? String(r.name) : '';
+          if (name && name !== 'Login' && name !== 'TwoFactor') {
+            navigationRef.dispatch(
+              CommonActions.reset({ index: 0, routes: [{ name: 'TwoFactor' }] })
+            );
+          }
+        }
+      } catch (_) {
+        // ignore
+      }
+    }, [auth?.loading, auth?.token, auth?.needsMfa]);
+
+    return (
+      <NavigationContainer
+        ref={navigationRef}
+        onStateChange={() => {
+          try {
+            const r = navigationRef.getCurrentRoute();
+            if (r && r.name) {
+              // Map nested route names back to top-level stack keys so BottomNav highlights correctly
+              const map = {
+                Main: 'Home',
+                CommunityMain: 'Home',
+                PostThread: 'Home',
+                ChatsList: 'Chats',
+                ChatThread: 'Chats',
+                NewThread: 'Chats',
+                MyChildMain: 'MyChild',
+                SettingsMain: 'Settings',
+                MyClassMain: 'MyClass',
+                ControlsMain: 'Controls',
+              };
+              const next = map[r.name] || r.name;
+              setCurrentRoute(next);
+              setDebugContext({ route: next });
+              logger.debug('nav', 'Route change', { route: next });
+            }
+          } catch (e) {
+            // ignore
+          }
+        }}
+      >
+        <AppStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
+          <AppStack.Screen name="Login">
+            {(props) => <LoginScreen {...props} suppressAutoRedirect={true} />}
+          </AppStack.Screen>
+          <AppStack.Screen
+            name="TwoFactor"
+            component={TwoFactorScreen}
+            options={{ gestureEnabled: false }}
+          />
+          <AppStack.Screen name="Main" component={MainShell} />
+        </AppStack.Navigator>
+      </NavigationContainer>
+    );
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ErrorBoundary>
-      <StatusBar barStyle="dark-content" translucent={false} />
-      <SafeAreaProvider>
-      <AuthProvider>
-        <DataProvider>
-          <>
-            <NavigationContainer
-              ref={navigationRef}
-              onStateChange={() => {
-                try {
-                  const r = navigationRef.getCurrentRoute();
-                  if (r && r.name) {
-                    // Map nested route names back to top-level stack keys so BottomNav highlights correctly
-                    const map = {
-                      Main: 'Home',
-                      CommunityMain: 'Home',
-                      PostThread: 'Home',
-                      ChatsList: 'Chats',
-                      ChatThread: 'Chats',
-                      NewThread: 'Chats',
-                      MyChildMain: 'MyChild',
-                      SettingsMain: 'Settings',
-                      MyClassMain: 'MyClass',
-                      ControlsMain: 'Controls',
-                    };
-                    const next = map[r.name] || r.name;
-                    setCurrentRoute(next);
-                    setDebugContext({ route: next });
-                    logger.debug('nav', 'Route change', { route: next });
-                  }
-                } catch (e) {
-                  // ignore
-                }
-              }}
-            >
-              <AppStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
-                <AppStack.Screen name="Login">
-                  {(props) => <LoginScreen {...props} suppressAutoRedirect={true} />}
-                </AppStack.Screen>
-                <AppStack.Screen name="Main" component={MainRoutes} />
-              </AppStack.Navigator>
-            </NavigationContainer>
-            {currentRoute !== 'Login' && (
-              <>
-                <BottomNav navigationRef={navigationRef} currentRoute={currentRoute} />
-                <UrgentMemoOverlay />
-                <ArrivalDetector />
-              </>
-            )}
-          </>
-        </DataProvider>
-      </AuthProvider>
-      </SafeAreaProvider>
+        <StatusBar barStyle="dark-content" translucent={false} />
+        <SafeAreaProvider>
+          <AuthProvider>
+            <AppNavigator />
+          </AuthProvider>
+        </SafeAreaProvider>
       </ErrorBoundary>
     </GestureHandlerRootView>
   );
