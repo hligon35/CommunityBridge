@@ -8,25 +8,78 @@
   "functions": {
     "source": "functions"
   },
-  "hosting": {
-    "public": "public",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "headers": [
-      {
-        "source": "**/*.html",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "no-cache"
+  "hosting": [
+    {
+      "site": "buddyboard-7acda",
+      "public": "public",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "headers": [
+        {
+          "source": "**/*.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        }
+      ],
+      "cleanUrls": true,
+      "trailingSlash": false
+    },
+    {
+      "site": "buddyboard-app",
+      "public": "web-dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "headers": [
+        {
+          "source": "**/*.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        }
+      ],
+      "cleanUrls": true,
+      "trailingSlash": false,
+      "rewrites": [
+        {
+          "source": "/api/**",
+          "run": {
+            "serviceId": "CHANGE_ME_CLOUD_RUN_SERVICE",
+            "region": "us-central1"
           }
-        ]
-      }
-    ],
-    "cleanUrls": true,
-    "trailingSlash": false
-  }
+        },
+        {
+          "source": "/uploads/**",
+          "run": {
+            "serviceId": "CHANGE_ME_CLOUD_RUN_SERVICE",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/app-login",
+          "destination": "/app-login/index.html"
+        },
+        {
+          "source": "/app-login/**",
+          "destination": "/app-login/index.html"
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    }
+  ]
 }

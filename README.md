@@ -217,6 +217,48 @@ Notes:
 - The app reads the API host from `EXPO_PUBLIC_API_BASE_URL` (see `eas.json`).
 - For web builds, if `EXPO_PUBLIC_API_BASE_URL` is not set, the app falls back to the current browser origin (so accessing the site via an IP/alternate hostname still works when `/api/*` is reverse-proxied).
 
+Firebase Hosting (marketing + app SPA)
+------------------------------------
+
+This repo is set up for two Firebase Hosting sites (see `firebase.json`):
+
+- **Marketing/site pages**: `buddyboard-7acda` (serves `public/`)
+- **Web app (SPA)**: `buddyboard-app` (serves `web-dist/`)
+
+Build the web app bundle:
+
+```sh
+npm run build:web
+```
+
+One-time setup (create the app Hosting site):
+
+```sh
+firebase hosting:sites:create buddyboard-app
+```
+
+Before deploying the app site, update `firebase.json` and replace `CHANGE_ME_CLOUD_RUN_SERVICE` with your Cloud Run service ID (the service that runs `scripts/api-server.js`).
+
+Deploy examples:
+
+```sh
+# Marketing only
+firebase deploy --only hosting:buddyboard-7acda
+
+# App SPA only
+firebase deploy --only hosting:buddyboard-app
+```
+
+After connecting custom domains in Firebase Hosting, add them to Firebase Auth **Authorized domains** (needed for `/app-login`).
+
+Minimal migration path (keeps app working)
+-----------------------------------------
+
+1. **Firebase Hosting serves the SPA** on the app subdomain, while `/api/*` and `/uploads/*` are rewritten to the existing Cloud Run backend.
+2. **Keep Cloud Run as the API** while you validate web + mobile against production.
+3. **Migrate endpoints incrementally**: move a small set of server endpoints to Cloud Functions + Firestore, keeping the same external `/api/*` shape.
+4. **Retire Cloud Run + the SQL store** after all required endpoints/data are on Firebase.
+
 EAS Update (OTA) from ARM64 Linux
 --------------------------------
 If you're running on ARM64 Linux (e.g. Raspberry Pi), `eas update` can fail because React Native's bundled `hermesc` binary in `node_modules` is x86_64.
