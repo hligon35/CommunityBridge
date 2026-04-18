@@ -1,21 +1,9 @@
 import { Platform } from 'react-native';
 import { initializeApp, getApp, getApps } from 'firebase/app';
-import { getAuth, initializeAuth } from 'firebase/auth';
+import { getAuth, getReactNativePersistence, initializeAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
-
-function getReactNativePersistenceFactoryMaybe() {
-  // Firebase recommends importing from `firebase/auth/react-native`.
-  // We load it dynamically to avoid bundler/export edge cases.
-  try {
-    // eslint-disable-next-line global-require
-    const mod = require('firebase/auth/react-native');
-    return typeof mod?.getReactNativePersistence === 'function' ? mod.getReactNativePersistence : null;
-  } catch (_) {
-    return null;
-  }
-}
 
 function getExpoPublicEnv(key) {
   // IMPORTANT: Expo inlines EXPO_PUBLIC_* vars only for *static* references.
@@ -201,7 +189,7 @@ function getAsyncStorageMaybe() {
   try {
     // eslint-disable-next-line global-require
     const mod = require('@react-native-async-storage/async-storage');
-    return mod?.default || mod || null;
+    return mod?.default || mod?.AsyncStorage || mod || null;
   } catch (_) {
     return null;
   }
@@ -259,10 +247,7 @@ export function getAuthInstance() {
     // throwing: "Component auth has not been registered yet".
     if (Platform.OS !== 'web') {
       const storage = getAsyncStorageMaybe();
-      const getReactNativePersistence = getReactNativePersistenceFactoryMaybe();
-      const persistence = (getReactNativePersistence && storage)
-        ? getReactNativePersistence(storage)
-        : undefined;
+      const persistence = storage ? getReactNativePersistence(storage) : undefined;
 
       if (persistence) {
         inst = initializeAuth(getApp(), { persistence });

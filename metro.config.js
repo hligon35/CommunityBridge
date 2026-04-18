@@ -32,6 +32,17 @@ const RN_AUTH_INTERNAL_ENTRY = path.join(__dirname, 'node_modules', 'firebase', 
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
 	try {
+		// Force Firebase Auth public entrypoints to the React Native build.
+		// Firebase 10.x does not export `firebase/auth/react-native`, and the default
+		// `firebase/auth` export chain can select the web build in some Metro setups.
+		// This mapping ensures Auth registers its component on native.
+		if (moduleName === 'firebase/auth' && fs.existsSync(RN_AUTH_ENTRY)) {
+			return { type: 'sourceFile', filePath: RN_AUTH_ENTRY };
+		}
+		if (moduleName === 'firebase/auth/internal' && fs.existsSync(RN_AUTH_INTERNAL_ENTRY)) {
+			return { type: 'sourceFile', filePath: RN_AUTH_INTERNAL_ENTRY };
+		}
+
 		if (moduleName === '@firebase/auth' && fs.existsSync(RN_AUTH_ENTRY)) {
 			return { type: 'sourceFile', filePath: RN_AUTH_ENTRY };
 		}
