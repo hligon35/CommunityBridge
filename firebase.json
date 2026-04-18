@@ -56,15 +56,15 @@
         {
           "source": "/api/**",
           "run": {
-            "serviceId": "CHANGE_ME_CLOUD_RUN_SERVICE",
-            "region": "us-central1"
+            "serviceId": "buddyboard",
+            "region": "us-east5"
           }
         },
         {
           "source": "/uploads/**",
           "run": {
-            "serviceId": "CHANGE_ME_CLOUD_RUN_SERVICE",
-            "region": "us-central1"
+            "serviceId": "buddyboard",
+            "region": "us-east5"
           }
         },
         {
