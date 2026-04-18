@@ -14,8 +14,8 @@ RUN npm ci --no-audit --no-fund --progress=false
 # Copy app source
 COPY . .
 
-# Expose app port
-EXPOSE 3000
+# Cloud Run routes traffic to $PORT (defaults to 8080)
+EXPOSE 8080
 
 # Default command
 CMD ["npm", "start"]
