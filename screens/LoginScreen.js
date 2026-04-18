@@ -335,6 +335,8 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   }, [auth.loading, showSignUp]);
 
   const brandSectionMinHeight = Math.max(180, Math.round(windowHeight * 0.33));
+  const OuterWrapper = Platform.OS === 'web' ? View : TouchableWithoutFeedback;
+  const outerWrapperProps = Platform.OS === 'web' ? {} : { onPress: Keyboard.dismiss, accessible: false };
 
   if (auth.loading) return (
     <View style={[styles.screen, { alignItems: 'center', justifyContent: 'center' }]}>
@@ -349,7 +351,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={0}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <OuterWrapper {...outerWrapperProps}>
           <ScrollView
             contentContainerStyle={styles.scrollContainer}
             keyboardShouldPersistTaps="handled"
@@ -533,7 +535,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
           </View>
               </View>
             </ScrollView>
-          </TouchableWithoutFeedback>
+          </OuterWrapper>
         </KeyboardAvoidingView>
       </View>
   );

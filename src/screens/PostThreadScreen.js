@@ -25,6 +25,9 @@ export default function PostThreadScreen() {
 
   const post = useMemo(() => posts.find((p) => p.id === postId) || null, [posts, postId]);
 
+  const OuterWrapper = Platform.OS === 'web' ? View : TouchableWithoutFeedback;
+  const outerWrapperProps = Platform.OS === 'web' ? {} : { onPress: Keyboard.dismiss, accessible: false };
+
   async function handleSend() {
     if (!text || !text.trim()) return;
     setSending(true);
@@ -78,7 +81,7 @@ export default function PostThreadScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 96 : 0}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <OuterWrapper {...outerWrapperProps}>
           <View style={{ flex: 1 }}>
             <FlatList
               data={post.comments || []}
@@ -174,7 +177,7 @@ export default function PostThreadScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </TouchableWithoutFeedback>
+        </OuterWrapper>
       </KeyboardAvoidingView>
       {showUserModal && selectedUser && (
         <Modal transparent visible animationType="fade">

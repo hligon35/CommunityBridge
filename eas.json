@@ -1,10 +1,11 @@
 {
   "cli": {
-    "appVersionSource": "local"
+    "appVersionSource": "remote"
   },
   "build": {
     "internal": {
       "node": "20.19.4",
+      "autoIncrement": true,
       "distribution": "internal",
       "android": {
         "buildType": "apk"

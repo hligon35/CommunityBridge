@@ -51,9 +51,12 @@ export default function ChatThreadScreen({ route }) {
     try { setRefreshing(true); /* trigger data refresh if available */ } catch (e) {} finally { setRefreshing(false); }
   }
 
+  const OuterWrapper = Platform.OS === 'web' ? View : TouchableWithoutFeedback;
+  const outerWrapperProps = Platform.OS === 'web' ? {} : { onPress: Keyboard.dismiss, accessible: false };
+
   return (
     <ScreenWrapper style={{ flex: 1, backgroundColor: '#fff' }}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <OuterWrapper {...outerWrapperProps}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -104,7 +107,7 @@ export default function ChatThreadScreen({ route }) {
             <Button title="Send" onPress={handleSend} />
           </View>
         </KeyboardAvoidingView>
-      </TouchableWithoutFeedback>
+      </OuterWrapper>
     </ScreenWrapper>
   );
 }

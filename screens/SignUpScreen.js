@@ -80,6 +80,8 @@ export default function SignUpScreen({ onDone, onCancel }) {
   };
 
   const brandSectionMinHeight = Math.max(180, Math.round(windowHeight * 0.33));
+  const OuterWrapper = Platform.OS === 'web' ? View : TouchableWithoutFeedback;
+  const outerWrapperProps = Platform.OS === 'web' ? {} : { onPress: Keyboard.dismiss, accessible: false };
 
   return (
     <View style={styles.screen}>
@@ -88,7 +90,7 @@ export default function SignUpScreen({ onDone, onCancel }) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={0}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <OuterWrapper {...outerWrapperProps}>
           <ScrollView
             contentContainerStyle={styles.scrollContainer}
             keyboardShouldPersistTaps="handled"
@@ -170,7 +172,7 @@ export default function SignUpScreen({ onDone, onCancel }) {
               </View>
             </View>
           </ScrollView>
-        </TouchableWithoutFeedback>
+        </OuterWrapper>
       </KeyboardAvoidingView>
     </View>
   );
