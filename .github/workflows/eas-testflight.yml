@@ -44,23 +44,23 @@ jobs:
 
       - name: Verify Expo/EAS token
         env:
-          EXPO_TOKEN: ${{ secrets.EAS_TOKEN }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           if [ -z "${EXPO_TOKEN-}" ]; then
-            echo "EAS_TOKEN secret is not set. Exiting."
+            echo "EXPO_TOKEN secret is not set. Exiting."
             exit 1
           fi
           eas whoami
 
       - name: Build iOS (cloud)
         env:
-          EXPO_TOKEN: ${{ secrets.EAS_TOKEN }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           eas build --platform ios --profile production --non-interactive
 
       - name: Submit to TestFlight
         if: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && github.event.inputs.submit == 'true') }}
         env:
-          EXPO_TOKEN: ${{ secrets.EAS_TOKEN }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           eas submit --platform ios --latest --non-interactive
