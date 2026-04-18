@@ -19,9 +19,9 @@
     <style>
       :root { --bg:#0b1220; --card:#0f1a33; --text:#e5e7eb; --muted:#94a3b8; --accent:#22c55e; --danger:#ef4444; --line: rgba(255,255,255,.10); }
       *{box-sizing:border-box}
-      body{margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background: radial-gradient(1200px 700px at 20% 0%, #1b2a52 0%, var(--bg) 55%); color:var(--text);}
+      body{margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding: 42px 18px; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background: radial-gradient(1200px 700px at 20% 0%, #1b2a52 0%, var(--bg) 55%); color:var(--text);}
       a{color:inherit}
-      .wrap{max-width: 520px; margin: 0 auto; padding: 42px 18px;}
+      .wrap{max-width: 520px; width:100%; margin: 0; padding: 0;}
       .card{background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03)); border: 1px solid var(--line); border-radius: 18px; padding: 18px;}
       h1{margin:0 0 8px; font-size: 26px}
       p{margin:0 0 14px; color: var(--muted); line-height:1.5}
@@ -81,12 +81,9 @@
           </div>
 
           <div class="row" style="margin-top: 14px;">
-            <a class="btn btnPrimary" href="buddyboard://">Open the mobile app</a>
+            <a id="btnWebApp" class="btn btnPrimary" href="#">Continue to web app</a>
+            <a class="btn" href="buddyboard://">Open the mobile app</a>
             <button id="btnLogout" class="btn btnDanger" type="button">Sign out</button>
-          </div>
-
-          <div class="msg">
-            This page authenticates with Firebase. It does not replace the mobile app UI.
           </div>
         </div>
       </div>
@@ -122,6 +119,28 @@
       const signedOut = $('signedOut');
       const signedIn = $('signedIn');
       const who = $('who');
+      const btnWebApp = $('btnWebApp');
+
+      const WEB_APP_URL = 'https://app.communitybridge.app';
+
+      function getNextUrl() {
+        try {
+          const next = new URLSearchParams(window.location.search || '').get('next');
+          if (!next) return WEB_APP_URL;
+
+          // Allow same-origin relative paths or absolute https URLs.
+          if (next.startsWith('/')) return window.location.origin + next;
+          if (next.startsWith('https://')) return next;
+        } catch (_) {
+          // ignore
+        }
+        return WEB_APP_URL;
+      }
+
+      const nextUrl = getNextUrl();
+      try {
+        if (btnWebApp) btnWebApp.href = nextUrl;
+      } catch (_) {}
 
       function setMsg(text, isErr = false) {
         msgEl.textContent = text || '';
@@ -169,6 +188,13 @@
           signedOut.style.display = 'none';
           signedIn.style.display = 'block';
           who.textContent = `${user.email || '(no email)'}  ·  ${user.uid}`;
+
+          // Redirect into the web app once authenticated.
+          try {
+            window.location.replace(nextUrl);
+          } catch (_) {
+            // ignore
+          }
         } else {
           signedIn.style.display = 'none';
           signedOut.style.display = 'block';
