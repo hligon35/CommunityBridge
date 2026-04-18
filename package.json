@@ -7,6 +7,7 @@
   },
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
+    "generate:icons": "node ./scripts/generate_icon_sets.js",
     "start": "node ./scripts/start-server.js",
     "start:expo": "cross-env EXPO_NO_DEPENDENCY_VALIDATION=1 NODE_OPTIONS=--max_old_space_size=8192 expo start",
     "android": "expo run:android",
