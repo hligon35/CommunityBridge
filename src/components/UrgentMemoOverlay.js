@@ -5,13 +5,13 @@ import { useAuth } from '../AuthContext';
 import * as Api from '../Api';
 
 export default function UrgentMemoOverlay() {
-  const { user } = useAuth();
+  const { user, needsMfa } = useAuth();
   const [memos, setMemos] = useState([]);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     (async () => {
-      if (!user) return;
+      if (!user || needsMfa) return;
       try {
         const data = await Api.getUrgentMemos();
         let list = Array.isArray(data) ? data : (data?.memos || []);
@@ -44,7 +44,7 @@ export default function UrgentMemoOverlay() {
       }
     })();
     return () => {};
-  }, [user]);
+  }, [user, needsMfa]);
 
   async function handleContinue() {
     try {

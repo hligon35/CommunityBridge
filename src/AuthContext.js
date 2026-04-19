@@ -25,6 +25,9 @@ export function AuthProvider({ children }) {
 
   function isMfaFresh(profile) {
     try {
+      // Firestore security rules require mfaVerifiedAt to be a Timestamp.
+      // If older data stored it as a string, treat it as not verified.
+      if (profile && profile.mfaVerifiedAtIsTimestamp === false) return false;
       const iso = profile?.mfaVerifiedAt;
       if (!iso) return false;
       const ts = Date.parse(String(iso));

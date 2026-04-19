@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { InteractionManager, NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Api from './Api';
@@ -142,7 +142,11 @@ const THERAPISTS_KEY = 'bbs_therapists_v1';
 // Directory seed data is provided from `src/seed/directorySeed.js` (imported above)
 
 export function DataProvider({ children: reactChildren }) {
-  const { user, loading } = useAuth();
+  const { user, loading, needsMfa } = useAuth();
+  const needsMfaRef = useRef(Boolean(needsMfa));
+  useEffect(() => {
+    needsMfaRef.current = Boolean(needsMfa);
+  }, [needsMfa]);
   const [posts, setPosts] = useState([]);
   const [messages, setMessages] = useState([]);
   const [urgentMemos, setUrgentMemos] = useState([]);
@@ -299,6 +303,8 @@ export function DataProvider({ children: reactChildren }) {
   }, []);
 
   async function fetchAndSync() {
+    // Avoid Firestore reads while MFA is required but not verified.
+    if (!user || needsMfaRef.current) return;
     
     try {
       const remotePosts = await Api.getPosts();
@@ -370,7 +376,7 @@ export function DataProvider({ children: reactChildren }) {
   // Trigger network fetch once auth has finished loading and a user is signed in.
   useEffect(() => {
     let mounted = true;
-    if (loading || !user) return () => { mounted = false; };
+    if (loading || !user || needsMfa) return () => { mounted = false; };
 
     try {
       InteractionManager.runAfterInteractions(() => {

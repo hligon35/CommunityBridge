@@ -100,12 +100,14 @@ async function getUserProfile(uid) {
   const snap = await getDoc(doc(db, 'users', uid));
   if (!snap.exists()) return null;
   const data = snap.data() || {};
+  const mfaIsTimestamp = Boolean(data.mfaVerifiedAt && typeof data.mfaVerifiedAt.toDate === 'function');
   return {
     id: uid,
     ...data,
     createdAt: isoFromMaybeTimestamp(data.createdAt) || data.createdAt || null,
     updatedAt: isoFromMaybeTimestamp(data.updatedAt) || data.updatedAt || null,
     mfaVerifiedAt: isoFromMaybeTimestamp(data.mfaVerifiedAt) || data.mfaVerifiedAt || null,
+    mfaVerifiedAtIsTimestamp: mfaIsTimestamp,
   };
 }
 
