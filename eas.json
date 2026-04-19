@@ -14,6 +14,14 @@
         "simulator": false
       },
       "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyADZ4UNncaoe0CvQfiKoev7rT1cuSZgWl8",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "buddyboard-7acda.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "buddyboard-7acda",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "buddyboard-7acda.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "870175047052",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:870175047052:android:ff966198b531ee97a9eaa9",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-B5L8SY0SKV",
+        "EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION": "us-east5",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "705959942740-dlu9qqt6pukb5nedchf54qijoa1lpnp2.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "705959942740-jsplm4go5rlvdia77tbgvtfebuoee63d.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "705959942740-qfoan37p3bf6klqi1r4solk2segk5phh.apps.googleusercontent.com",
@@ -37,6 +45,14 @@
         "simulator": false
       },
       "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyADZ4UNncaoe0CvQfiKoev7rT1cuSZgWl8",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "buddyboard-7acda.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "buddyboard-7acda",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "buddyboard-7acda.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "870175047052",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:870175047052:android:ff966198b531ee97a9eaa9",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-B5L8SY0SKV",
+        "EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION": "us-east5",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "705959942740-dlu9qqt6pukb5nedchf54qijoa1lpnp2.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "705959942740-jsplm4go5rlvdia77tbgvtfebuoee63d.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "705959942740-qfoan37p3bf6klqi1r4solk2segk5phh.apps.googleusercontent.com",
@@ -60,6 +76,14 @@
         "simulator": false
       },
       "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyADZ4UNncaoe0CvQfiKoev7rT1cuSZgWl8",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "buddyboard-7acda.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "buddyboard-7acda",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "buddyboard-7acda.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "870175047052",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:870175047052:android:ff966198b531ee97a9eaa9",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-B5L8SY0SKV",
+        "EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION": "us-east5",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "705959942740-dlu9qqt6pukb5nedchf54qijoa1lpnp2.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "705959942740-jsplm4go5rlvdia77tbgvtfebuoee63d.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "705959942740-qfoan37p3bf6klqi1r4solk2segk5phh.apps.googleusercontent.com",
@@ -82,6 +106,14 @@
         "simulator": false
       },
       "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyADZ4UNncaoe0CvQfiKoev7rT1cuSZgWl8",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "buddyboard-7acda.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "buddyboard-7acda",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "buddyboard-7acda.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "870175047052",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:870175047052:android:ff966198b531ee97a9eaa9",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-B5L8SY0SKV",
+        "EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION": "us-east5",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "705959942740-dlu9qqt6pukb5nedchf54qijoa1lpnp2.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "705959942740-jsplm4go5rlvdia77tbgvtfebuoee63d.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "705959942740-qfoan37p3bf6klqi1r4solk2segk5phh.apps.googleusercontent.com",
@@ -104,6 +136,14 @@
         "simulator": false
       },
       "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyADZ4UNncaoe0CvQfiKoev7rT1cuSZgWl8",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "buddyboard-7acda.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "buddyboard-7acda",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "buddyboard-7acda.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "870175047052",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:870175047052:android:ff966198b531ee97a9eaa9",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-B5L8SY0SKV",
+        "EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION": "us-east5",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "705959942740-dlu9qqt6pukb5nedchf54qijoa1lpnp2.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "705959942740-jsplm4go5rlvdia77tbgvtfebuoee63d.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "705959942740-qfoan37p3bf6klqi1r4solk2segk5phh.apps.googleusercontent.com",

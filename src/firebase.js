@@ -1,9 +1,23 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth, getReactNativePersistence, initializeAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
+
+function getExpoExtraValue(key) {
+  try {
+    return (
+      Constants?.expoConfig?.extra?.[key] ??
+      Constants?.easConfig?.extra?.[key] ??
+      Constants?.manifest2?.extra?.[key] ??
+      Constants?.manifest?.extra?.[key]
+    );
+  } catch (_) {
+    return undefined;
+  }
+}
 
 function getExpoPublicEnv(key) {
   // IMPORTANT: Expo inlines EXPO_PUBLIC_* vars only for *static* references.
@@ -11,21 +25,53 @@ function getExpoPublicEnv(key) {
   try {
     switch (String(key || '')) {
       case 'EXPO_PUBLIC_FIREBASE_API_KEY':
-        return String(process.env.EXPO_PUBLIC_FIREBASE_API_KEY || '');
+        return String(
+          process.env.EXPO_PUBLIC_FIREBASE_API_KEY ||
+            getExpoExtraValue('EXPO_PUBLIC_FIREBASE_API_KEY') ||
+            ''
+        );
       case 'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN':
-        return String(process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || '');
+        return String(
+          process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN ||
+            getExpoExtraValue('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN') ||
+            ''
+        );
       case 'EXPO_PUBLIC_FIREBASE_PROJECT_ID':
-        return String(process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || '');
+        return String(
+          process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ||
+            getExpoExtraValue('EXPO_PUBLIC_FIREBASE_PROJECT_ID') ||
+            ''
+        );
       case 'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET':
-        return String(process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || '');
+        return String(
+          process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET ||
+            getExpoExtraValue('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET') ||
+            ''
+        );
       case 'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID':
-        return String(process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '');
+        return String(
+          process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ||
+            getExpoExtraValue('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') ||
+            ''
+        );
       case 'EXPO_PUBLIC_FIREBASE_APP_ID':
-        return String(process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '');
+        return String(
+          process.env.EXPO_PUBLIC_FIREBASE_APP_ID ||
+            getExpoExtraValue('EXPO_PUBLIC_FIREBASE_APP_ID') ||
+            ''
+        );
       case 'EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID':
-        return String(process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID || '');
+        return String(
+          process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID ||
+            getExpoExtraValue('EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID') ||
+            ''
+        );
       case 'EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION':
-        return String(process.env.EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION || '');
+        return String(
+          process.env.EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION ||
+            getExpoExtraValue('EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION') ||
+            ''
+        );
       default:
         return '';
     }
