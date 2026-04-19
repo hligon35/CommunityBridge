@@ -390,7 +390,36 @@ function isPgUniqueViolation(e) {
   return String(e && e.code ? e.code : '') === '23505';
 }
 
-const pool = new Pool({ connectionString: DATABASE_URL });
+function buildPgPoolConfig(connectionString) {
+  const cfg = { connectionString };
+  const forceSsl = String(process.env.BB_PG_SSL || '').trim();
+  if (['1', 'true', 'yes', 'on'].includes(forceSsl.toLowerCase())) {
+    cfg.ssl = { rejectUnauthorized: false };
+    return cfg;
+  }
+
+  try {
+    const u = new URL(connectionString);
+    const host = String(u.hostname || '').toLowerCase();
+    const sslParam = String(u.searchParams.get('ssl') || '').toLowerCase();
+    const sslMode = String(u.searchParams.get('sslmode') || '').toLowerCase();
+
+    // Supabase Postgres requires SSL.
+    if (
+      host.endsWith('.supabase.co') ||
+      sslParam === '1' ||
+      sslParam === 'true' ||
+      sslMode === 'require'
+    ) {
+      cfg.ssl = { rejectUnauthorized: false };
+    }
+  } catch (_) {
+    // If parsing fails, fall back to non-SSL config.
+  }
+  return cfg;
+}
+
+const pool = new Pool(buildPgPoolConfig(DATABASE_URL));
 
 async function pgQueryOne(sql, params) {
   const result = await pool.query(sql, params);

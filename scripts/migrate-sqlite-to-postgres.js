@@ -4,6 +4,31 @@ const path = require('path');
 const Database = require('better-sqlite3');
 const { Pool } = require('pg');
 
+function buildPgPoolConfig(connectionString) {
+  const cfg = { connectionString };
+  const forceSsl = String(process.env.BB_PG_SSL || '').trim();
+  if (['1', 'true', 'yes', 'on'].includes(forceSsl.toLowerCase())) {
+    cfg.ssl = { rejectUnauthorized: false };
+    return cfg;
+  }
+
+  try {
+    const u = new URL(connectionString);
+    const host = String(u.hostname || '').toLowerCase();
+    const sslParam = String(u.searchParams.get('ssl') || '').toLowerCase();
+    const sslMode = String(u.searchParams.get('sslmode') || '').toLowerCase();
+    if (
+      host.endsWith('.supabase.co') ||
+      sslParam === '1' ||
+      sslParam === 'true' ||
+      sslMode === 'require'
+    ) {
+      cfg.ssl = { rejectUnauthorized: false };
+    }
+  } catch (_) {}
+  return cfg;
+}
+
 function safeJsonParse(text, fallback) {
   try {
     if (!text) return fallback;
@@ -147,7 +172,7 @@ async function main() {
   console.log(`[migrate] SQLite: ${sqlitePath}`);
 
   const sqlite = new Database(sqlitePath, { readonly: true });
-  const pool = new Pool({ connectionString: pgUrl });
+  const pool = new Pool(buildPgPoolConfig(pgUrl));
 
   await initDb(pool);
 
