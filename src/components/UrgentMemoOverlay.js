@@ -5,7 +5,7 @@ import { useAuth } from '../AuthContext';
 import * as Api from '../Api';
 
 export default function UrgentMemoOverlay() {
-  const { user, needsMfa } = useAuth();
+  const { user, needsMfa, refreshMfaState } = useAuth();
   const [memos, setMemos] = useState([]);
   const [visible, setVisible] = useState(false);
 
@@ -41,6 +41,14 @@ export default function UrgentMemoOverlay() {
         if (unseen.length) setVisible(true);
       } catch (e) {
         console.warn('urgent memos fetch failed', e.message);
+        try {
+          const msg = String(e?.message || e || '').toLowerCase();
+          if (msg.includes('missing or insufficient permissions') && typeof refreshMfaState === 'function') {
+            await refreshMfaState();
+          }
+        } catch (_) {
+          // ignore
+        }
       }
     })();
     return () => {};

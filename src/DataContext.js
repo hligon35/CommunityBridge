@@ -142,8 +142,9 @@ const THERAPISTS_KEY = 'bbs_therapists_v1';
 // Directory seed data is provided from `src/seed/directorySeed.js` (imported above)
 
 export function DataProvider({ children: reactChildren }) {
-  const { user, loading, needsMfa } = useAuth();
+  const { user, loading, needsMfa, refreshMfaState } = useAuth();
   const needsMfaRef = useRef(Boolean(needsMfa));
+  const mfaRefreshInFlightRef = useRef(false);
   useEffect(() => {
     needsMfaRef.current = Boolean(needsMfa);
   }, [needsMfa]);
@@ -305,6 +306,23 @@ export function DataProvider({ children: reactChildren }) {
   async function fetchAndSync() {
     // Avoid Firestore reads while MFA is required but not verified.
     if (!user || needsMfaRef.current) return;
+
+    const maybeRefreshMfaOnPermissionDenied = async (e) => {
+      try {
+        const msg = String(e?.message || e || '').toLowerCase();
+        if (!msg.includes('missing or insufficient permissions')) return;
+        if (needsMfaRef.current) return;
+        if (mfaRefreshInFlightRef.current) return;
+        if (typeof refreshMfaState !== 'function') return;
+
+        mfaRefreshInFlightRef.current = true;
+        await refreshMfaState();
+      } catch (_) {
+        // ignore
+      } finally {
+        mfaRefreshInFlightRef.current = false;
+      }
+    };
     
     try {
       const remotePosts = await Api.getPosts();
@@ -320,7 +338,10 @@ export function DataProvider({ children: reactChildren }) {
         });
         setPosts(norm);
       }
-    } catch (e) { console.warn('getPosts failed', e.message); }
+    } catch (e) {
+      console.warn('getPosts failed', e.message);
+      await maybeRefreshMfaOnPermissionDenied(e);
+    }
     try {
       const remoteMessages = await Api.getMessages();
       if (Array.isArray(remoteMessages)) setMessages(remoteMessages);
@@ -328,11 +349,17 @@ export function DataProvider({ children: reactChildren }) {
     try {
       const memos = await Api.getUrgentMemos();
       setUrgentMemos(Array.isArray(memos) ? memos : (memos?.memos || []));
-    } catch (e) { console.warn('getUrgentMemos failed', e.message); }
+    } catch (e) {
+      console.warn('getUrgentMemos failed', e.message);
+      await maybeRefreshMfaOnPermissionDenied(e);
+    }
     try {
       const proposals = await Api.getTimeChangeProposals();
       setTimeChangeProposals(Array.isArray(proposals) ? proposals : (proposals?.proposals || []));
-    } catch (e) { console.warn('getTimeChangeProposals failed', e.message); }
+    } catch (e) {
+      console.warn('getTimeChangeProposals failed', e.message);
+      await maybeRefreshMfaOnPermissionDenied(e);
+    }
 
     // Directory sync. Admins can read/seed the full directory; non-admins use /api/directory/me.
     try {
@@ -390,7 +417,7 @@ export function DataProvider({ children: reactChildren }) {
     }
 
     return () => { mounted = false; };
-  }, [loading, user]);
+  }, [loading, user, needsMfa]);
 
   async function createPost(payload) {
     const temp = { ...payload, id: `temp-${Date.now()}`, createdAt: new Date().toISOString(), pending: true };
