@@ -27,7 +27,7 @@
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "705959942740-qfoan37p3bf6klqi1r4solk2segk5phh.apps.googleusercontent.com",
         "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "internal",
         "EXPO_PUBLIC_SENTRY_DSN": "https://2dfd13b6f80e20096c7d4d613052814c@o4510654674632704.ingest.us.sentry.io/4511236400873472",
-        "SENTRY_ORG": "sparq-digital",
+        "SENTRY_ORG": "azlabsllc",
         "SENTRY_PROJECT": "communitybridge",
         "SENTRY_ALLOW_FAILURE": "true",
         "EXPO_PUBLIC_API_BASE_URL": "https://communitybridge.app"
@@ -58,7 +58,7 @@
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "705959942740-qfoan37p3bf6klqi1r4solk2segk5phh.apps.googleusercontent.com",
         "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "testflight-internal",
         "EXPO_PUBLIC_SENTRY_DSN": "https://2dfd13b6f80e20096c7d4d613052814c@o4510654674632704.ingest.us.sentry.io/4511236400873472",
-        "SENTRY_ORG": "sparq-digital",
+        "SENTRY_ORG": "azlabsllc",
         "SENTRY_PROJECT": "communitybridge",
         "SENTRY_ALLOW_FAILURE": "true",
         "EXPO_PUBLIC_API_BASE_URL": "https://communitybridge.app"
@@ -88,7 +88,7 @@
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "705959942740-jsplm4go5rlvdia77tbgvtfebuoee63d.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "705959942740-qfoan37p3bf6klqi1r4solk2segk5phh.apps.googleusercontent.com",
         "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "development",
-        "SENTRY_ORG": "sparq-digital",
+        "SENTRY_ORG": "azlabsllc",
         "SENTRY_PROJECT": "communitybridge",
         "SENTRY_ALLOW_FAILURE": "true",
         "EXPO_PUBLIC_API_BASE_URL": "https://communitybridge.app"
@@ -118,7 +118,7 @@
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "705959942740-jsplm4go5rlvdia77tbgvtfebuoee63d.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "705959942740-qfoan37p3bf6klqi1r4solk2segk5phh.apps.googleusercontent.com",
         "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "preview",
-        "SENTRY_ORG": "sparq-digital",
+        "SENTRY_ORG": "azlabsllc",
         "SENTRY_PROJECT": "communitybridge",
         "SENTRY_ALLOW_FAILURE": "true",
         "EXPO_PUBLIC_API_BASE_URL": "https://communitybridge.app"
@@ -148,7 +148,7 @@
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "705959942740-jsplm4go5rlvdia77tbgvtfebuoee63d.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "705959942740-qfoan37p3bf6klqi1r4solk2segk5phh.apps.googleusercontent.com",
         "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "production",
-        "SENTRY_ORG": "sparq-digital",
+        "SENTRY_ORG": "azlabsllc",
         "SENTRY_PROJECT": "communitybridge",
         "SENTRY_ALLOW_FAILURE": "true",
         "EXPO_PUBLIC_API_BASE_URL": "https://communitybridge.app"

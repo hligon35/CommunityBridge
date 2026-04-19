@@ -8,6 +8,42 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+
+function loadDotEnvFile(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return;
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const lines = raw.split(/\r?\n/);
+
+    for (const line of lines) {
+      const trimmed = String(line || '').trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+
+      const cleaned = trimmed.startsWith('export ') ? trimmed.slice(7).trim() : trimmed;
+      const eq = cleaned.indexOf('=');
+      if (eq <= 0) continue;
+
+      const key = cleaned.slice(0, eq).trim();
+      if (!key || Object.prototype.hasOwnProperty.call(process.env, key)) continue;
+
+      let value = cleaned.slice(eq + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      process.env[key] = value;
+    }
+  } catch (_) {
+    // ignore dotenv parsing errors
+  }
+}
+
+// Local dev convenience: load env vars without requiring dotenv.
+// This enables BB_ALLOW_NO_DB=1, BB_SERVE_WEB_APP=1, etc.
+loadDotEnvFile(path.resolve(process.cwd(), '.env.local'));
+loadDotEnvFile(path.resolve(process.cwd(), '.env'));
 let SqliteDatabase = null;
 function getSqliteDatabaseCtor() {
   if (SqliteDatabase) return SqliteDatabase;
@@ -2436,8 +2472,25 @@ function resolveWebDistFileForRequestPath(reqPath) {
 app.get(/.*/, (req, res, next) => {
   // On the app subdomain, serve the exported web app if present.
   if (shouldServeWebApp(req)) {
+    // Keep the root path as marketing (and let it optionally redirect to /home
+    // if already authenticated). The Expo web app is intentionally served under /home.
+    if (req.path === '/' || req.path === '/index.html') {
+      const pRoot = resolvePublicFileForRequestPath('/');
+      if (pRoot) return res.sendFile(pRoot);
+    }
+
     // Keep the browser login helper on the app subdomain.
-    if (req.path === '/app-login' || req.path.startsWith('/app-login/')) {
+    if (
+      req.path === '/app-login' ||
+      req.path === '/app-login.html' ||
+      req.path.startsWith('/app-login/') ||
+      req.path === '/login' ||
+      req.path === '/login.html' ||
+      req.path.startsWith('/login/') ||
+      req.path === '/sign-up' ||
+      req.path === '/sign-up.html' ||
+      req.path.startsWith('/sign-up/')
+    ) {
       const pLogin = resolvePublicFileForRequestPath(req.path);
       if (pLogin) return res.sendFile(pLogin);
     }

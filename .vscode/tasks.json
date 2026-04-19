@@ -1,0 +1,108 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Web: Start Expo dev server",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "web"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Mobile: Start Expo dev server (all platforms)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "start:expo"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Web: Export static build (/home)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build:web"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "API: Start server",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "api:server"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "API: Start mock server (port 3006)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "api:mock"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests: Smoke E2E (default)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "smoke"],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests: Smoke E2E (mock)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "smoke:mock"],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "EAS Update: iOS testflight-internal (arm)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "update:ios:testflight-internal:arm"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "EAS Update: All platforms testflight-internal (arm)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "update:testflight-internal:arm"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "EAS Build: iOS testflight-internal",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build:ios:testflight-internal"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "EAS Submit: iOS testflight-internal (latest)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "submit:ios:testflight-internal"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "EAS Build: Android internal (non-interactive)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build:android:internal"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Maintenance: Clear dev server state",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev-clear-server"],
+      "problemMatcher": []
+    }
+  ]
+}

@@ -103,6 +103,12 @@ function main() {
   copyDirIfExists(path.join('public', 'app-login'), path.join('web-dist', 'app-login'));
   copyIfExists(path.join('public', 'app-login.html'), path.join('web-dist', 'app-login.html'));
 
+  // Also keep /login available as the primary login route.
+  copyDirIfExists(path.join('public', 'login'), path.join('web-dist', 'login'));
+
+  // Keep /sign-up available as a static page.
+  copyDirIfExists(path.join('public', 'sign-up'), path.join('web-dist', 'sign-up'));
+
   // Publish the web app under /home on the marketing site (public/).
   // - /home serves public/home/index.html
   // - Assets remain rooted at /_expo/** to keep Expo's absolute asset URLs working.

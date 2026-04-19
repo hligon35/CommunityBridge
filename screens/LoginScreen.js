@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Modal, Platform, Image, KeyboardAvoidingView, ScrollView, TouchableWithoutFeedback, Keyboard, useWindowDimensions } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, AntDesign } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
@@ -38,7 +38,21 @@ function maskClientId(id) {
   return `${s.slice(0, 4)}…${s.slice(-6)}`;
 }
 
-function GoogleSignInButtonDisabled({ busy, onPress }) {
+function GoogleSignInButtonDisabled({ busy, onPress, variant = 'full' }) {
+  if (variant === 'icon') {
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel="Continue with Google (setup required)"
+        style={[styles.iconPushBtn, busy ? { opacity: 0.7 } : null]}
+        disabled={busy}
+      >
+        <AntDesign name="google" size={20} color="#4285F4" />
+      </TouchableOpacity>
+    );
+  }
+
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -47,7 +61,7 @@ function GoogleSignInButtonDisabled({ busy, onPress }) {
       style={[styles.secondaryBtn, busy ? { opacity: 0.7 } : null]}
       disabled={busy}
     >
-      <MaterialIcons name="g-translate" size={18} color="#2563eb" />
+      <AntDesign name="google" size={18} color="#4285F4" />
       <Text style={styles.secondaryBtnText}>Continue with Google (setup required)</Text>
     </TouchableOpacity>
   );
@@ -62,12 +76,14 @@ function GoogleSignInButtonEnabled({
   androidClientId,
   webClientId,
   redirectUri,
+  variant = 'full',
 }) {
   // expo-auth-session requires webClientId on web; do not even initialize the hook if it's missing.
   if (Platform.OS === 'web' && !String(webClientId || '').trim()) {
     return (
       <GoogleSignInButtonDisabled
         busy={busy}
+        variant={variant}
         onPress={() => {
           Alert.alert(
             'Google sign-in not configured',
@@ -82,7 +98,10 @@ function GoogleSignInButtonEnabled({
     iosClientId: iosClientId || undefined,
     androidClientId: androidClientId || undefined,
     webClientId: webClientId || undefined,
-    redirectUri,
+    // IMPORTANT: Only pass a redirect URI override on web.
+    // On native (iOS/Android), let expo-auth-session compute the installed-app redirect
+    // (based on bundle id / application id) to satisfy Google's policies.
+    ...(redirectUri ? { redirectUri } : {}),
     scopes: ['profile', 'email'],
   });
 
@@ -132,23 +151,39 @@ function GoogleSignInButtonEnabled({
     }
   }, [googleResponse, googleRequest]);
 
+  const onPress = () => {
+    if (!googleRequest) {
+      Alert.alert('Google sign-in', 'Google sign-in is still initializing. Please try again.');
+      return;
+    }
+    googlePromptAsync({ showInRecents: true }).catch(() => {
+      Alert.alert('Google sign-in failed', 'Could not start sign-in.');
+    });
+  };
+
+  if (variant === 'icon') {
+    return (
+      <TouchableOpacity
+        style={[styles.iconPushBtn, busy ? { opacity: 0.7 } : null]}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel="Continue with Google"
+        disabled={busy}
+      >
+        <AntDesign name="google" size={20} color="#4285F4" />
+      </TouchableOpacity>
+    );
+  }
+
   return (
     <TouchableOpacity
       style={[styles.secondaryBtn, busy ? { opacity: 0.7 } : null]}
-      onPress={() => {
-        if (!googleRequest) {
-          Alert.alert('Google sign-in', 'Google sign-in is still initializing. Please try again.');
-          return;
-        }
-        googlePromptAsync({ showInRecents: true }).catch(() => {
-          Alert.alert('Google sign-in failed', 'Could not start sign-in.');
-        });
-      }}
+      onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Continue with Google"
       disabled={busy}
     >
-      <MaterialIcons name="g-translate" size={18} color="#2563eb" />
+      <AntDesign name="google" size={18} color="#4285F4" />
       <Text style={styles.secondaryBtnText}>Continue with Google</Text>
     </TouchableOpacity>
   );
@@ -156,7 +191,7 @@ function GoogleSignInButtonEnabled({
 
 function GoogleSignInButton(props) {
   if (!props.enabled) {
-    return <GoogleSignInButtonDisabled busy={props.busy} onPress={props.onMissingConfig} />;
+    return <GoogleSignInButtonDisabled busy={props.busy} onPress={props.onMissingConfig} variant={props.variant} />;
   }
   return (
     <GoogleSignInButtonEnabled
@@ -168,6 +203,7 @@ function GoogleSignInButton(props) {
       androidClientId={props.androidClientId}
       webClientId={props.webClientId}
       redirectUri={props.redirectUri}
+      variant={props.variant}
     />
   );
 }
@@ -219,7 +255,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   const googleEnabled = Boolean(googleClientIdForPlatform);
 
   const googleRedirectUri = useMemo(() => {
-    // For the deployed web app we want to land back on /home.
+    // Web: land back on /home (static hosting under /home).
     if (Platform.OS === 'web') {
       try {
         const origin = String(globalThis?.location?.origin || '').trim();
@@ -228,8 +264,8 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       return AuthSession.makeRedirectUri();
     }
 
-    // Native: use an app scheme deep link.
-    return AuthSession.makeRedirectUri({ scheme: 'communitybridge', path: 'oauthredirect' });
+    // Native: do not override; expo-auth-session will compute a compliant installed-app redirect.
+    return '';
   }, []);
 
   useEffect(() => {
@@ -239,7 +275,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       hasIosClientId: Boolean(iosGoogleClientId),
       hasAndroidClientId: Boolean(androidGoogleClientId),
       hasWebClientId: Boolean(webGoogleClientId),
-      redirectUri: googleRedirectUri,
+      redirectUri: googleRedirectUri || '(provider default)',
       iosClientIdHint: maskClientId(iosGoogleClientId),
       androidClientIdHint: maskClientId(androidGoogleClientId),
       webClientIdHint: maskClientId(webGoogleClientId),
@@ -334,7 +370,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       'Google sign-in not configured',
       `Missing the Google Client ID for this platform.${missing.length ? `\n\nMissing:\n- ${missing.join('\n- ')}` : ''}` +
         `\n\nFor EAS builds, add these to your build profile env (or EAS project env vars):\n- EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID\n- EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID\n- EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` +
-        `\n\nThis build will use redirect URI:\n${googleRedirectUri}` +
+        `\n\nRedirect URI:\n${googleRedirectUri || '(provider default for native)'}` +
         `\n\nThen rebuild the app binary.`
     );
   }
@@ -465,7 +501,8 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     return () => { mounted = false; };
   }, [auth.loading, showSignUp]);
 
-  const brandSectionMinHeight = Math.max(180, Math.round(windowHeight * 0.33));
+  // Keep the logo closer to the form on mobile.
+  const brandSectionMinHeight = Math.max(140, Math.round(windowHeight * 0.22));
   const OuterWrapper = Platform.OS === 'web' ? View : TouchableWithoutFeedback;
   const outerWrapperProps = Platform.OS === 'web' ? {} : { onPress: Keyboard.dismiss, accessible: false };
 
@@ -507,26 +544,38 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
                 />
               </View>
 
-              <View style={[fieldWidthStyle, styles.passwordFieldWrap]}>
+              <View style={fieldWidthStyle}>
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
-                  style={[styles.input, styles.passwordInput]}
+                  style={styles.input}
                   placeholder="Password"
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
                   textContentType="password"
                 />
+              </View>
+
+              <View style={[fieldWidthStyle, styles.showPasswordRow]}>
                 <TouchableOpacity
-                  style={styles.peekIconBtn}
                   onPress={() => setShowPassword((v) => !v)}
-                  accessibilityRole="button"
-                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel="Show password"
+                  accessibilityState={{ checked: showPassword }}
+                  style={styles.showPasswordToggle}
+                  disabled={busy}
                 >
-                  <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color="#2563eb" />
+                  <MaterialIcons
+                    name={showPassword ? 'check-box' : 'check-box-outline-blank'}
+                    size={20}
+                    color="#2563eb"
+                  />
+                  <Text style={styles.showPasswordText}>Show password</Text>
                 </TouchableOpacity>
               </View>
+
+              <View style={styles.blankRow} />
 
           <View style={styles.actionsRow}>
             {showSentryTestButton ? (
@@ -552,7 +601,26 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
               <Text style={styles.primaryPushBtnText}>{busy ? 'Signing in…' : 'Sign in'}</Text>
             </TouchableOpacity>
 
-            {biometricAvailable && hasBiometricAuthStored ? (
+            {/* Google sign-in as an icon button on mobile */}
+            {Platform.OS !== 'web' ? (
+              <View style={{ marginLeft: 10 }}>
+                <GoogleSignInButton
+                  variant="icon"
+                  auth={auth}
+                  navigation={navigation}
+                  enabled={googleEnabled}
+                  busy={busy}
+                  setBusy={setBusy}
+                  iosClientId={iosGoogleClientId}
+                  androidClientId={androidGoogleClientId}
+                  webClientId={webGoogleClientId}
+                  redirectUri={googleRedirectUri}
+                  onMissingConfig={showGoogleConfigHelp}
+                />
+              </View>
+            ) : null}
+
+            {biometricAvailable ? (
               <TouchableOpacity
                 onPress={doBiometricUnlock}
                 accessibilityRole="button"
@@ -616,20 +684,23 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
           {/* Google sign-in at the bottom of the form */}
           <View style={styles.secondaryActions}>
-            <View style={{ width: '100%', maxWidth: 360 }}>
-              <GoogleSignInButton
-                auth={auth}
-                navigation={navigation}
-                enabled={googleEnabled}
-                busy={busy}
-                setBusy={setBusy}
-                iosClientId={iosGoogleClientId}
-                androidClientId={androidGoogleClientId}
-                webClientId={webGoogleClientId}
-                redirectUri={googleRedirectUri}
-                onMissingConfig={showGoogleConfigHelp}
-              />
-            </View>
+            {Platform.OS === 'web' ? (
+              <View style={{ width: '100%', maxWidth: 360 }}>
+                <GoogleSignInButton
+                  variant="full"
+                  auth={auth}
+                  navigation={navigation}
+                  enabled={googleEnabled}
+                  busy={busy}
+                  setBusy={setBusy}
+                  iosClientId={iosGoogleClientId}
+                  androidClientId={androidGoogleClientId}
+                  webClientId={webGoogleClientId}
+                  redirectUri={googleRedirectUri}
+                  onMissingConfig={showGoogleConfigHelp}
+                />
+              </View>
+            ) : null}
 
             {showSentryTestButton ? (
               <View style={{ width: '100%', maxWidth: 360, marginTop: 10 }}>
@@ -675,9 +746,10 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#ccc', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12, borderRadius: 10, backgroundColor: '#fff' },
   registerWrap: { marginTop: 12, alignItems: 'center' },
   registerText: { color: '#2563eb', fontWeight: '600' },
-  passwordFieldWrap: { position: 'relative' },
-  passwordInput: { paddingRight: 42 },
-  peekIconBtn: { position: 'absolute', right: 10, top: 10, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  showPasswordRow: { width: '100%', maxWidth: 360, flexDirection: 'row', justifyContent: 'flex-end', alignSelf: 'center', marginTop: -2 },
+  showPasswordToggle: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 2 },
+  showPasswordText: { marginLeft: 8, color: '#6b7280', fontWeight: '700' },
+  blankRow: { height: 12 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   primaryPushBtn: { backgroundColor: '#2563eb', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 10, minWidth: 140, alignItems: 'center' },
   primaryPushBtnText: { color: '#fff', fontWeight: '800' },
