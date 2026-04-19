@@ -7,6 +7,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
 import * as Google from 'expo-auth-session/providers/google';
+import * as AuthSession from 'expo-auth-session';
 import SignUpScreen from './SignUpScreen';
 import ForgotPasswordScreen from './ForgotPasswordScreen';
 import { useAuth } from '../src/AuthContext';
@@ -61,14 +62,29 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       ''
   );
 
-  // Prefer platform-specific client IDs, but allow web client ID as a fallback.
-  // (This keeps the button available even if only the web client ID is configured.)
-  const fallbackClientId = webGoogleClientId || iosGoogleClientId || androidGoogleClientId;
+  // IMPORTANT:
+  // Do NOT fall back to the web client ID on native platforms.
+  // Using a web client ID on iOS/Android is a common cause of Google OAuth
+  // `redirect_uri_mismatch` errors.
   const googleEnabled = Boolean(
-    (Platform.OS === 'ios' && (iosGoogleClientId || fallbackClientId)) ||
-      (Platform.OS === 'android' && (androidGoogleClientId || fallbackClientId)) ||
-      (Platform.OS === 'web' && (webGoogleClientId || fallbackClientId))
+    (Platform.OS === 'ios' && iosGoogleClientId) ||
+      (Platform.OS === 'android' && androidGoogleClientId) ||
+      (Platform.OS === 'web' && webGoogleClientId)
   );
+
+  const googleRedirectUri = useMemo(() => {
+    // For the deployed web app we want to land back on /home.
+    if (Platform.OS === 'web') {
+      try {
+        const origin = String(globalThis?.location?.origin || '').trim();
+        if (origin) return `${origin}/home`;
+      } catch (_) {}
+      return AuthSession.makeRedirectUri();
+    }
+
+    // Native: use an app scheme deep link.
+    return AuthSession.makeRedirectUri({ scheme: 'communitybridge', path: 'oauthredirect' });
+  }, []);
 
   // IMPORTANT:
   // - On native (iOS/Android), Google AuthSession defaults to ResponseType.Code and will
@@ -78,11 +94,14 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     iosClientId: iosGoogleClientId || undefined,
     androidClientId: androidGoogleClientId || undefined,
     webClientId: webGoogleClientId || undefined,
-    clientId: fallbackClientId || undefined,
+    redirectUri: googleRedirectUri,
     scopes: ['profile', 'email'],
   });
 
-  const SENTRY_OTLP_URL = 'https://o4510654674632704.ingest.us.sentry.io/api/4510654676533248/integration/otlp';
+  const SENTRY_OTLP_BASE = 'https://o4510654674632704.ingest.us.sentry.io/api/4510654676533248/otlp';
+  const SENTRY_OTLP_TRACES_URL = `${SENTRY_OTLP_BASE}/v1/traces`;
+  const SENTRY_OTLP_METRICS_URL = `${SENTRY_OTLP_BASE}/v1/metrics`;
+  const SENTRY_OTLP_LOGS_URL = `${SENTRY_OTLP_BASE}/v1/logs`;
   const sentryEnv = String(
     process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT ||
       getExpoExtraValue('EXPO_PUBLIC_SENTRY_ENVIRONMENT') ||
@@ -159,7 +178,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   function showGoogleConfigHelp() {
     Alert.alert(
       'Google sign-in not configured',
-      'Missing the Google Client ID for this platform.\n\nFor EAS builds, add these to your build profile env (or EAS project env vars):\n- EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID\n- EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID\n- EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID\n\nThen rebuild the app binary.'
+      `Missing the Google Client ID for this platform.\n\nFor EAS builds, add these to your build profile env (or EAS project env vars):\n- EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID\n- EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID\n- EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID\n\nThis build will use redirect URI:\n${googleRedirectUri}\n\nThen rebuild the app binary.`
     );
   }
 
@@ -203,7 +222,9 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     if (googleResponse.type === 'error') {
       Alert.alert(
         'Google sign-in failed',
-        `${desc || err || 'Google OAuth error.'}${code ? `\n\nCode: ${code}` : ''}`
+        `${desc || err || 'Google OAuth error.'}` +
+          `${code ? `\n\nCode: ${code}` : ''}` +
+          `${googleRequest?.redirectUri ? `\n\nRedirect URI: ${googleRequest.redirectUri}` : ''}`
       );
     }
   }, [googleResponse]);
@@ -514,22 +535,23 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
               </View>
             ) : null}
 
-            <View style={{ width: '100%', maxWidth: 360, marginTop: 10 }}>
-              <TouchableOpacity
-                onPress={() => {
-                  try {
-                    WebBrowser.openBrowserAsync(SENTRY_OTLP_URL);
-                  } catch (e) {
-                    Alert.alert('Could not open link', SENTRY_OTLP_URL);
-                  }
-                }}
-                accessibilityRole="button"
-                style={styles.secondaryBtn}
-              >
-                <MaterialIcons name="open-in-new" size={18} color="#2563eb" />
-                <Text style={styles.secondaryBtnText}>Open Sentry OTLP URL</Text>
-              </TouchableOpacity>
-            </View>
+            {showSentryTestButton ? (
+              <View style={{ width: '100%', maxWidth: 360, marginTop: 10 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    Alert.alert(
+                      'Sentry OTLP endpoints',
+                      `These are ingest endpoints (not browsable in a browser).\n\nTraces:\n${SENTRY_OTLP_TRACES_URL}\n\nMetrics:\n${SENTRY_OTLP_METRICS_URL}\n\nLogs:\n${SENTRY_OTLP_LOGS_URL}`
+                    );
+                  }}
+                  accessibilityRole="button"
+                  style={styles.secondaryBtn}
+                >
+                  <MaterialIcons name="info-outline" size={18} color="#2563eb" />
+                  <Text style={styles.secondaryBtnText}>Show Sentry OTLP endpoints</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
 
             {/* Internal Sentry test moved to icon button near Sign In */}
           </View>
