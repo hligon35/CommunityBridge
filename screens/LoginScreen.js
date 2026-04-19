@@ -31,6 +31,147 @@ function getExpoExtraValue(key) {
   }
 }
 
+function maskClientId(id) {
+  const s = String(id || '').trim();
+  if (!s) return '';
+  if (s.length <= 10) return '***';
+  return `${s.slice(0, 4)}…${s.slice(-6)}`;
+}
+
+function GoogleSignInButtonDisabled({ busy, onPress }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Continue with Google (setup required)"
+      style={[styles.secondaryBtn, busy ? { opacity: 0.7 } : null]}
+      disabled={busy}
+    >
+      <MaterialIcons name="g-translate" size={18} color="#2563eb" />
+      <Text style={styles.secondaryBtnText}>Continue with Google (setup required)</Text>
+    </TouchableOpacity>
+  );
+}
+
+function GoogleSignInButtonEnabled({
+  auth,
+  navigation,
+  busy,
+  setBusy,
+  iosClientId,
+  androidClientId,
+  webClientId,
+  redirectUri,
+}) {
+  // expo-auth-session requires webClientId on web; do not even initialize the hook if it's missing.
+  if (Platform.OS === 'web' && !String(webClientId || '').trim()) {
+    return (
+      <GoogleSignInButtonDisabled
+        busy={busy}
+        onPress={() => {
+          Alert.alert(
+            'Google sign-in not configured',
+            'Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for this web build.'
+          );
+        }}
+      />
+    );
+  }
+
+  const [googleRequest, googleResponse, googlePromptAsync] = Google.useIdTokenAuthRequest({
+    iosClientId: iosClientId || undefined,
+    androidClientId: androidClientId || undefined,
+    webClientId: webClientId || undefined,
+    redirectUri,
+    scopes: ['profile', 'email'],
+  });
+
+  useEffect(() => {
+    if (!googleResponse) return;
+    if (googleResponse.type !== 'success') return;
+
+    const idToken =
+      googleResponse?.authentication?.idToken ||
+      googleResponse?.params?.id_token ||
+      '';
+
+    if (!idToken) {
+      Alert.alert('Google sign-in failed', 'Missing Google ID token.');
+      return;
+    }
+
+    (async () => {
+      setBusy(true);
+      try {
+        await auth.loginWithGoogle(idToken);
+        const gate = await auth.refreshMfaState();
+        navigation.replace(gate?.needsMfa ? 'TwoFactor' : 'Main');
+      } catch (e) {
+        Alert.alert('Google sign-in failed', e?.message || 'Please try again.');
+      } finally {
+        setBusy(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleResponse]);
+
+  useEffect(() => {
+    if (!googleResponse) return;
+    if (googleResponse.type === 'success') return;
+
+    const err = String(googleResponse?.error?.message || googleResponse?.error || '').trim();
+    const desc = String(googleResponse?.params?.error_description || '').trim();
+    const code = String(googleResponse?.params?.error || '').trim();
+    if (googleResponse.type === 'error') {
+      Alert.alert(
+        'Google sign-in failed',
+        `${desc || err || 'Google OAuth error.'}` +
+          `${code ? `\n\nCode: ${code}` : ''}` +
+          `${googleRequest?.redirectUri ? `\n\nRedirect URI: ${googleRequest.redirectUri}` : ''}`
+      );
+    }
+  }, [googleResponse, googleRequest]);
+
+  return (
+    <TouchableOpacity
+      style={[styles.secondaryBtn, busy ? { opacity: 0.7 } : null]}
+      onPress={() => {
+        if (!googleRequest) {
+          Alert.alert('Google sign-in', 'Google sign-in is still initializing. Please try again.');
+          return;
+        }
+        googlePromptAsync({ showInRecents: true }).catch(() => {
+          Alert.alert('Google sign-in failed', 'Could not start sign-in.');
+        });
+      }}
+      accessibilityRole="button"
+      accessibilityLabel="Continue with Google"
+      disabled={busy}
+    >
+      <MaterialIcons name="g-translate" size={18} color="#2563eb" />
+      <Text style={styles.secondaryBtnText}>Continue with Google</Text>
+    </TouchableOpacity>
+  );
+}
+
+function GoogleSignInButton(props) {
+  if (!props.enabled) {
+    return <GoogleSignInButtonDisabled busy={props.busy} onPress={props.onMissingConfig} />;
+  }
+  return (
+    <GoogleSignInButtonEnabled
+      auth={props.auth}
+      navigation={props.navigation}
+      busy={props.busy}
+      setBusy={props.setBusy}
+      iosClientId={props.iosClientId}
+      androidClientId={props.androidClientId}
+      webClientId={props.webClientId}
+      redirectUri={props.redirectUri}
+    />
+  );
+}
+
 export default function LoginScreen({ navigation, suppressAutoRedirect = false }) {
   const { height: windowHeight } = useWindowDimensions();
 
@@ -50,27 +191,32 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
       getExpoExtraValue('EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID') ||
       ''
-  );
+  ).trim();
   const androidGoogleClientId = String(
     process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
       getExpoExtraValue('EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID') ||
       ''
-  );
+  ).trim();
   const webGoogleClientId = String(
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
       getExpoExtraValue('EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID') ||
       ''
-  );
+  ).trim();
 
   // IMPORTANT:
   // Do NOT fall back to the web client ID on native platforms.
   // Using a web client ID on iOS/Android is a common cause of Google OAuth
   // `redirect_uri_mismatch` errors.
-  const googleEnabled = Boolean(
-    (Platform.OS === 'ios' && iosGoogleClientId) ||
-      (Platform.OS === 'android' && androidGoogleClientId) ||
-      (Platform.OS === 'web' && webGoogleClientId)
-  );
+  const googleClientIdForPlatform =
+    Platform.OS === 'ios'
+      ? iosGoogleClientId
+      : Platform.OS === 'android'
+        ? androidGoogleClientId
+        : Platform.OS === 'web'
+          ? webGoogleClientId
+          : '';
+
+  const googleEnabled = Boolean(googleClientIdForPlatform);
 
   const googleRedirectUri = useMemo(() => {
     // For the deployed web app we want to land back on /home.
@@ -86,17 +232,20 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     return AuthSession.makeRedirectUri({ scheme: 'communitybridge', path: 'oauthredirect' });
   }, []);
 
-  // IMPORTANT:
-  // - On native (iOS/Android), Google AuthSession defaults to ResponseType.Code and will
-  //   exchange for tokens (including idToken) without requiring us to force an implicit flow.
-  // - Forcing ResponseType.IdToken on native commonly results in Google 400 errors.
-  const [googleRequest, googleResponse, googlePromptAsync] = Google.useIdTokenAuthRequest({
-    iosClientId: iosGoogleClientId || undefined,
-    androidClientId: androidGoogleClientId || undefined,
-    webClientId: webGoogleClientId || undefined,
-    redirectUri: googleRedirectUri,
-    scopes: ['profile', 'email'],
-  });
+  useEffect(() => {
+    logger.info('auth', 'Google auth config', {
+      platform: Platform.OS,
+      googleEnabled,
+      hasIosClientId: Boolean(iosGoogleClientId),
+      hasAndroidClientId: Boolean(androidGoogleClientId),
+      hasWebClientId: Boolean(webGoogleClientId),
+      redirectUri: googleRedirectUri,
+      iosClientIdHint: maskClientId(iosGoogleClientId),
+      androidClientIdHint: maskClientId(androidGoogleClientId),
+      webClientIdHint: maskClientId(webGoogleClientId),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const SENTRY_OTLP_BASE = 'https://o4510654674632704.ingest.us.sentry.io/api/4510654676533248/otlp';
   const SENTRY_OTLP_TRACES_URL = `${SENTRY_OTLP_BASE}/v1/traces`;
@@ -176,58 +325,19 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   }
 
   function showGoogleConfigHelp() {
+    const missing = [];
+    if (Platform.OS === 'ios' && !iosGoogleClientId) missing.push('EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID');
+    if (Platform.OS === 'android' && !androidGoogleClientId) missing.push('EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID');
+    if (Platform.OS === 'web' && !webGoogleClientId) missing.push('EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID');
+
     Alert.alert(
       'Google sign-in not configured',
-      `Missing the Google Client ID for this platform.\n\nFor EAS builds, add these to your build profile env (or EAS project env vars):\n- EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID\n- EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID\n- EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID\n\nThis build will use redirect URI:\n${googleRedirectUri}\n\nThen rebuild the app binary.`
+      `Missing the Google Client ID for this platform.${missing.length ? `\n\nMissing:\n- ${missing.join('\n- ')}` : ''}` +
+        `\n\nFor EAS builds, add these to your build profile env (or EAS project env vars):\n- EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID\n- EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID\n- EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` +
+        `\n\nThis build will use redirect URI:\n${googleRedirectUri}` +
+        `\n\nThen rebuild the app binary.`
     );
   }
-
-  useEffect(() => {
-    if (!googleResponse) return;
-    if (googleResponse.type !== 'success') return;
-
-    const idToken =
-      googleResponse?.authentication?.idToken ||
-      googleResponse?.params?.id_token ||
-      '';
-
-    if (!idToken) {
-      Alert.alert('Google sign-in failed', 'Missing Google ID token.');
-      return;
-    }
-
-    (async () => {
-      setBusy(true);
-      try {
-        await auth.loginWithGoogle(idToken);
-        const gate = await auth.refreshMfaState();
-        navigation.replace(gate?.needsMfa ? 'TwoFactor' : 'Main');
-      } catch (e) {
-        Alert.alert('Google sign-in failed', e?.message || 'Please try again.');
-      } finally {
-        setBusy(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [googleResponse]);
-
-  useEffect(() => {
-    if (!googleResponse) return;
-    if (googleResponse.type === 'success') return;
-
-    // Surface useful details for debugging OAuth 400s.
-    const err = String(googleResponse?.error?.message || googleResponse?.error || '').trim();
-    const desc = String(googleResponse?.params?.error_description || '').trim();
-    const code = String(googleResponse?.params?.error || '').trim();
-    if (googleResponse.type === 'error') {
-      Alert.alert(
-        'Google sign-in failed',
-        `${desc || err || 'Google OAuth error.'}` +
-          `${code ? `\n\nCode: ${code}` : ''}` +
-          `${googleRequest?.redirectUri ? `\n\nRedirect URI: ${googleRequest.redirectUri}` : ''}`
-      );
-    }
-  }, [googleResponse]);
 
   async function sendInternalSentryTestError() {
     try {
@@ -506,28 +616,20 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
           {/* Google sign-in at the bottom of the form */}
           <View style={styles.secondaryActions}>
-            {googleEnabled ? (
-              <View style={{ width: '100%', maxWidth: 360 }}>
-                <TouchableOpacity
-                  onPress={() => {
-                    if (!googleRequest) {
-                      showGoogleConfigHelp();
-                      return;
-                    }
-                    googlePromptAsync().catch(() => {
-                      Alert.alert('Google sign-in failed', 'Could not start sign-in.');
-                    });
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Continue with Google"
-                  style={[styles.secondaryBtn, busy ? { opacity: 0.7 } : null]}
-                  disabled={busy}
-                >
-                  <MaterialIcons name="g-translate" size={18} color="#2563eb" />
-                  <Text style={styles.secondaryBtnText}>Continue with Google</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
+            <View style={{ width: '100%', maxWidth: 360 }}>
+              <GoogleSignInButton
+                auth={auth}
+                navigation={navigation}
+                enabled={googleEnabled}
+                busy={busy}
+                setBusy={setBusy}
+                iosClientId={iosGoogleClientId}
+                androidClientId={androidGoogleClientId}
+                webClientId={webGoogleClientId}
+                redirectUri={googleRedirectUri}
+                onMissingConfig={showGoogleConfigHelp}
+              />
+            </View>
 
             {showSentryTestButton ? (
               <View style={{ width: '100%', maxWidth: 360, marginTop: 10 }}>
