@@ -62,5 +62,9 @@ appstore_connect.json
 # Accidental nested clone of this same repo (avoid confusion)
 /BuddyBoard
 
+# Local Copilot/agent skill artifacts
+/.agents
+/skills-lock.json
+
 
 .env.local
