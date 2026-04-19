@@ -1,10 +1,6 @@
 name: Build and submit Android Internal (EAS)
 
 on:
-  push:
-    branches:
-      - main
-      - feat/**
   workflow_dispatch: {}
 
 jobs:

@@ -1,10 +1,6 @@
 name: Build and submit iOS to TestFlight
 
 on:
-  push:
-    branches:
-      - master
-      - test
   workflow_dispatch:
     inputs:
       submit:

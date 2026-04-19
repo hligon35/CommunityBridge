@@ -510,7 +510,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
             {showSentryTestButton ? (
               <View style={{ width: '100%', maxWidth: 360, marginTop: 10 }}>
-                <Button title="Try!" onPress={sendInternalSentryTestError} disabled={busy} />
+                {/* Debug Sentry test is available via the bug icon near Sign In */}
               </View>
             ) : null}
 
