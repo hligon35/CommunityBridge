@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StatusBar } from 'react-native';
+import { StatusBar, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 // Temporarily remove TailwindProvider if not available at runtime
 import { NavigationContainer } from '@react-navigation/native';
@@ -213,7 +213,9 @@ function App() {
 
   useEffect(() => {
     try {
-      configureNotificationHandling();
+      // expo-notifications push token listeners are not fully supported on web.
+      // Skip notification setup on web to avoid noisy console warnings.
+      if (Platform.OS !== 'web') configureNotificationHandling();
       registerGlobalDebugHandlers();
       logger.debug('app', 'Registered global debug handlers');
     } catch (e) {

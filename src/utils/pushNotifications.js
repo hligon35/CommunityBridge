@@ -47,6 +47,7 @@ const EAS_PROJECT_ID = (() => {
 })();
 
 export function configureNotificationHandling() {
+  if (Platform.OS === 'web') return;
   if (isExpoGo()) return;
 
   // Show alerts by default when a notification arrives.
@@ -63,6 +64,9 @@ export function configureNotificationHandling() {
 }
 
 export async function registerForExpoPushTokenAsync() {
+  if (Platform.OS === 'web') {
+    return { ok: false, reason: 'web-unsupported' };
+  }
   if (isExpoGo()) {
     return { ok: false, reason: 'expo-go' };
   }
