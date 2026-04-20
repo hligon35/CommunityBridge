@@ -14,7 +14,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDlF2E4GSmIgyNMdBahzlV91rvi_VUm4B0",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "communitybridge-26apr.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "communitybridge-26apr",
         "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "communitybridge-26apr.firebasestorage.app",
@@ -44,7 +44,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDlF2E4GSmIgyNMdBahzlV91rvi_VUm4B0",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "communitybridge-26apr.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "communitybridge-26apr",
         "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "communitybridge-26apr.firebasestorage.app",
@@ -74,7 +74,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDlF2E4GSmIgyNMdBahzlV91rvi_VUm4B0",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "communitybridge-26apr.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "communitybridge-26apr",
         "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "communitybridge-26apr.firebasestorage.app",
@@ -103,7 +103,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDlF2E4GSmIgyNMdBahzlV91rvi_VUm4B0",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "communitybridge-26apr.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "communitybridge-26apr",
         "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "communitybridge-26apr.firebasestorage.app",
@@ -132,7 +132,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDlF2E4GSmIgyNMdBahzlV91rvi_VUm4B0",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "communitybridge-26apr.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "communitybridge-26apr",
         "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "communitybridge-26apr.firebasestorage.app",
