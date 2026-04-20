@@ -1,11 +1,11 @@
 buddy-board.com {
   @api path /api/* /uploads/*
   handle @api {
-    reverse_proxy api:3005
+    reverse_proxy 127.0.0.1:3005
   }
 
   handle {
-    reverse_proxy BuddyBoardApp:3000
+    reverse_proxy 127.0.0.1:3005
   }
 
   # Optional: basic hardening headers

@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Api from '../Api';
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
+import { setArrivalBackgroundState, startArrivalBackgroundLocation, stopArrivalBackgroundLocation } from '../utils/arrivalBackgroundLocation';
 
 const ARRIVAL_KEY = 'settings_arrival_enabled_v1';
 const BUSINESS_ADDR_KEY = 'business_address_v1';
@@ -48,10 +49,48 @@ export default function useArrivalDetector() {
   const { children, fetchAndSync } = useData();
   const { user } = useAuth();
   const intervalRef = useRef(null);
+  const bgRef = useRef({ active: false, userId: null });
   const appState = useRef(AppState.currentState);
   const [enabled, setEnabled] = useState(false);
   const [orgEnabled, setOrgEnabled] = useState(true);
   const [business, setBusiness] = useState(null);
+
+  function _buildBackgroundWindows() {
+    const windows = [];
+    if (!user) return windows;
+    const role = (user.role || '').toString().toLowerCase();
+
+    if (role === 'parent') {
+      const list = children || [];
+      for (const ch of list) {
+        const cid = ch?.id != null ? String(ch.id) : '';
+        const upcoming = Array.isArray(ch?.upcoming) ? ch.upcoming : [];
+        for (const ev of upcoming) {
+          const whenISO = ev?.whenISO ? String(ev.whenISO) : '';
+          const eventId = ev?.id != null ? String(ev.id) : '';
+          if (!whenISO) continue;
+          windows.push({ role, childId: cid || undefined, eventId: eventId || undefined, whenISO });
+        }
+      }
+    } else if (role === 'therapist') {
+      const shifts = Array.isArray(user?.shifts) ? user.shifts : [];
+      for (const s of shifts) {
+        const startISO = s?.startISO ? String(s.startISO) : '';
+        if (!startISO) continue;
+        windows.push({ role, shiftId: s?.id != null ? String(s.id) : undefined, startISO });
+      }
+    }
+
+    return windows;
+  }
+
+  function _buildBackgroundOrg() {
+    const lat = Number(business?.lat);
+    const lng = Number(business?.lng);
+    const dropZoneMiles = Number(business?.dropZoneMiles);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(dropZoneMiles) || dropZoneMiles <= 0) return null;
+    return { lat, lng, dropZoneMiles };
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -99,8 +138,32 @@ export default function useArrivalDetector() {
     const effectiveEnabled = enabled && orgEnabled;
     if (!effectiveEnabled) {
       _stopInterval();
+      // Best-effort stop; do not block UI if it fails.
+      stopArrivalBackgroundLocation().catch(() => {});
+      bgRef.current = { active: false, userId: null };
       return;
     }
+
+    // Keep background task aligned with the latest schedule + org drop-zone.
+    // If we can't build windows yet, background pings are suppressed.
+    if (Platform.OS !== 'web') {
+      setArrivalBackgroundState({
+        org: _buildBackgroundOrg(),
+        windows: _buildBackgroundWindows(),
+      }).catch(() => {});
+    }
+
+    // Start background location updates when arrival detection is enabled.
+    // This requires a rebuild and the user granting "Always" location permission.
+    if (user && Platform.OS !== 'web') {
+      const uid = user.id;
+      if (!bgRef.current.active || bgRef.current.userId !== uid) {
+        bgRef.current = { active: true, userId: uid };
+        const role = (user.role || '').toString().toLowerCase();
+        startArrivalBackgroundLocation({ userId: uid, role }).catch(() => {});
+      }
+    }
+
     // start checking periodically when enabled
     _evaluateAndSchedule();
     return () => { _stopInterval(); };

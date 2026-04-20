@@ -13,7 +13,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 const slog = require('./logger');
 const LOG_REQUESTS = (() => {
-  const v = process.env.BB_DEBUG_REQUESTS;
+  const v = process.env.CB_DEBUG_REQUESTS || process.env.BB_DEBUG_REQUESTS;
   if (v == null) return true;
   const s = String(v).trim().toLowerCase();
   if (['1', 'true', 'yes', 'y', 'on'].includes(s)) return true;
@@ -100,7 +100,7 @@ if (LOG_REQUESTS) {
 
 // In-memory mock data
 let posts = [
-  { id: 1, author: 'Teacher', text: 'Welcome to BuddyBoard!', likes: 0, shares: 0, comments: [], createdAt: new Date().toISOString() }
+  { id: 1, author: 'Teacher', text: 'Welcome to CommunityBridge!', likes: 0, shares: 0, comments: [], createdAt: new Date().toISOString() }
 ];
 let messages = [];
 let urgentMemos = [];

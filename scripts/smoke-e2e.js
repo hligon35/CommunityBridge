@@ -1,5 +1,5 @@
 /*
-  BuddyBoard end-to-end smoke runner.
+  CommunityBridge end-to-end smoke runner.
 
   Runs a minimal flow across the API and prints a color-coded PASS/FAIL summary.
 
@@ -7,17 +7,19 @@
     node scripts/smoke-e2e.js
 
   Env:
-    BB_BASE_URL=http://127.0.0.1:3006   (defaults to mock)
-    BB_EMAIL=test@example.com
-    BB_NAME="Smoke Tester"
-    BB_PASSWORD=Password123!
-    BB_ROLE=parent
+    CB_BASE_URL=http://127.0.0.1:3006   (preferred; defaults to mock)
+    CB_EMAIL=test@example.com
+    CB_NAME="Smoke Tester"
+    CB_PASSWORD=Password123!
+    CB_ROLE=parent
+
+    (Legacy BB_* vars are still supported.)
 
   Notes:
     - For api-server.js, you may want:
-        BB_ALLOW_SIGNUP=1
-        BB_REQUIRE_2FA_ON_SIGNUP=1
-        BB_DEBUG_2FA_RETURN_CODE=1
+        CB_ALLOW_SIGNUP=1
+        CB_REQUIRE_2FA_ON_SIGNUP=1
+        CB_DEBUG_2FA_RETURN_CODE=1
       so the signup response includes a devCode for automation.
 */
 
@@ -105,11 +107,11 @@ function pickDevCode(signupResp) {
 }
 
 async function main() {
-  const baseUrl = (process.env.BB_BASE_URL || DEFAULT_BASE).replace(/\/+$/, '');
-  const email = process.env.BB_EMAIL || `smoke+${Date.now()}@example.com`;
-  const name = process.env.BB_NAME || 'Smoke Tester';
-  const password = process.env.BB_PASSWORD || 'Password123!';
-  const role = process.env.BB_ROLE || 'parent';
+  const baseUrl = (process.env.CB_BASE_URL || process.env.BB_BASE_URL || DEFAULT_BASE).replace(/\/+$/, '');
+  const email = process.env.CB_EMAIL || process.env.BB_EMAIL || `smoke+${Date.now()}@example.com`;
+  const name = process.env.CB_NAME || process.env.BB_NAME || 'Smoke Tester';
+  const password = process.env.CB_PASSWORD || process.env.BB_PASSWORD || 'Password123!';
+  const role = process.env.CB_ROLE || process.env.BB_ROLE || 'parent';
 
   const results = [];
 
@@ -136,7 +138,7 @@ async function main() {
 
   const verify = await runStep(results, 'auth.2fa.verify', async () => {
     if (!challengeId) throw new Error('missing challengeId from signup');
-    if (!devCode) throw new Error('missing devCode from signup; enable BB_DEBUG_2FA_RETURN_CODE on api-server');
+    if (!devCode) throw new Error('missing devCode from signup; enable CB_DEBUG_2FA_RETURN_CODE/BB_DEBUG_2FA_RETURN_CODE on api-server');
     const r = await http(baseUrl, 'POST', '/api/auth/2fa/verify', { json: { challengeId, code: String(devCode) } });
     if (!r.ok) throw new Error(`2fa verify failed: ${r.status} ${JSON.stringify(r.data)}`);
     return r.data;

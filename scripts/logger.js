@@ -1,5 +1,5 @@
 // Lightweight ANSI logger for node scripts (api-server/api-mock)
-// Controlled via BB_DEBUG_LOGS / BB_DEBUG_LOG_LEVEL.
+// Controlled via CB_DEBUG_LOGS / CB_DEBUG_LOG_LEVEL (preferred) or BB_* (legacy).
 
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
 
@@ -35,17 +35,17 @@ function envFlag(value, fallback = false) {
 
 function shouldColor() {
   // Color by default in terminals; allow disabling.
-  const enabled = envFlag(process.env.BB_DEBUG_LOG_COLORS, true);
+  const enabled = envFlag(process.env.CB_DEBUG_LOG_COLORS || process.env.BB_DEBUG_LOG_COLORS, true);
   if (!enabled) return false;
   return !!process.stdout && !!process.stdout.isTTY;
 }
 
 function minLevel() {
-  return normalizeLevel(process.env.BB_DEBUG_LOG_LEVEL || 'debug');
+  return normalizeLevel(process.env.CB_DEBUG_LOG_LEVEL || process.env.BB_DEBUG_LOG_LEVEL || 'debug');
 }
 
 function debugEnabled() {
-  return envFlag(process.env.BB_DEBUG_LOGS, true);
+  return envFlag(process.env.CB_DEBUG_LOGS || process.env.BB_DEBUG_LOGS, true);
 }
 
 function shouldLog(level) {

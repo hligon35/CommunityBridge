@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "870175047052",
-    "project_id": "buddyboard-7acda",
-    "storage_bucket": "buddyboard-7acda.firebasestorage.app"
+    "project_number": "752508556236",
+    "project_id": "communitybridge-26apr",
+    "storage_bucket": "communitybridge-26apr.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:870175047052:android:ff966198b531ee97a9eaa9",
+        "mobilesdk_app_id": "1:752508556236:android:11f36ea05c441340c14369",
         "android_client_info": {
-          "package_name": "com.azlabs.buddyboard"
+          "package_name": "com.azlabsllc.communitybridge"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDp-yfw3d7uzs43tf5SaJd0czIBcWwNpDc"
+          "current_key": "AIzaSyDlF2E4GSmIgyNMdBahzlV91rvi_VUm4B0"
         }
       ],
       "services": {

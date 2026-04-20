@@ -4,7 +4,7 @@ const path = require('path');
 // Our API server already respects process.env.PORT, so make `npm start`
 // run the API by default.
 
-const scriptName = process.env.BB_DATABASE_URL ? 'api-server-pg.js' : 'api-server.js';
+const scriptName = (process.env.CB_DATABASE_URL || process.env.BB_DATABASE_URL) ? 'api-server-pg.js' : 'api-server.js';
 
 // eslint-disable-next-line import/no-dynamic-require, global-require
 require(path.join(__dirname, scriptName));

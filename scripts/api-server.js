@@ -41,7 +41,7 @@ function loadDotEnvFile(filePath) {
 }
 
 // Local dev convenience: load env vars without requiring dotenv.
-// This enables BB_ALLOW_NO_DB=1, BB_SERVE_WEB_APP=1, etc.
+// This enables CB_* (preferred) and BB_* (legacy) env toggles.
 loadDotEnvFile(path.resolve(process.cwd(), '.env.local'));
 loadDotEnvFile(path.resolve(process.cwd(), '.env'));
 let SqliteDatabase = null;
@@ -83,10 +83,10 @@ function getNodemailerLib() {
 }
 
 const PORT = Number(process.env.PORT || 3005);
-const DB_PATH = process.env.BB_DB_PATH || path.join(process.cwd(), '.data', 'buddyboard.sqlite');
-const JWT_SECRET = process.env.BB_JWT_SECRET || '';
+const DB_PATH = process.env.CB_DB_PATH || process.env.BB_DB_PATH || path.join(process.cwd(), '.data', 'buddyboard.sqlite');
+const JWT_SECRET = process.env.CB_JWT_SECRET || process.env.BB_JWT_SECRET || '';
 const NODE_ENV = String(process.env.NODE_ENV || '').trim().toLowerCase();
-const PUBLIC_BASE_URL = (process.env.BB_PUBLIC_BASE_URL || '').trim();
+const PUBLIC_BASE_URL = (process.env.CB_PUBLIC_BASE_URL || process.env.BB_PUBLIC_BASE_URL || '').trim();
 
 function envFlag(value, defaultValue = false) {
   if (value == null) return defaultValue;
@@ -97,46 +97,46 @@ function envFlag(value, defaultValue = false) {
   return defaultValue;
 }
 
-const ALLOW_SIGNUP = envFlag(process.env.BB_ALLOW_SIGNUP, true);
+const ALLOW_SIGNUP = envFlag(process.env.CB_ALLOW_SIGNUP || process.env.BB_ALLOW_SIGNUP, true);
 // IMPORTANT:
 // Requiring 2FA on signup by default will hard-fail account creation when email/SMS delivery
 // isn't configured (e.g. missing BB_SMTP_URL/BB_EMAIL_FROM). Default to OFF unless explicitly enabled.
-const REQUIRE_2FA_ON_SIGNUP = envFlag(process.env.BB_REQUIRE_2FA_ON_SIGNUP, false);
-const DEBUG_2FA_RETURN_CODE = envFlag(process.env.BB_DEBUG_2FA_RETURN_CODE, false);
+const REQUIRE_2FA_ON_SIGNUP = envFlag(process.env.CB_REQUIRE_2FA_ON_SIGNUP || process.env.BB_REQUIRE_2FA_ON_SIGNUP, false);
+const DEBUG_2FA_RETURN_CODE = envFlag(process.env.CB_DEBUG_2FA_RETURN_CODE || process.env.BB_DEBUG_2FA_RETURN_CODE, false);
 // When enabled, include the underlying delivery failure message in API responses.
 // Keep disabled in production by default to avoid leaking implementation details.
-const DEBUG_2FA_DELIVERY_ERRORS = envFlag(process.env.BB_DEBUG_2FA_DELIVERY_ERRORS, false);
-const LOG_REQUESTS = envFlag(process.env.BB_DEBUG_REQUESTS, true);
+const DEBUG_2FA_DELIVERY_ERRORS = envFlag(process.env.CB_DEBUG_2FA_DELIVERY_ERRORS || process.env.BB_DEBUG_2FA_DELIVERY_ERRORS, false);
+const LOG_REQUESTS = envFlag(process.env.CB_DEBUG_REQUESTS || process.env.BB_DEBUG_REQUESTS, true);
 // When enabled, allow the server to start without a DB (static hosting only).
 // This is intended for local debugging and should not be used for real app traffic.
-const ALLOW_NO_DB = envFlag(process.env.BB_ALLOW_NO_DB, false);
+const ALLOW_NO_DB = envFlag(process.env.CB_ALLOW_NO_DB || process.env.BB_ALLOW_NO_DB, false);
 
 // 2FA delivery toggles
 // Default: email enabled, SMS disabled.
-const ENABLE_EMAIL_2FA = envFlag(process.env.BB_ENABLE_EMAIL_2FA, true);
-const ENABLE_SMS_2FA = envFlag(process.env.BB_ENABLE_SMS_2FA, false);
+const ENABLE_EMAIL_2FA = envFlag(process.env.CB_ENABLE_EMAIL_2FA || process.env.BB_ENABLE_EMAIL_2FA, true);
+const ENABLE_SMS_2FA = envFlag(process.env.CB_ENABLE_SMS_2FA || process.env.BB_ENABLE_SMS_2FA, false);
 
 // 2FA delivery (SMS only).
 // Configure Twilio in production/TestFlight:
 // - BB_TWILIO_ACCOUNT_SID
 // - BB_TWILIO_AUTH_TOKEN
 // - BB_TWILIO_FROM (E.164, e.g. +15551234567) OR BB_TWILIO_MESSAGING_SERVICE_SID
-const TWILIO_ACCOUNT_SID = (process.env.BB_TWILIO_ACCOUNT_SID || '').trim();
-const TWILIO_AUTH_TOKEN = (process.env.BB_TWILIO_AUTH_TOKEN || '').trim();
-const TWILIO_FROM = (process.env.BB_TWILIO_FROM || '').trim();
-const TWILIO_MESSAGING_SERVICE_SID = (process.env.BB_TWILIO_MESSAGING_SERVICE_SID || '').trim();
+const TWILIO_ACCOUNT_SID = (process.env.CB_TWILIO_ACCOUNT_SID || process.env.BB_TWILIO_ACCOUNT_SID || '').trim();
+const TWILIO_AUTH_TOKEN = (process.env.CB_TWILIO_AUTH_TOKEN || process.env.BB_TWILIO_AUTH_TOKEN || '').trim();
+const TWILIO_FROM = (process.env.CB_TWILIO_FROM || process.env.BB_TWILIO_FROM || '').trim();
+const TWILIO_MESSAGING_SERVICE_SID = (process.env.CB_TWILIO_MESSAGING_SERVICE_SID || process.env.BB_TWILIO_MESSAGING_SERVICE_SID || '').trim();
 
 // 2FA delivery (Email)
 // Configure SMTP:
-// - BB_SMTP_URL (e.g. smtp://user:pass@smtp.example.com:587)
-// - BB_EMAIL_FROM (e.g. BuddyBoard <no-reply@example.com>)
-const SMTP_URL = (process.env.BB_SMTP_URL || '').trim();
-const EMAIL_FROM = (process.env.BB_EMAIL_FROM || '').trim();
-const EMAIL_2FA_SUBJECT = (process.env.BB_EMAIL_2FA_SUBJECT || 'BuddyBoard verification code').trim();
-const EMAIL_PASSWORD_RESET_SUBJECT = (process.env.BB_EMAIL_PASSWORD_RESET_SUBJECT || 'BuddyBoard password reset').trim();
+// - CB_SMTP_URL / BB_SMTP_URL (e.g. smtp://user:pass@smtp.example.com:587)
+// - CB_EMAIL_FROM / BB_EMAIL_FROM (e.g. CommunityBridge <no-reply@example.com>)
+const SMTP_URL = (process.env.CB_SMTP_URL || process.env.BB_SMTP_URL || '').trim();
+const EMAIL_FROM = (process.env.CB_EMAIL_FROM || process.env.BB_EMAIL_FROM || '').trim();
+const EMAIL_2FA_SUBJECT = (process.env.CB_EMAIL_2FA_SUBJECT || process.env.BB_EMAIL_2FA_SUBJECT || 'CommunityBridge verification code').trim();
+const EMAIL_PASSWORD_RESET_SUBJECT = (process.env.CB_EMAIL_PASSWORD_RESET_SUBJECT || process.env.BB_EMAIL_PASSWORD_RESET_SUBJECT || 'CommunityBridge password reset').trim();
 
-const RETURN_PASSWORD_RESET_CODE = envFlag(process.env.BB_RETURN_PASSWORD_RESET_CODE, NODE_ENV !== 'production');
-const PASSWORD_RESET_TTL_MINUTES = Math.max(5, Number(process.env.BB_PASSWORD_RESET_TTL_MINUTES || 30));
+const RETURN_PASSWORD_RESET_CODE = envFlag(process.env.CB_RETURN_PASSWORD_RESET_CODE || process.env.BB_RETURN_PASSWORD_RESET_CODE, NODE_ENV !== 'production');
+const PASSWORD_RESET_TTL_MINUTES = Math.max(5, Number(process.env.CB_PASSWORD_RESET_TTL_MINUTES || process.env.BB_PASSWORD_RESET_TTL_MINUTES || 30));
 
 const slog = require('./logger');
 
@@ -158,7 +158,7 @@ function getTwilioClient() {
   if (twilioClient) return twilioClient;
   const twilio = getTwilioLib();
   if (!twilio) {
-    throw new Error("Missing dependency 'twilio' in this server build. Rebuild your Docker image after installing dependencies (npm ci) so the twilio package is included.");
+    throw new Error("Missing dependency 'twilio' in this server build. Install server dependencies (npm ci) so the twilio package is included.");
   }
   twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
   return twilioClient;
@@ -182,7 +182,7 @@ async function send2faCodeSms({ to, code }) {
     throw new Error('2FA SMS delivery is not configured (set BB_TWILIO_ACCOUNT_SID/BB_TWILIO_AUTH_TOKEN and BB_TWILIO_FROM or BB_TWILIO_MESSAGING_SERVICE_SID)');
   }
 
-  const body = `BuddyBoard verification code: ${code}. Expires in 5 minutes.`;
+  const body = `CommunityBridge verification code: ${code}. Expires in 5 minutes.`;
   const msg = {
     to,
     body,
@@ -199,7 +199,7 @@ function getEmailTransporter() {
   if (emailTransporter) return emailTransporter;
   const nodemailer = getNodemailerLib();
   if (!nodemailer) {
-    throw new Error("Missing dependency 'nodemailer' in this server build. Rebuild your Docker image after installing dependencies (npm ci) so the nodemailer package is included.");
+    throw new Error("Missing dependency 'nodemailer' in this server build. Install server dependencies (npm ci) so the nodemailer package is included.");
   }
   emailTransporter = nodemailer.createTransport(SMTP_URL);
   return emailTransporter;
@@ -219,10 +219,10 @@ async function send2faCodeEmail({ to, code }) {
 
   const transporter = getEmailTransporter();
   if (!transporter) {
-    throw new Error('2FA email delivery is not configured (set BB_SMTP_URL and BB_EMAIL_FROM, and ensure BB_ENABLE_EMAIL_2FA=1)');
+    throw new Error('2FA email delivery is not configured (set CB_SMTP_URL/BB_SMTP_URL and CB_EMAIL_FROM/BB_EMAIL_FROM, and ensure CB_ENABLE_EMAIL_2FA/BB_ENABLE_EMAIL_2FA=1)');
   }
 
-  const text = `BuddyBoard verification code: ${code}. Expires in 5 minutes.`;
+  const text = `CommunityBridge verification code: ${code}. Expires in 5 minutes.`;
   await transporter.sendMail({
     from: EMAIL_FROM,
     to: destination,
@@ -335,13 +335,13 @@ function consume2faChallenge(challengeId, code) {
 }
 // Dev compatibility: allow the mobile app's __DEV__ auto-login token.
 // Default: enabled outside production, disabled in production.
-const ALLOW_DEV_TOKEN = envFlag(process.env.BB_ALLOW_DEV_TOKEN, NODE_ENV !== 'production');
+const ALLOW_DEV_TOKEN = envFlag(process.env.CB_ALLOW_DEV_TOKEN || process.env.BB_ALLOW_DEV_TOKEN, NODE_ENV !== 'production');
 
-const ADMIN_EMAIL = process.env.BB_ADMIN_EMAIL || '';
-const ADMIN_PASSWORD = process.env.BB_ADMIN_PASSWORD || '';
-const ADMIN_NAME = process.env.BB_ADMIN_NAME || 'Admin';
+const ADMIN_EMAIL = process.env.CB_ADMIN_EMAIL || process.env.BB_ADMIN_EMAIL || '';
+const ADMIN_PASSWORD = process.env.CB_ADMIN_PASSWORD || process.env.BB_ADMIN_PASSWORD || '';
+const ADMIN_NAME = process.env.CB_ADMIN_NAME || process.env.BB_ADMIN_NAME || 'Admin';
 
-const GOOGLE_CLIENT_IDS = String(process.env.BB_GOOGLE_CLIENT_IDS || '').trim();
+const GOOGLE_CLIENT_IDS = String(process.env.CB_GOOGLE_CLIENT_IDS || process.env.BB_GOOGLE_CLIENT_IDS || '').trim();
 let googleClient = null;
 try {
   if (GOOGLE_CLIENT_IDS) {
@@ -376,13 +376,13 @@ try {
   dbInitError = e || new Error('SQLite initialization failed');
   if (!ALLOW_NO_DB) throw dbInitError;
   try {
-    console.warn('[api] SQLite unavailable; continuing without DB because BB_ALLOW_NO_DB=1');
+    console.warn('[api] SQLite unavailable; continuing without DB because CB_ALLOW_NO_DB=1 or BB_ALLOW_NO_DB=1');
     console.warn('[api] SQLite error:', dbInitError && dbInitError.message ? dbInitError.message : String(dbInitError));
   } catch (_) {}
 }
 
-const UPLOAD_DIR = process.env.BB_UPLOAD_DIR
-  ? String(process.env.BB_UPLOAD_DIR)
+const UPLOAD_DIR = process.env.CB_UPLOAD_DIR || process.env.BB_UPLOAD_DIR
+  ? String(process.env.CB_UPLOAD_DIR || process.env.BB_UPLOAD_DIR)
   : path.join(path.dirname(DB_PATH), 'uploads');
 
 ensureDir(UPLOAD_DIR);
@@ -549,7 +549,7 @@ function getPasswordResetEmailTransporter() {
   if (passwordResetTransporter) return passwordResetTransporter;
   const nodemailer = getNodemailerLib();
   if (!nodemailer) {
-    throw new Error("Missing dependency 'nodemailer' in this server build. Rebuild your Docker image after installing dependencies (npm ci) so the nodemailer package is included.");
+    throw new Error("Missing dependency 'nodemailer' in this server build. Install server dependencies (npm ci) so the nodemailer package is included.");
   }
   passwordResetTransporter = nodemailer.createTransport(SMTP_URL);
   return passwordResetTransporter;
@@ -571,10 +571,10 @@ async function sendPasswordResetEmail({ to, code }) {
 
   const transporter = getPasswordResetEmailTransporter();
   if (!transporter) {
-    throw new Error('Password reset email delivery is not configured (set BB_SMTP_URL and BB_EMAIL_FROM)');
+    throw new Error('Password reset email delivery is not configured (set CB_SMTP_URL/BB_SMTP_URL and CB_EMAIL_FROM/BB_EMAIL_FROM)');
   }
 
-  const text = `BuddyBoard password reset code: ${code}.\n\nEnter this code in the app to set a new password.\n\nThis code expires in ${PASSWORD_RESET_TTL_MINUTES} minutes.`;
+  const text = `CommunityBridge password reset code: ${code}.\n\nEnter this code in the app to set a new password.\n\nThis code expires in ${PASSWORD_RESET_TTL_MINUTES} minutes.`;
   await transporter.sendMail({
     from: EMAIL_FROM,
     to: destination,
@@ -813,7 +813,7 @@ async function sendExpoPush(tokens, { title, body, data } = {}) {
 
     const messages = unique.map((to) => ({
       to,
-      title: safeString(title || 'BuddyBoard'),
+      title: safeString(title || 'CommunityBridge'),
       body: safeString(body || ''),
       data: (data && typeof data === 'object') ? data : {},
       sound: 'default',
@@ -2365,8 +2365,8 @@ function getRequestHost(req) {
 }
 
 function shouldServeWebApp(req) {
-  // If BB_SERVE_WEB_APP is set, always serve the web app.
-  if (String(process.env.BB_SERVE_WEB_APP || '') === '1') return true;
+  // If CB_SERVE_WEB_APP or BB_SERVE_WEB_APP is set, always serve the web app.
+  if (String(process.env.CB_SERVE_WEB_APP || process.env.BB_SERVE_WEB_APP || '') === '1') return true;
 
   const host = getRequestHost(req);
   return host.startsWith('app.');
@@ -2511,7 +2511,7 @@ app.get(/.*/, (req, res, next) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[api] BuddyBoard API listening on :${PORT}`);
+  console.log(`[api] CommunityBridge API listening on :${PORT}`);
   console.log(`[api] DB: ${DB_PATH}`);
 });
 

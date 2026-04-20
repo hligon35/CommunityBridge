@@ -6,6 +6,7 @@
   Usage:
     node ./scripts/find-duplicate-users.js
     node ./scripts/find-duplicate-users.js --db /path/to/buddyboard.sqlite
+    CB_DB_PATH=/path/to/buddyboard.sqlite node ./scripts/find-duplicate-users.js
     BB_DB_PATH=/path/to/buddyboard.sqlite node ./scripts/find-duplicate-users.js
     node ./scripts/find-duplicate-users.js --json
 
@@ -29,7 +30,7 @@ function hasFlag(flag) {
 }
 
 function defaultDbPath() {
-  return process.env.BB_DB_PATH || path.join(process.cwd(), '.data', 'buddyboard.sqlite');
+  return process.env.CB_DB_PATH || process.env.BB_DB_PATH || path.join(process.cwd(), '.data', 'buddyboard.sqlite');
 }
 
 function safeString(v) {
@@ -70,13 +71,14 @@ function printUsageAndExit(code) {
   // eslint-disable-next-line no-console
   console.log(
     [
-      'BuddyBoard - Find duplicate users by email',
+      'CommunityBridge - Find duplicate users by email',
       '',
       'Usage:',
       '  node ./scripts/find-duplicate-users.js [--db <path>] [--json]',
       '',
       'Env:',
-      '  BB_DB_PATH   Path to SQLite db (same as api-server)',
+      '  CB_DB_PATH   Path to SQLite db (preferred; same as api-server)',
+      '  BB_DB_PATH   Path to SQLite db (legacy; still supported)',
     ].join('\n')
   );
   process.exit(code);
@@ -103,7 +105,7 @@ if (!fs.existsSync(dbPath)) {
     // eslint-disable-next-line no-console
     console.error(`DB not found: ${dbPath}`);
     // eslint-disable-next-line no-console
-    console.error('Tip: set BB_DB_PATH or pass --db');
+    console.error('Tip: set CB_DB_PATH/BB_DB_PATH or pass --db');
   }
   process.exit(2);
 }

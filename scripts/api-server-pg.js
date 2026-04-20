@@ -29,7 +29,7 @@ function getRequestHost(req) {
 }
 
 function shouldServeWebApp(req) {
-  if (String(process.env.BB_SERVE_WEB_APP || '') === '1') return true;
+  if (String(process.env.CB_SERVE_WEB_APP || process.env.BB_SERVE_WEB_APP || '') === '1') return true;
   const host = getRequestHost(req);
   return host.startsWith('app.');
 }
@@ -67,23 +67,23 @@ function getNodemailerLib() {
 }
 
 const PORT = Number(process.env.PORT || 3005);
-const DATA_DIR = process.env.BB_DATA_DIR
-  ? String(process.env.BB_DATA_DIR)
+const DATA_DIR = process.env.CB_DATA_DIR || process.env.BB_DATA_DIR
+  ? String(process.env.CB_DATA_DIR || process.env.BB_DATA_DIR)
   : path.join(process.cwd(), '.data');
-const DATABASE_URL = (process.env.BB_DATABASE_URL || process.env.DATABASE_URL || '').trim();
+const DATABASE_URL = (process.env.CB_DATABASE_URL || process.env.BB_DATABASE_URL || process.env.DATABASE_URL || '').trim();
 
 if (!DATABASE_URL) {
-  // This file is only intended to run when BB_DATABASE_URL is configured.
-  // The docker-compose entrypoint uses api-server.js for SQLite mode.
+  // This file is only intended to run when CB_DATABASE_URL/BB_DATABASE_URL is configured.
+  // scripts/start-server.js selects between SQLite and Postgres modes.
   // Keep this hard-fail to avoid silently running without persistence.
   // eslint-disable-next-line no-console
-  console.error('[api] Missing BB_DATABASE_URL (or DATABASE_URL).');
+  console.error('[api] Missing CB_DATABASE_URL/BB_DATABASE_URL (or DATABASE_URL).');
   process.exit(1);
 }
 
-const JWT_SECRET = process.env.BB_JWT_SECRET || '';
+const JWT_SECRET = process.env.CB_JWT_SECRET || process.env.BB_JWT_SECRET || '';
 const NODE_ENV = String(process.env.NODE_ENV || '').trim().toLowerCase();
-const PUBLIC_BASE_URL = (process.env.BB_PUBLIC_BASE_URL || '').trim();
+const PUBLIC_BASE_URL = (process.env.CB_PUBLIC_BASE_URL || process.env.BB_PUBLIC_BASE_URL || '').trim();
 
 function envFlag(value, defaultValue = false) {
   if (value == null) return defaultValue;
@@ -94,30 +94,30 @@ function envFlag(value, defaultValue = false) {
   return defaultValue;
 }
 
-const ALLOW_SIGNUP = envFlag(process.env.BB_ALLOW_SIGNUP, true);
-const REQUIRE_2FA_ON_SIGNUP = envFlag(process.env.BB_REQUIRE_2FA_ON_SIGNUP, false);
-const DEBUG_2FA_RETURN_CODE = envFlag(process.env.BB_DEBUG_2FA_RETURN_CODE, false);
-const DEBUG_2FA_DELIVERY_ERRORS = envFlag(process.env.BB_DEBUG_2FA_DELIVERY_ERRORS, false);
-const LOG_REQUESTS = envFlag(process.env.BB_DEBUG_REQUESTS, true);
+const ALLOW_SIGNUP = envFlag(process.env.CB_ALLOW_SIGNUP || process.env.BB_ALLOW_SIGNUP, true);
+const REQUIRE_2FA_ON_SIGNUP = envFlag(process.env.CB_REQUIRE_2FA_ON_SIGNUP || process.env.BB_REQUIRE_2FA_ON_SIGNUP, false);
+const DEBUG_2FA_RETURN_CODE = envFlag(process.env.CB_DEBUG_2FA_RETURN_CODE || process.env.BB_DEBUG_2FA_RETURN_CODE, false);
+const DEBUG_2FA_DELIVERY_ERRORS = envFlag(process.env.CB_DEBUG_2FA_DELIVERY_ERRORS || process.env.BB_DEBUG_2FA_DELIVERY_ERRORS, false);
+const LOG_REQUESTS = envFlag(process.env.CB_DEBUG_REQUESTS || process.env.BB_DEBUG_REQUESTS, true);
 
 // 2FA delivery toggles
-const ENABLE_EMAIL_2FA = envFlag(process.env.BB_ENABLE_EMAIL_2FA, true);
-const ENABLE_SMS_2FA = envFlag(process.env.BB_ENABLE_SMS_2FA, false);
+const ENABLE_EMAIL_2FA = envFlag(process.env.CB_ENABLE_EMAIL_2FA || process.env.BB_ENABLE_EMAIL_2FA, true);
+const ENABLE_SMS_2FA = envFlag(process.env.CB_ENABLE_SMS_2FA || process.env.BB_ENABLE_SMS_2FA, false);
 
 // 2FA delivery (SMS only).
-const TWILIO_ACCOUNT_SID = (process.env.BB_TWILIO_ACCOUNT_SID || '').trim();
-const TWILIO_AUTH_TOKEN = (process.env.BB_TWILIO_AUTH_TOKEN || '').trim();
-const TWILIO_FROM = (process.env.BB_TWILIO_FROM || '').trim();
-const TWILIO_MESSAGING_SERVICE_SID = (process.env.BB_TWILIO_MESSAGING_SERVICE_SID || '').trim();
+const TWILIO_ACCOUNT_SID = (process.env.CB_TWILIO_ACCOUNT_SID || process.env.BB_TWILIO_ACCOUNT_SID || '').trim();
+const TWILIO_AUTH_TOKEN = (process.env.CB_TWILIO_AUTH_TOKEN || process.env.BB_TWILIO_AUTH_TOKEN || '').trim();
+const TWILIO_FROM = (process.env.CB_TWILIO_FROM || process.env.BB_TWILIO_FROM || '').trim();
+const TWILIO_MESSAGING_SERVICE_SID = (process.env.CB_TWILIO_MESSAGING_SERVICE_SID || process.env.BB_TWILIO_MESSAGING_SERVICE_SID || '').trim();
 
 // 2FA delivery (Email)
-const SMTP_URL = (process.env.BB_SMTP_URL || '').trim();
-const EMAIL_FROM = (process.env.BB_EMAIL_FROM || '').trim();
-const EMAIL_2FA_SUBJECT = (process.env.BB_EMAIL_2FA_SUBJECT || 'BuddyBoard verification code').trim();
-const EMAIL_PASSWORD_RESET_SUBJECT = (process.env.BB_EMAIL_PASSWORD_RESET_SUBJECT || 'BuddyBoard password reset').trim();
+const SMTP_URL = (process.env.CB_SMTP_URL || process.env.BB_SMTP_URL || '').trim();
+const EMAIL_FROM = (process.env.CB_EMAIL_FROM || process.env.BB_EMAIL_FROM || '').trim();
+const EMAIL_2FA_SUBJECT = (process.env.CB_EMAIL_2FA_SUBJECT || process.env.BB_EMAIL_2FA_SUBJECT || 'CommunityBridge verification code').trim();
+const EMAIL_PASSWORD_RESET_SUBJECT = (process.env.CB_EMAIL_PASSWORD_RESET_SUBJECT || process.env.BB_EMAIL_PASSWORD_RESET_SUBJECT || 'CommunityBridge password reset').trim();
 
-const RETURN_PASSWORD_RESET_CODE = envFlag(process.env.BB_RETURN_PASSWORD_RESET_CODE, NODE_ENV !== 'production');
-const PASSWORD_RESET_TTL_MINUTES = Math.max(5, Number(process.env.BB_PASSWORD_RESET_TTL_MINUTES || 30));
+const RETURN_PASSWORD_RESET_CODE = envFlag(process.env.CB_RETURN_PASSWORD_RESET_CODE || process.env.BB_RETURN_PASSWORD_RESET_CODE, NODE_ENV !== 'production');
+const PASSWORD_RESET_TTL_MINUTES = Math.max(5, Number(process.env.CB_PASSWORD_RESET_TTL_MINUTES || process.env.BB_PASSWORD_RESET_TTL_MINUTES || 30));
 
 const slog = require('./logger');
 
@@ -127,8 +127,8 @@ function ensureDir(p) {
 
 ensureDir(DATA_DIR);
 
-const UPLOAD_DIR = process.env.BB_UPLOAD_DIR
-  ? String(process.env.BB_UPLOAD_DIR)
+const UPLOAD_DIR = process.env.CB_UPLOAD_DIR || process.env.BB_UPLOAD_DIR
+  ? String(process.env.CB_UPLOAD_DIR || process.env.BB_UPLOAD_DIR)
   : path.join(DATA_DIR, 'uploads');
 
 ensureDir(UPLOAD_DIR);
@@ -226,7 +226,7 @@ function getTwilioClient() {
   if (twilioClient) return twilioClient;
   const twilio = getTwilioLib();
   if (!twilio) {
-    throw new Error("Missing dependency 'twilio' in this server build. Rebuild your Docker image after installing dependencies (npm ci) so the twilio package is included.");
+    throw new Error("Missing dependency 'twilio' in this server build. Install server dependencies (npm ci) so the twilio package is included.");
   }
   twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
   return twilioClient;
@@ -238,7 +238,7 @@ function getEmailTransport() {
   if (emailTransport) return emailTransport;
   const nodemailer = getNodemailerLib();
   if (!nodemailer) {
-    throw new Error("Missing dependency 'nodemailer' in this server build. Rebuild your Docker image after installing dependencies (npm ci) so the nodemailer package is included.");
+    throw new Error("Missing dependency 'nodemailer' in this server build. Install server dependencies (npm ci) so the nodemailer package is included.");
   }
   emailTransport = nodemailer.createTransport(SMTP_URL);
   return emailTransport;
@@ -257,7 +257,7 @@ async function deliver2faCode({ method, destination, code }) {
   if (method === 'sms') {
     const client = getTwilioClient();
     if (!client) throw new Error('SMS 2FA not configured');
-    const msg = { body: `Your BuddyBoard verification code is ${code}` };
+    const msg = { body: `Your CommunityBridge verification code is ${code}` };
     if (TWILIO_MESSAGING_SERVICE_SID) msg.messagingServiceSid = TWILIO_MESSAGING_SERVICE_SID;
     else msg.from = TWILIO_FROM;
     msg.to = destination;
@@ -273,7 +273,7 @@ async function deliver2faCode({ method, destination, code }) {
     from: EMAIL_FROM,
     to: destination,
     subject: EMAIL_2FA_SUBJECT,
-    text: `Your BuddyBoard verification code is ${code}`,
+    text: `Your CommunityBridge verification code is ${code}`,
   });
 }
 
@@ -339,13 +339,13 @@ function consume2faChallenge(challengeId, code) {
 }
 
 // Dev compatibility token
-const ALLOW_DEV_TOKEN = envFlag(process.env.BB_ALLOW_DEV_TOKEN, NODE_ENV !== 'production');
+const ALLOW_DEV_TOKEN = envFlag(process.env.CB_ALLOW_DEV_TOKEN || process.env.BB_ALLOW_DEV_TOKEN, NODE_ENV !== 'production');
 
-const ADMIN_EMAIL = process.env.BB_ADMIN_EMAIL || '';
-const ADMIN_PASSWORD = process.env.BB_ADMIN_PASSWORD || '';
-const ADMIN_NAME = process.env.BB_ADMIN_NAME || 'Admin';
+const ADMIN_EMAIL = process.env.CB_ADMIN_EMAIL || process.env.BB_ADMIN_EMAIL || '';
+const ADMIN_PASSWORD = process.env.CB_ADMIN_PASSWORD || process.env.BB_ADMIN_PASSWORD || '';
+const ADMIN_NAME = process.env.CB_ADMIN_NAME || process.env.BB_ADMIN_NAME || 'Admin';
 
-const GOOGLE_CLIENT_IDS = String(process.env.BB_GOOGLE_CLIENT_IDS || '').trim();
+const GOOGLE_CLIENT_IDS = String(process.env.CB_GOOGLE_CLIENT_IDS || process.env.BB_GOOGLE_CLIENT_IDS || '').trim();
 let googleClient = null;
 try {
   if (GOOGLE_CLIENT_IDS) {
@@ -380,7 +380,7 @@ function signToken(user) {
 function requireJwtConfigured() {
   if (!JWT_SECRET) {
     // eslint-disable-next-line no-console
-    console.warn('[api] Missing BB_JWT_SECRET. Set this in server environment for production.');
+    console.warn('[api] Missing CB_JWT_SECRET/BB_JWT_SECRET. Set this in server environment for production.');
   }
 }
 
@@ -392,7 +392,7 @@ function isPgUniqueViolation(e) {
 
 function buildPgPoolConfig(connectionString) {
   const cfg = { connectionString };
-  const forceSsl = String(process.env.BB_PG_SSL || '').trim();
+  const forceSsl = String(process.env.CB_PG_SSL || process.env.BB_PG_SSL || '').trim();
   if (['1', 'true', 'yes', 'on'].includes(forceSsl.toLowerCase())) {
     cfg.ssl = { rejectUnauthorized: false };
     return cfg;
@@ -610,7 +610,7 @@ function getPasswordResetEmailTransporter() {
   if (passwordResetTransporter) return passwordResetTransporter;
   const nodemailer = getNodemailerLib();
   if (!nodemailer) {
-    throw new Error("Missing dependency 'nodemailer' in this server build. Rebuild your Docker image after installing dependencies (npm ci) so the nodemailer package is included.");
+    throw new Error("Missing dependency 'nodemailer' in this server build. Install server dependencies (npm ci) so the nodemailer package is included.");
   }
   passwordResetTransporter = nodemailer.createTransport(SMTP_URL);
   return passwordResetTransporter;
@@ -631,10 +631,10 @@ async function sendPasswordResetEmail({ to, code }) {
 
   const transporter = getPasswordResetEmailTransporter();
   if (!transporter) {
-    throw new Error('Password reset email delivery is not configured (set BB_SMTP_URL and BB_EMAIL_FROM)');
+    throw new Error('Password reset email delivery is not configured (set CB_SMTP_URL/BB_SMTP_URL and CB_EMAIL_FROM/BB_EMAIL_FROM)');
   }
 
-  const text = `BuddyBoard password reset code: ${code}.\n\nEnter this code in the app to set a new password.\n\nThis code expires in ${PASSWORD_RESET_TTL_MINUTES} minutes.`;
+  const text = `CommunityBridge password reset code: ${code}.\n\nEnter this code in the app to set a new password.\n\nThis code expires in ${PASSWORD_RESET_TTL_MINUTES} minutes.`;
   await transporter.sendMail({
     from: EMAIL_FROM,
     to: destination,
@@ -862,7 +862,7 @@ async function sendExpoPush(tokens, { title, body, data } = {}) {
 
     const messages = unique.map((to) => ({
       to,
-      title: safeString(title || 'BuddyBoard'),
+      title: safeString(title || 'CommunityBridge'),
       body: safeString(body || ''),
       data: (data && typeof data === 'object') ? data : {},
       sound: 'default',
@@ -2396,7 +2396,7 @@ async function main() {
 
   app.listen(PORT, '0.0.0.0', () => {
     // eslint-disable-next-line no-console
-    console.log(`[api] BuddyBoard API listening on :${PORT}`);
+    console.log(`[api] CommunityBridge API listening on :${PORT}`);
     // eslint-disable-next-line no-console
     console.log(`[api] Postgres: ${DATABASE_URL.replace(/:\/\/.*@/, '://***@')}`);
     // eslint-disable-next-line no-console

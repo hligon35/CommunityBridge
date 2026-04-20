@@ -1,11 +1,11 @@
 <#
-Register the BuddyBoard Expo start script as a Windows service using NSSM.
+Register the CommunityBridge Expo start script as a Windows service using NSSM.
 
 Run this from an elevated PowerShell prompt (Run as Administrator):
     .\scripts\register-nssm.ps1
 
 Options:
-    -ServiceName : name of the Windows service (default: BuddyBoardExpo)
+    -ServiceName : name of the Windows service (default: BuddyBoardExpo — legacy name kept for compatibility)
     -StartBat    : path to start-expo.bat (default: ..\\.expo\\start-expo.bat relative to this script)
 
 The script will attempt to use Chocolatey if available, otherwise it will download NSSM

@@ -1,9 +1,0 @@
-node_modules
-android
-ios
-.git
-.expo
-dist
-build
-*.log
-/.vscode

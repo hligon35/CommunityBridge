@@ -45,7 +45,7 @@ async function sendExpoPush(tokens, { title, body, data, kind } = {}) {
 
   const messages = unique.map((to) => ({
     to,
-    title: safeString(title || 'BuddyBoard'),
+    title: safeString(title || 'CommunityBridge'),
     body: safeString(body || ''),
     data: (data && typeof data === 'object') ? data : {},
     sound: 'default',
@@ -102,7 +102,7 @@ async function fetchTextWithLimits(url, { timeoutMs = 5000, maxBytes = 1024 * 10
       redirect: 'follow',
       signal: controller.signal,
       headers: {
-        'User-Agent': 'BuddyBoardLinkPreview/1.0',
+        'User-Agent': 'CommunityBridgeLinkPreview/1.0',
         'Accept': 'text/html,application/xhtml+xml',
       },
     });
@@ -150,7 +150,7 @@ function sha256Hex(input) {
 
 function getMfaSecret() {
   // Use an env var (preferred). Fallback keeps dev/test usable but should be set in prod.
-  const fromEnv = safeString(process.env.BB_MFA_CODE_SECRET).trim();
+  const fromEnv = safeString(process.env.CB_MFA_CODE_SECRET || process.env.BB_MFA_CODE_SECRET).trim();
   if (fromEnv) return fromEnv;
   const fromProject = safeString(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT).trim();
   return fromProject || 'bb_mfa_default_secret';
@@ -174,9 +174,9 @@ function getDisplayEmail(email) {
 }
 
 async function sendEmailOtp({ to, code }) {
-  const smtpUrl = safeString(process.env.BB_SMTP_URL).trim();
+  const smtpUrl = safeString(process.env.CB_SMTP_URL || process.env.BB_SMTP_URL).trim();
   if (!smtpUrl) {
-    const err = new Error('Email 2FA is not configured (missing BB_SMTP_URL).');
+    const err = new Error('Email 2FA is not configured (missing CB_SMTP_URL/BB_SMTP_URL).');
     err.code = 'BB_MFA_EMAIL_NOT_CONFIGURED';
     throw err;
   }
@@ -192,7 +192,7 @@ async function sendEmailOtp({ to, code }) {
     throw err;
   }
 
-  const from = safeString(process.env.BB_EMAIL_FROM || process.env.BB_SMTP_FROM || 'info@communitybridge.app').trim();
+  const from = safeString(process.env.CB_EMAIL_FROM || process.env.BB_EMAIL_FROM || process.env.CB_SMTP_FROM || process.env.BB_SMTP_FROM || 'info@communitybridge.app').trim();
   const transporter = nodemailer.createTransport(smtpUrl);
   const subject = 'CommunityBridge verification code';
   const text = `Your CommunityBridge verification code is: ${code}\n\nThis code expires in 10 minutes.`;
@@ -206,10 +206,10 @@ async function sendEmailOtp({ to, code }) {
 }
 
 async function sendSmsOtp({ to, code }) {
-  const sid = safeString(process.env.BB_TWILIO_ACCOUNT_SID).trim();
-  const token = safeString(process.env.BB_TWILIO_AUTH_TOKEN).trim();
+  const sid = safeString(process.env.CB_TWILIO_ACCOUNT_SID || process.env.BB_TWILIO_ACCOUNT_SID).trim();
+  const token = safeString(process.env.CB_TWILIO_AUTH_TOKEN || process.env.BB_TWILIO_AUTH_TOKEN).trim();
   if (!sid || !token) {
-    const err = new Error('SMS 2FA is not configured (missing BB_TWILIO_ACCOUNT_SID/BB_TWILIO_AUTH_TOKEN).');
+    const err = new Error('SMS 2FA is not configured (missing CB_TWILIO_ACCOUNT_SID/CB_TWILIO_AUTH_TOKEN or BB_TWILIO_ACCOUNT_SID/BB_TWILIO_AUTH_TOKEN).');
     err.code = 'BB_MFA_SMS_NOT_CONFIGURED';
     throw err;
   }
@@ -225,10 +225,10 @@ async function sendSmsOtp({ to, code }) {
     throw err;
   }
 
-  const from = safeString(process.env.BB_TWILIO_FROM).trim();
-  const messagingServiceSid = safeString(process.env.BB_TWILIO_MESSAGING_SERVICE_SID).trim();
+  const from = safeString(process.env.CB_TWILIO_FROM || process.env.BB_TWILIO_FROM).trim();
+  const messagingServiceSid = safeString(process.env.CB_TWILIO_MESSAGING_SERVICE_SID || process.env.BB_TWILIO_MESSAGING_SERVICE_SID).trim();
   if (!from && !messagingServiceSid) {
-    const err = new Error('SMS 2FA missing BB_TWILIO_FROM or BB_TWILIO_MESSAGING_SERVICE_SID.');
+    const err = new Error('SMS 2FA missing CB_TWILIO_FROM/CB_TWILIO_MESSAGING_SERVICE_SID or BB_TWILIO_FROM/BB_TWILIO_MESSAGING_SERVICE_SID.');
     err.code = 'BB_MFA_SMS_FROM_MISSING';
     throw err;
   }

@@ -123,7 +123,7 @@
 
           <div class="row rowTop">
             <a id="btnWebApp" class="btn btnPrimary" href="#">Continue to web app</a>
-            <a class="btn" href="buddyboard://">Open the mobile app</a>
+            <a id="btnOpenApp" class="btn" href="communitybridge://">Open the mobile app</a>
             <button id="btnLogout" class="btn btnDanger" type="button">Sign out</button>
           </div>
         </div>
@@ -168,6 +168,18 @@
       const btnGoogle = $('btnGoogle');
       const btnBiometric = $('btnBiometric');
       const linkForgot = $('linkForgot');
+
+      // Prefer the new scheme, but keep legacy buddyboard:// working during migration.
+      const btnOpenApp = $('btnOpenApp');
+      if (btnOpenApp) {
+        btnOpenApp.addEventListener('click', (e) => {
+          e.preventDefault();
+          try { window.location.href = 'communitybridge://'; } catch (_) {}
+          setTimeout(() => {
+            try { window.location.href = 'buddyboard://'; } catch (_) {}
+          }, 600);
+        });
+      }
 
       // IMPORTANT: Firebase Auth state is scoped to the current origin.
       // To keep the browser logged in, redirect to the web app on the SAME origin.

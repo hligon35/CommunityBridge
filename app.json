@@ -1,17 +1,22 @@
 {
   "expo": {
     "name": "CommunityBridge",
-    "slug": "buddyboard-mobile",
+    "slug": "communitybridge",
     "version": "1.0.1",
     "sdkVersion": "54.0.0",
     "ios": {
-      "bundleIdentifier": "com.azlabs.buddyboard",
-      "buildNumber": "37",
+      "bundleIdentifier": "com.azlabsllc.communitybridge",
+      "buildNumber": "1",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSFaceIDUsageDescription": "CommunityBridge uses Face ID / Touch ID to help you securely sign in on this device.",
         "NSLocationWhenInUseUsageDescription": "CommunityBridge uses your location to support arrival detection and location-based features.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "CommunityBridge uses your location in the background to support arrival detection.",
+        "NSLocationAlwaysUsageDescription": "CommunityBridge uses your location in the background to support arrival detection.",
+        "UIBackgroundModes": [
+          "location"
+        ],
         "NSCameraUsageDescription": "CommunityBridge needs camera access to let you capture photos for posts and messages.",
         "NSPhotoLibraryUsageDescription": "CommunityBridge needs photo library access to let you choose images for posts and messages.",
         "NSPhotoLibraryAddUsageDescription": "CommunityBridge needs permission to save images to your photo library when you choose to download media."
@@ -25,7 +30,7 @@
     "scheme": [
       "buddyboard",
       "communitybridge",
-      "com.azlabs.buddyboard"
+      "com.azlabsllc.communitybridge"
     ],
     "orientation": "portrait",
     "plugins": [
@@ -33,6 +38,13 @@
         "expo-notifications",
         {
           "mode": "production"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true
         }
       ],
       "@react-native-community/datetimepicker",
@@ -53,7 +65,7 @@
       "backgroundColor": "#000000"
     },
     "android": {
-      "package": "com.azlabs.buddyboard",
+      "package": "com.azlabsllc.communitybridge",
       "googleServicesFile": "./google-services.json",
       "versionCode": 12,
       "softwareKeyboardLayoutMode": "resize",
@@ -67,13 +79,13 @@
     },
     "extra": {
       "eas": {
-        "projectId": "38ed77a1-3892-42c8-b7cf-9cebe6d98545"
+        "projectId": "2daf0aaf-da22-4a08-a108-0bc03948b07d"
       }
     },
-    "owner": "azlab-corp",
+    "owner": "azlabsllc",
     "runtimeVersion": "1.0.1",
     "updates": {
-      "url": "https://u.expo.dev/38ed77a1-3892-42c8-b7cf-9cebe6d98545"
+      "url": "https://u.expo.dev/2daf0aaf-da22-4a08-a108-0bc03948b07d"
     }
   }
 }

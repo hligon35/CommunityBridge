@@ -6,7 +6,7 @@ const { Pool } = require('pg');
 
 function buildPgPoolConfig(connectionString) {
   const cfg = { connectionString };
-  const forceSsl = String(process.env.BB_PG_SSL || '').trim();
+  const forceSsl = String(process.env.CB_PG_SSL || process.env.BB_PG_SSL || '').trim();
   if (['1', 'true', 'yes', 'on'].includes(forceSsl.toLowerCase())) {
     cfg.ssl = { rejectUnauthorized: false };
     return cfg;
@@ -159,13 +159,13 @@ async function initDb(pool) {
 }
 
 async function main() {
-  const sqlitePath = process.env.BB_DB_PATH
-    ? String(process.env.BB_DB_PATH)
+  const sqlitePath = (process.env.CB_DB_PATH || process.env.BB_DB_PATH)
+    ? String(process.env.CB_DB_PATH || process.env.BB_DB_PATH)
     : path.join(process.cwd(), '.data', 'buddyboard.sqlite');
-  const pgUrl = (process.env.BB_DATABASE_URL || process.env.DATABASE_URL || '').trim();
+  const pgUrl = (process.env.CB_DATABASE_URL || process.env.BB_DATABASE_URL || process.env.DATABASE_URL || '').trim();
 
   if (!pgUrl) {
-    console.error('Missing BB_DATABASE_URL (or DATABASE_URL)');
+    console.error('Missing CB_DATABASE_URL/BB_DATABASE_URL (or DATABASE_URL)');
     process.exit(1);
   }
 
