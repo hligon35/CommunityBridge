@@ -10,7 +10,7 @@
   },
   "hosting": [
     {
-      "site": "buddyboard-7acda",
+      "site": "communitybridge-26apr",
       "public": "public",
       "ignore": [
         "firebase.json",
@@ -35,14 +35,14 @@
           "source": "/api/**",
           "run": {
             "serviceId": "buddyboard",
-            "region": "us-east5"
+            "region": "us-central1"
           }
         },
         {
           "source": "/uploads/**",
           "run": {
             "serviceId": "buddyboard",
-            "region": "us-east5"
+            "region": "us-central1"
           }
         },
         {
@@ -56,7 +56,7 @@
       ]
     },
     {
-      "site": "buddyboard-app",
+      "site": "communitybridge-26apr20",
       "public": "web-dist",
       "ignore": [
         "firebase.json",
@@ -81,14 +81,14 @@
           "source": "/api/**",
           "run": {
             "serviceId": "buddyboard",
-            "region": "us-east5"
+            "region": "us-central1"
           }
         },
         {
           "source": "/uploads/**",
           "run": {
             "serviceId": "buddyboard",
-            "region": "us-east5"
+            "region": "us-central1"
           }
         },
         {

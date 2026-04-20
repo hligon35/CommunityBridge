@@ -1,0 +1,197 @@
+CommunityBridge — Application & Page Inventory
+Generated: 2026-04-20
+
+====================================================================
+A) Applications (user-facing surfaces)
+====================================================================
+
+1) Expo / React Native app (Mobile + Web build)
+   - Entry: App.js
+   - Navigation: React Navigation stacks (see section C)
+
+2) Firebase Hosting site: communitybridge-26apr
+   - Source folder: public/
+   - Type: static marketing/support pages + static “home” web shell
+   - Firebase config: firebase.json hosting[0]
+
+3) Firebase Hosting site: communitybridge-26apr20
+   - Source folder: web-dist/
+   - Type: SPA web build (catch-all rewrite to /index.html) + static support pages
+   - Firebase config: firebase.json hosting[1]
+
+4) Backend endpoints exposed under Hosting (both sites)
+   - /api/**      -> Cloud Run serviceId "buddyboard" (region us-central1)
+   - /uploads/**  -> Cloud Run serviceId "buddyboard" (region us-central1)
+   - Config: firebase.json rewrites in both hosting entries
+
+====================================================================
+B) Hosted Web Pages — Site: communitybridge-26apr (public/)
+====================================================================
+
+Notes:
+- cleanUrls=true means “/privacy” typically serves “/privacy.html”.
+- Explicit rewrites exist for /home and /home/** -> /home/index.html.
+
+Primary pages (top-level HTML):
+- /                       -> public/index.html
+- /download               -> public/download.html
+- /for-providers           -> public/for-providers.html
+- /privacy                -> public/privacy.html
+- /support                -> public/support.html
+- /terms                  -> public/terms.html
+- /app-login              -> public/app-login.html
+
+Folder index pages:
+- /home                   -> public/home/index.html  (also via explicit rewrite)
+- /login                  -> public/login/index.html
+- /sign-up                -> public/sign-up/index.html
+- /app-login/             -> public/app-login/index.html
+
+Download / client packet HTML pages:
+- /downloads/client-packet/html/01_CommunityBridge_Executive_Product_Overview
+  -> public/downloads/client-packet/html/01_CommunityBridge_Executive_Product_Overview.html
+- /downloads/client-packet/html/02_CommunityBridge_Security_Overview
+  -> public/downloads/client-packet/html/02_CommunityBridge_Security_Overview.html
+- /downloads/client-packet/html/03_CommunityBridge_Privacy_and_HIPAA_Readiness_Checklist
+  -> public/downloads/client-packet/html/03_CommunityBridge_Privacy_and_HIPAA_Readiness_Checklist.html
+- /downloads/client-packet/html/04_CommunityBridge_BAA_and_Security_Packet_Request_Workflow
+  -> public/downloads/client-packet/html/04_CommunityBridge_BAA_and_Security_Packet_Request_Workflow.html
+- /downloads/client-packet/html/05_CommunityBridge_Data_Flow_Summary
+  -> public/downloads/client-packet/html/05_CommunityBridge_Data_Flow_Summary.html
+- /downloads/client-packet/html/06_CommunityBridge_Implementation_Guide
+  -> public/downloads/client-packet/html/06_CommunityBridge_Implementation_Guide.html
+- /downloads/client-packet/html/07_CommunityBridge_Parent_and_Staff_Onboarding_Guide
+  -> public/downloads/client-packet/html/07_CommunityBridge_Parent_and_Staff_Onboarding_Guide.html
+- /downloads/client-packet/html/08_CommunityBridge_Incident_Response_Summary
+  -> public/downloads/client-packet/html/08_CommunityBridge_Incident_Response_Summary.html
+- /downloads/client-packet/html/09_CommunityBridge_Release_and_Support_Policy
+  -> public/downloads/client-packet/html/09_CommunityBridge_Release_and_Support_Policy.html
+- /downloads/client-packet/html/10_CommunityBridge_Subprocessor_and_Third_Party_Services_List
+  -> public/downloads/client-packet/html/10_CommunityBridge_Subprocessor_and_Third_Party_Services_List.html
+
+====================================================================
+C) In-App Pages (Expo navigation routes)
+====================================================================
+
+These are the route names registered in App.js.
+
+C1) App stack (top-level)
+- Login      -> screens/LoginScreen.js
+- TwoFactor  -> screens/TwoFactorScreen.js
+- Main       -> MainShell (wraps DataProvider + MainRoutes + BottomNav)
+
+C2) MainRoutes (tabs / top-level sections)
+Role-based tabs inside RootStack:
+- Home       -> CommunityStack (always)
+- Chats      -> ChatsStack (always)
+- Settings   -> SettingsStack (always)
+- MyChild    -> MyChildStack (role: parent)
+- MyClass    -> MyClassStack (role: therapist)
+- Controls   -> ControlsStack (role: admin/administrator)
+
+C3) CommunityStack
+- CommunityMain  -> src/screens/HomeScreen.js
+- PostThread     -> src/screens/PostThreadScreen.js
+
+C4) ChatsStack
+- ChatsList      -> src/screens/ChatsScreen.js
+- NewThread      -> src/screens/NewThreadScreen.js
+- ChatThread     -> src/screens/ChatThreadScreen.js
+
+C5) MyChildStack (parent role)
+- MyChildMain    -> src/screens/MyChildScreen.js
+
+C6) MyClassStack (therapist role)
+- MyClassMain    -> src/screens/MyClassScreen.js
+
+C7) SettingsStack
+- SettingsMain   -> src/screens/SettingsScreen.js
+- EditProfile    -> src/screens/EditProfileScreen.js
+- Help           -> src/screens/HelpScreen.js
+
+C8) ControlsStack (admin role)
+- ControlsMain       -> src/screens/AdminControlsScreen.js
+- StudentDirectory   -> src/screens/StudentDirectoryScreen.js
+- FacultyDirectory   -> src/screens/FacultyDirectoryScreen.js
+- ParentDirectory    -> src/screens/ParentDirectoryScreen.js
+- ParentDetail       -> src/screens/ParentDetailScreen.js
+- ChildDetail        -> src/screens/ChildDetailScreen.js
+- FacultyDetail      -> src/screens/FacultyDetailScreen.js
+- AdminMemos         -> src/screens/AdminMemosScreen.js
+- AdminChatMonitor   -> src/screens/AdminChatMonitorScreen.js
+- UserMonitor        -> src/screens/UserMonitorScreen.js
+- ChatThread         -> src/screens/ChatThreadScreen.js
+- ManagePermissions  -> src/screens/ManagePermissionsScreen.js
+- PrivacyDefaults    -> src/screens/PrivacyDefaultsScreen.js
+- ModeratePosts      -> src/screens/ModeratePostsScreen.js
+- AdminAlerts        -> src/screens/AdminAlertsScreen.js
+- ExportData         -> src/screens/ExportDataScreen.js
+
+====================================================================
+D) Hosted Web Pages — Site: communitybridge-26apr20 (web-dist/)
+====================================================================
+
+Notes:
+- This site has a catch-all rewrite: "**" -> /index.html (SPA entry).
+- It also has a rewrite for /app-login and /app-login/** -> /app-login/index.html.
+- Static files may still be directly served if requested (depending on Hosting precedence).
+
+Primary SPA entry:
+- /                       -> web-dist/index.html
+
+App-login entry:
+- /app-login               -> web-dist/app-login/index.html (rewrite target)
+- /app-login.html           -> web-dist/app-login.html (static file also present)
+
+Static support pages present in web-dist root:
+- /download                -> web-dist/download.html
+- /for-providers           -> web-dist/for-providers.html
+- /privacy                 -> web-dist/privacy.html
+- /support                 -> web-dist/support.html
+- /terms                   -> web-dist/terms.html
+
+Folder index pages also present in web-dist:
+- /login                   -> web-dist/login/index.html
+- /sign-up                 -> web-dist/sign-up/index.html
+
+Download / client packet HTML pages (also present in web-dist):
+- /downloads/client-packet/html/01_CommunityBridge_Executive_Product_Overview
+  -> web-dist/downloads/client-packet/html/01_CommunityBridge_Executive_Product_Overview.html
+- /downloads/client-packet/html/02_CommunityBridge_Security_Overview
+  -> web-dist/downloads/client-packet/html/02_CommunityBridge_Security_Overview.html
+- /downloads/client-packet/html/03_CommunityBridge_Privacy_and_HIPAA_Readiness_Checklist
+  -> web-dist/downloads/client-packet/html/03_CommunityBridge_Privacy_and_HIPAA_Readiness_Checklist.html
+- /downloads/client-packet/html/04_CommunityBridge_BAA_and_Security_Packet_Request_Workflow
+  -> web-dist/downloads/client-packet/html/04_CommunityBridge_BAA_and_Security_Packet_Request_Workflow.html
+- /downloads/client-packet/html/05_CommunityBridge_Data_Flow_Summary
+  -> web-dist/downloads/client-packet/html/05_CommunityBridge_Data_Flow_Summary.html
+- /downloads/client-packet/html/06_CommunityBridge_Implementation_Guide
+  -> web-dist/downloads/client-packet/html/06_CommunityBridge_Implementation_Guide.html
+- /downloads/client-packet/html/07_CommunityBridge_Parent_and_Staff_Onboarding_Guide
+  -> web-dist/downloads/client-packet/html/07_CommunityBridge_Parent_and_Staff_Onboarding_Guide.html
+- /downloads/client-packet/html/08_CommunityBridge_Incident_Response_Summary
+  -> web-dist/downloads/client-packet/html/08_CommunityBridge_Incident_Response_Summary.html
+- /downloads/client-packet/html/09_CommunityBridge_Release_and_Support_Policy
+  -> web-dist/downloads/client-packet/html/09_CommunityBridge_Release_and_Support_Policy.html
+- /downloads/client-packet/html/10_CommunityBridge_Subprocessor_and_Third_Party_Services_List
+  -> web-dist/downloads/client-packet/html/10_CommunityBridge_Subprocessor_and_Third_Party_Services_List.html
+
+====================================================================
+E) Legacy / Not currently routed by App.js (found in screens/)
+====================================================================
+
+Only these are currently used by App.js:
+- screens/LoginScreen.js
+- screens/TwoFactorScreen.js
+
+Other screen components exist but are not registered as navigation routes in App.js today:
+- screens/AdminScreen.js
+- screens/CalendarScreen.js
+- screens/ComposeMessageScreen.js
+- screens/ForgotPasswordScreen.js
+- screens/HomeScreen.js
+- screens/MessageDetailScreen.js
+- screens/MessagesScreen.js
+- screens/SettingsScreen.js
+- screens/SignUpScreen.js
+- screens/UrgentMemosScreen.js
