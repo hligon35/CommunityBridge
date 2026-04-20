@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/png" href="/icon.png" sizes="any" />
+    <link rel="apple-touch-icon" href="/icon.png" />
+    <title>CommunityBridge – Dashboard</title>
+    <meta name="robots" content="noindex" />
+    <meta http-equiv="refresh" content="0; url=https://dashboard.communitybridge.app/" />
+    <script>
+      (function () {
+        // Static shell for /dashboard on the root domain.
+        // Redirect into the authenticated SPA.
+        var DASHBOARD_ORIGIN = 'https://dashboard.communitybridge.app';
+
+        function safeNextPath(raw) {
+          try {
+            if (!raw) return '';
+            var next = String(raw).trim();
+            if (!next) return '';
+
+            // Only allow same-site relative paths to avoid open redirects.
+            if (next[0] === '/') return next;
+            return '';
+          } catch (_) {
+            return '';
+          }
+        }
+
+        try {
+          var qs = new URLSearchParams(window.location.search || '');
+          var nextPath = safeNextPath(qs.get('next'));
+          var target = DASHBOARD_ORIGIN + (nextPath || '/');
+          window.location.replace(target);
+        } catch (_) {
+          window.location.replace(DASHBOARD_ORIGIN + '/');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <noscript>
+      Continue to <a href="https://dashboard.communitybridge.app/">dashboard.communitybridge.app</a>.
+    </noscript>
+  </body>
+</html>

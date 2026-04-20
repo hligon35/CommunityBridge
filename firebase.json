@@ -34,16 +34,24 @@
         {
           "source": "/api/**",
           "run": {
-            "serviceId": "buddyboard",
+            "serviceId": "communitybridge",
             "region": "us-central1"
           }
         },
         {
           "source": "/uploads/**",
           "run": {
-            "serviceId": "buddyboard",
+            "serviceId": "communitybridge",
             "region": "us-central1"
           }
+        },
+        {
+          "source": "/dashboard",
+          "destination": "/dashboard/index.html"
+        },
+        {
+          "source": "/dashboard/**",
+          "destination": "/dashboard/index.html"
         },
         {
           "source": "/home",
@@ -80,14 +88,14 @@
         {
           "source": "/api/**",
           "run": {
-            "serviceId": "buddyboard",
+            "serviceId": "communitybridge",
             "region": "us-central1"
           }
         },
         {
           "source": "/uploads/**",
           "run": {
-            "serviceId": "buddyboard",
+            "serviceId": "communitybridge",
             "region": "us-central1"
           }
         },

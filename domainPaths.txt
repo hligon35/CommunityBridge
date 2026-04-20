@@ -1,6 +1,13 @@
 CommunityBridge — Application & Page Inventory
 Generated: 2026-04-20
 
+Domains (intended production routing)
+- communitybridge.app                 -> Firebase Hosting site: communitybridge-26apr (public/)
+- dashboard.communitybridge.app        -> Firebase Hosting site: communitybridge-26apr20 (web-dist/)
+- auth.communitybridge.app             -> Authentication UI (login/signup/2FA/reset)
+- api.communitybridge.app              -> Cloud Run service: communitybridge
+- admin.communitybridge.app            -> Admin-only UI
+
 ====================================================================
 A) Applications (user-facing surfaces)
 ====================================================================
@@ -11,7 +18,7 @@ A) Applications (user-facing surfaces)
 
 2) Firebase Hosting site: communitybridge-26apr
    - Source folder: public/
-   - Type: static marketing/support pages + static “home” web shell
+  - Type: static marketing/support pages + static “dashboard” shell
    - Firebase config: firebase.json hosting[0]
 
 3) Firebase Hosting site: communitybridge-26apr20
@@ -20,8 +27,8 @@ A) Applications (user-facing surfaces)
    - Firebase config: firebase.json hosting[1]
 
 4) Backend endpoints exposed under Hosting (both sites)
-   - /api/**      -> Cloud Run serviceId "buddyboard" (region us-central1)
-   - /uploads/**  -> Cloud Run serviceId "buddyboard" (region us-central1)
+  - /api/**      -> Cloud Run serviceId "communitybridge" (region us-central1)
+  - /uploads/**  -> Cloud Run serviceId "communitybridge" (region us-central1)
    - Config: firebase.json rewrites in both hosting entries
 
 ====================================================================
@@ -30,7 +37,8 @@ B) Hosted Web Pages — Site: communitybridge-26apr (public/)
 
 Notes:
 - cleanUrls=true means “/privacy” typically serves “/privacy.html”.
-- Explicit rewrites exist for /home and /home/** -> /home/index.html.
+- Explicit rewrites exist for /dashboard and /dashboard/** -> /dashboard/index.html.
+- Legacy rewrites also exist for /home and /home/** -> /home/index.html.
 
 Primary pages (top-level HTML):
 - /                       -> public/index.html
@@ -42,6 +50,7 @@ Primary pages (top-level HTML):
 - /app-login              -> public/app-login.html
 
 Folder index pages:
+- /dashboard               -> public/dashboard/index.html  (via explicit rewrite)
 - /home                   -> public/home/index.html  (also via explicit rewrite)
 - /login                  -> public/login/index.html
 - /sign-up                -> public/sign-up/index.html

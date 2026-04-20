@@ -1,4 +1,4 @@
-buddy-board.com {
+communitybridge.app {
   @api path /api/* /uploads/*
   handle @api {
     reverse_proxy 127.0.0.1:3005

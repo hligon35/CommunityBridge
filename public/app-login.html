@@ -7,7 +7,7 @@
     <link rel="apple-touch-icon" href="/icon.png" />
     <script>
       (function () {
-        var CANONICAL_HOST = 'buddy-board.com';
+        var CANONICAL_HOST = 'communitybridge.app';
         if (window.location.hostname === 'www.' + CANONICAL_HOST) {
           var target = 'https://' + CANONICAL_HOST + window.location.pathname + window.location.search + window.location.hash;
           window.location.replace(target);
@@ -155,7 +155,7 @@
 
       // IMPORTANT: Firebase Auth state is scoped to the current origin.
       // To keep the browser logged in, redirect to the web app on the SAME origin.
-      const WEB_APP_URL = window.location.origin + '/home';
+      const WEB_APP_URL = 'https://dashboard.communitybridge.app/';
 
       function getNextUrl() {
         try {
@@ -164,7 +164,7 @@
 
           // Allow same-origin relative paths or absolute https URLs.
           // Prefer same-origin to preserve Firebase Auth persistence.
-          if (next.startsWith('/')) return window.location.origin + next;
+          if (next.startsWith('/')) return 'https://dashboard.communitybridge.app' + next;
           if (next.startsWith('https://')) return next;
         } catch (_) {
           // ignore
