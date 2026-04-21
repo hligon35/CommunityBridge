@@ -10,11 +10,13 @@ import {
   sendPasswordResetEmail,
   updateProfile,
   getIdToken,
+  deleteUser,
 } from 'firebase/auth';
 
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -529,6 +531,48 @@ export async function getLinkPreview(url) {
   }
 }
 
+export async function deleteMyAccount(payload) {
+  const user = requireUser();
+  const uid = String(user.uid || '').trim();
+  if (!uid) {
+    const err = new Error('Not authenticated');
+    err.code = 'BB_NOT_AUTHENTICATED';
+    throw err;
+  }
+
+  if (payload?.confirm !== true) {
+    const err = new Error('Confirmation required');
+    err.code = 'BB_CONFIRM_REQUIRED';
+    throw err;
+  }
+
+  if (!db) {
+    const err = new Error('Firebase is not initialized (missing Firestore instance).');
+    err.code = 'BB_FIREBASE_INIT_FAILED';
+    throw err;
+  }
+
+  // Best-effort cleanup of Firestore docs owned by this user.
+  // These deletes rely on Firestore rules allowing self-deletion.
+  try {
+    const tokensQ = query(collection(db, 'pushTokens'), where('userUid', '==', uid), limit(200));
+    const tokensSnap = await getDocs(tokensQ);
+    const batch = writeBatch(db);
+    tokensSnap.docs.forEach((d) => batch.delete(d.ref));
+
+    batch.delete(doc(db, 'directoryLinks', uid));
+    batch.delete(doc(db, 'parents', uid));
+    batch.delete(doc(db, 'users', uid));
+    await batch.commit();
+  } catch (e) {
+    logger.warn('[deleteMyAccount] Firestore cleanup failed', { message: e?.message || String(e) });
+  }
+
+  // Finally delete the Firebase Auth user.
+  await deleteUser(user);
+  return { ok: true };
+}
+
 export async function getUrgentMemos() {
   const u = requireUser();
   const role = (await getUserProfile(u.uid))?.role || 'parent';
@@ -1003,6 +1047,7 @@ export default {
   uploadMedia,
   signS3,
   getLinkPreview,
+  deleteMyAccount,
   getUrgentMemos,
   health,
   ackUrgentMemo,

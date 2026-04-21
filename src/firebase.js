@@ -72,12 +72,38 @@ function getExpoPublicEnv(key) {
             getExpoExtraValue('EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION') ||
             ''
         );
+      case 'EXPO_PUBLIC_ENABLE_APP_CHECK':
+        return String(
+          process.env.EXPO_PUBLIC_ENABLE_APP_CHECK ||
+            getExpoExtraValue('EXPO_PUBLIC_ENABLE_APP_CHECK') ||
+            ''
+        );
+      case 'EXPO_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY':
+        return String(
+          process.env.EXPO_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY ||
+            getExpoExtraValue('EXPO_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY') ||
+            ''
+        );
+      case 'EXPO_PUBLIC_FIREBASE_APP_CHECK_DEBUG_TOKEN':
+        return String(
+          process.env.EXPO_PUBLIC_FIREBASE_APP_CHECK_DEBUG_TOKEN ||
+            getExpoExtraValue('EXPO_PUBLIC_FIREBASE_APP_CHECK_DEBUG_TOKEN') ||
+            ''
+        );
       default:
         return '';
     }
   } catch (_) {
     return '';
   }
+}
+
+function parseBooleanLike(value) {
+  const v = String(value ?? '').trim().toLowerCase();
+  if (!v) return null;
+  if (v === '1' || v === 'true' || v === 'yes' || v === 'y' || v === 'on') return true;
+  if (v === '0' || v === 'false' || v === 'no' || v === 'n' || v === 'off') return false;
+  return null;
 }
 
 function getFirebaseConfigFromGoogleServices() {
@@ -114,14 +140,31 @@ function getFirebaseConfigFromGoogleServices() {
 
 const fromGoogleServices = getFirebaseConfigFromGoogleServices();
 
+// IMPORTANT (Web Auth persistence):
+// The web build must use the Firebase *WEB* app's apiKey/appId.
+// If we fall back to android google-services.json on web, Firebase Auth will
+// persist under a different storage key, causing "double login" between
+// static pages (app-login) and the Expo SPA (/dashboard).
+const WEB_SDKCONFIG_FALLBACK = {
+  apiKey: 'AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ',
+  authDomain: 'communitybridge-26apr.firebaseapp.com',
+  projectId: 'communitybridge-26apr',
+  storageBucket: 'communitybridge-26apr.firebasestorage.app',
+  messagingSenderId: '752508556236',
+  appId: '1:752508556236:web:dc183f4851108dd8c14369',
+  measurementId: 'G-HYK2C00ZRK',
+};
+
+const webFallback = Platform.OS === 'web' ? WEB_SDKCONFIG_FALLBACK : null;
+
 const firebaseConfig = {
-  apiKey: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_API_KEY') || fromGoogleServices?.apiKey || '',
-  authDomain: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN') || fromGoogleServices?.authDomain || '',
-  projectId: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_PROJECT_ID') || fromGoogleServices?.projectId || '',
-  storageBucket: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET') || fromGoogleServices?.storageBucket || '',
-  messagingSenderId: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') || fromGoogleServices?.messagingSenderId || '',
-  appId: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_APP_ID') || fromGoogleServices?.appId || '',
-  measurementId: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID'),
+  apiKey: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_API_KEY') || webFallback?.apiKey || fromGoogleServices?.apiKey || '',
+  authDomain: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN') || webFallback?.authDomain || fromGoogleServices?.authDomain || '',
+  projectId: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_PROJECT_ID') || webFallback?.projectId || fromGoogleServices?.projectId || '',
+  storageBucket: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET') || webFallback?.storageBucket || fromGoogleServices?.storageBucket || '',
+  messagingSenderId: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') || webFallback?.messagingSenderId || fromGoogleServices?.messagingSenderId || '',
+  appId: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_APP_ID') || webFallback?.appId || fromGoogleServices?.appId || '',
+  measurementId: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID') || webFallback?.measurementId,
 };
 
 const required = ['apiKey', 'projectId', 'appId'];
@@ -192,6 +235,55 @@ export function getFirebaseAppInitError() {
 }
 
 export const firebaseApp = getFirebaseApp();
+
+async function initWebAppCheckMaybe(app) {
+  try {
+    if (!app) return;
+    if (Platform.OS !== 'web') return;
+
+    const enabledFlag = parseBooleanLike(getExpoPublicEnv('EXPO_PUBLIC_ENABLE_APP_CHECK'));
+    if (enabledFlag === false) return;
+
+    const siteKey = String(getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY') || '').trim();
+    if (!siteKey) return;
+
+    const debugToken = String(getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_APP_CHECK_DEBUG_TOKEN') || '').trim();
+    if (debugToken) {
+      try {
+        globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN = debugToken === 'true' ? true : debugToken;
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    const mod = await import('firebase/app-check');
+    const initializeAppCheck = mod.initializeAppCheck || mod.default?.initializeAppCheck;
+    const ReCaptchaV3Provider = mod.ReCaptchaV3Provider || mod.default?.ReCaptchaV3Provider;
+    if (typeof initializeAppCheck !== 'function' || typeof ReCaptchaV3Provider !== 'function') return;
+
+    try {
+      initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(siteKey),
+        isTokenAutoRefreshEnabled: true,
+      });
+      try {
+        console.log('[firebase] App Check enabled (web)');
+      } catch (_) {}
+    } catch (e) {
+      // ignore "already exists" and similar initialization errors
+      try {
+        console.warn('[firebase] App Check init skipped', e);
+      } catch (_) {}
+    }
+  } catch (e) {
+    try {
+      console.warn('[firebase] App Check init failed', e);
+    } catch (_) {}
+  }
+}
+
+// Fire-and-forget: App Check just needs to be initialized early.
+void initWebAppCheckMaybe(firebaseApp);
 
 const AUTH_GLOBAL_KEY = '__bb_firebase_auth_instance__';
 const AUTH_ERROR_GLOBAL_KEY = '__bb_firebase_auth_init_error__';

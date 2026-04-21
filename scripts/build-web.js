@@ -81,6 +81,7 @@ function main() {
   removeDirIfExists(path.join('public', '_expo'));
   removeDirIfExists(path.join('public', 'assets'));
   removeDirIfExists(path.join('public', 'home'));
+  removeDirIfExists(path.join('public', 'dashboard'));
 
   run('npx', ['expo', 'export', '--platform', 'web', '--output-dir', 'web-dist']);
 
@@ -96,7 +97,7 @@ function main() {
     appEntrySrc: `/_expo/static/js/web/${appEntryFile}`,
   });
 
-  // Ensure web-dist root works (for the buddyboard-app hosting site).
+  // Ensure web-dist root works (for the app Hosting site).
   fs.writeFileSync(path.join('web-dist', 'index.html'), spaIndexHtml, 'utf8');
 
   // Firebase Hosting "app" site needs /app-login available on the same origin.
@@ -109,14 +110,24 @@ function main() {
   // Keep /sign-up available as a static page.
   copyDirIfExists(path.join('public', 'sign-up'), path.join('web-dist', 'sign-up'));
 
-  // Publish the web app under /home on the marketing site (public/).
-  // - /home serves public/home/index.html
+  // Publish the web app under /dashboard on the marketing site (public/).
+  // - /dashboard serves public/dashboard/index.html
   // - Assets remain rooted at /_expo/** to keep Expo's absolute asset URLs working.
+  const publicDashboardDir = path.join('public', 'dashboard');
+  removeDirIfExists(publicDashboardDir);
+  fs.mkdirSync(publicDashboardDir, { recursive: true });
+  fs.writeFileSync(path.join(publicDashboardDir, 'index.html'), spaIndexHtml, 'utf8');
+  copyIfExists(path.join('web-dist', 'metadata.json'), path.join(publicDashboardDir, 'metadata.json'));
+
+  // Legacy: keep /home working by redirecting to /dashboard.
   const publicHomeDir = path.join('public', 'home');
   removeDirIfExists(publicHomeDir);
   fs.mkdirSync(publicHomeDir, { recursive: true });
-  fs.writeFileSync(path.join(publicHomeDir, 'index.html'), spaIndexHtml, 'utf8');
-  copyIfExists(path.join('web-dist', 'metadata.json'), path.join(publicHomeDir, 'metadata.json'));
+  fs.writeFileSync(
+    path.join(publicHomeDir, 'index.html'),
+    `<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1" />\n    <meta http-equiv="refresh" content="0; url=/dashboard" />\n    <title>CommunityBridge</title>\n  </head>\n  <body>\n    <noscript>Continue to <a href="/dashboard">Dashboard</a>.</noscript>\n  </body>\n</html>\n`,
+    'utf8'
+  );
 
   const publicExpoDir = path.join('public', '_expo');
   removeDirIfExists(publicExpoDir);

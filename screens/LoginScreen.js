@@ -255,11 +255,11 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   const googleEnabled = Boolean(googleClientIdForPlatform);
 
   const googleRedirectUri = useMemo(() => {
-    // Web: land back on /home (static hosting under /home).
+    // Web: land back on /dashboard (Expo SPA is hosted under /dashboard).
     if (Platform.OS === 'web') {
       try {
         const origin = String(globalThis?.location?.origin || '').trim();
-        if (origin) return `${origin}/home`;
+        if (origin) return `${origin}/dashboard`;
       } catch (_) {}
       return AuthSession.makeRedirectUri();
     }

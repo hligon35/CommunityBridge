@@ -26,14 +26,27 @@
             import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js'),
           ]);
 
-          const firebaseConfig = {
-            apiKey: 'AIzaSyADZ4UNncaoe0CvQfiKoev7rT1cuSZgWl8',
-            authDomain: 'buddyboard-7acda.firebaseapp.com',
-            projectId: 'buddyboard-7acda',
-            storageBucket: 'buddyboard-7acda.firebasestorage.app',
-            messagingSenderId: '870175047052',
-            appId: '1:870175047052:android:ff966198b531ee97a9eaa9'
-          };
+          async function loadFirebaseConfig() {
+            try {
+              const res = await fetch('/__/firebase/init.json', { cache: 'no-store' });
+              if (res.ok) return await res.json();
+            } catch (_) {
+              // ignore
+            }
+
+            // Fallback (kept in sync with the CommunityBridge Firebase project)
+            return {
+              apiKey: 'AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ',
+              authDomain: 'communitybridge-26apr.firebaseapp.com',
+              projectId: 'communitybridge-26apr',
+              storageBucket: 'communitybridge-26apr.firebasestorage.app',
+              messagingSenderId: '752508556236',
+              appId: '1:752508556236:web:dc183f4851108dd8c14369',
+              measurementId: 'G-HYK2C00ZRK'
+            };
+          }
+
+          const firebaseConfig = await loadFirebaseConfig();
 
           const app = initializeApp(firebaseConfig);
           const auth = getAuth(app);

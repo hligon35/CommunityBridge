@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "752508556236",
+    "firebase_url": "https://communitybridge-26apr-default-rtdb.firebaseio.com",
     "project_id": "communitybridge-26apr",
     "storage_bucket": "communitybridge-26apr.firebasestorage.app"
   },
@@ -12,7 +13,12 @@
           "package_name": "com.azlabsllc.communitybridge"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDlF2E4GSmIgyNMdBahzlV91rvi_VUm4B0"
@@ -20,7 +26,20 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "752508556236-91cfpo8cgeo8vt80ee49vgsojf9m19e5.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.azlabsllc.communitybridge",
+                "app_store_id": "6756227915"
+              }
+            }
+          ]
         }
       }
     }

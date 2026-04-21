@@ -143,15 +143,26 @@
       } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
       // NOTE: Firebase config is not a secret; it identifies your Firebase project.
-      // If you later create a dedicated Web App in Firebase, you can replace these values with the Web config.
-      const firebaseConfig = {
-        apiKey: 'AIzaSyADZ4UNncaoe0CvQfiKoev7rT1cuSZgWl8',
-        authDomain: 'buddyboard-7acda.firebaseapp.com',
-        projectId: 'buddyboard-7acda',
-        storageBucket: 'buddyboard-7acda.firebasestorage.app',
-        messagingSenderId: '870175047052',
-        appId: '1:870175047052:android:ff966198b531ee97a9eaa9'
-      };
+      // Prefer Firebase Hosting's auto-provided config to avoid drift.
+      async function loadFirebaseConfig() {
+        try {
+          const res = await fetch('/__/firebase/init.json', { cache: 'no-store' });
+          if (res.ok) return await res.json();
+        } catch (_) {
+          // ignore
+        }
+        return {
+          apiKey: 'AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ',
+          authDomain: 'communitybridge-26apr.firebaseapp.com',
+          projectId: 'communitybridge-26apr',
+          storageBucket: 'communitybridge-26apr.firebasestorage.app',
+          messagingSenderId: '752508556236',
+          appId: '1:752508556236:web:dc183f4851108dd8c14369',
+          measurementId: 'G-HYK2C00ZRK'
+        };
+      }
+
+      const firebaseConfig = await loadFirebaseConfig();
 
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
@@ -182,8 +193,8 @@
       }
 
       // IMPORTANT: Firebase Auth state is scoped to the current origin.
-      // To keep the browser logged in, redirect to the web app on the SAME origin.
-      const WEB_APP_URL = 'https://dashboard.communitybridge.app/';
+      // Keep the browser logged in by redirecting to the web app on the SAME origin.
+      const WEB_APP_URL = window.location.origin + '/dashboard';
 
       function getNextUrl() {
         try {
@@ -192,7 +203,7 @@
 
           // Allow same-origin relative paths or absolute https URLs.
           // Prefer same-origin to preserve Firebase Auth persistence.
-          if (next.startsWith('/')) return 'https://dashboard.communitybridge.app' + next;
+          if (next.startsWith('/')) return window.location.origin + next;
           if (next.startsWith('https://')) return next;
         } catch (_) {
           // ignore

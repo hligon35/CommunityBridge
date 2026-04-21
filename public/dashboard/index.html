@@ -5,43 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/png" href="/icon.png" sizes="any" />
     <link rel="apple-touch-icon" href="/icon.png" />
-    <title>CommunityBridge – Dashboard</title>
-    <meta name="robots" content="noindex" />
-    <meta http-equiv="refresh" content="0; url=https://dashboard.communitybridge.app/" />
-    <script>
-      (function () {
-        // Static shell for /dashboard on the root domain.
-        // Redirect into the authenticated SPA.
-        var DASHBOARD_ORIGIN = 'https://dashboard.communitybridge.app';
-
-        function safeNextPath(raw) {
-          try {
-            if (!raw) return '';
-            var next = String(raw).trim();
-            if (!next) return '';
-
-            // Only allow same-site relative paths to avoid open redirects.
-            if (next[0] === '/') return next;
-            return '';
-          } catch (_) {
-            return '';
-          }
-        }
-
-        try {
-          var qs = new URLSearchParams(window.location.search || '');
-          var nextPath = safeNextPath(qs.get('next'));
-          var target = DASHBOARD_ORIGIN + (nextPath || '/');
-          window.location.replace(target);
-        } catch (_) {
-          window.location.replace(DASHBOARD_ORIGIN + '/');
-        }
-      })();
-    </script>
+    <title>CommunityBridge</title>
   </head>
   <body>
-    <noscript>
-      Continue to <a href="https://dashboard.communitybridge.app/">dashboard.communitybridge.app</a>.
-    </noscript>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <script src="/_expo/static/js/web/AppEntry-933c76d625ef34805b0cfd069f3bbfcb.js" defer></script>
   </body>
 </html>

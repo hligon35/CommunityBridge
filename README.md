@@ -219,10 +219,11 @@ Notes:
 Firebase Hosting (marketing + app SPA)
 ------------------------------------
 
-This repo is set up for two Firebase Hosting sites (see `firebase.json`):
+This repo is set up for a single Firebase Hosting site (see `firebase.json`):
 
-- **Marketing/site pages**: `buddyboard-7acda` (serves `public/`)
-- **Web app (SPA)**: `buddyboard-app` (serves `web-dist/`)
+- **Site**: `communitybridge-26apr` (serves `public/`)
+
+The Expo web app is published under `/dashboard` on the same origin.
 
 Build the web app bundle:
 
@@ -230,22 +231,13 @@ Build the web app bundle:
 npm run build:web
 ```
 
-One-time setup (create the app Hosting site):
-
-```sh
-firebase hosting:sites:create buddyboard-app
-```
-
-Before deploying the app site, update `firebase.json` and replace `CHANGE_ME_CLOUD_RUN_SERVICE` with your Cloud Run service ID (the service that runs `scripts/api-server.js`).
+Before deploying, update `firebase.json` and ensure the Cloud Run serviceId is correct for the `/api/**` and `/uploads/**` rewrites.
 
 Deploy examples:
 
 ```sh
-# Marketing only
-firebase deploy --only hosting:buddyboard-7acda
-
-# App SPA only
-firebase deploy --only hosting:buddyboard-app
+# Hosting (marketing + /dashboard SPA)
+firebase deploy --only hosting:communitybridge-26apr
 ```
 
 After connecting custom domains in Firebase Hosting, add them to Firebase Auth **Authorized domains** (needed for `/app-login`).

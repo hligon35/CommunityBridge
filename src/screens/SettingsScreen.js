@@ -56,6 +56,7 @@ export default function SettingsScreen({ navigation }) {
     createdAt: Updates.createdAt ? String(Updates.createdAt) : '',
   });
   const [updateBusy, setUpdateBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   // Debounced push preference sync to backend (efficient + consistent).
   const pushSyncTimerRef = useRef(null);
@@ -393,6 +394,51 @@ export default function SettingsScreen({ navigation }) {
     }
   };
 
+  async function confirmAndDeleteAccount() {
+    if (!user?.id) {
+      Alert.alert('Not signed in', 'Please sign in first.');
+      return;
+    }
+
+    Alert.alert(
+      'Delete account',
+      'This will permanently delete your account and sign you out. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Final confirmation',
+              'Are you sure you want to delete your CommunityBridge account?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete my account',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      setDeleteBusy(true);
+                      await Api.deleteMyAccount({ confirm: true });
+                      Alert.alert('Account deleted', 'Your account has been deleted.');
+                      await logout();
+                    } catch (e) {
+                      const msg = e?.message || 'Account deletion failed.';
+                      Alert.alert('Delete failed', msg);
+                    } finally {
+                      setDeleteBusy(false);
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  }
+
   return (
     <ScreenWrapper bannerShowBack={false} style={{ flex: 1 }}>
       <ScrollView style={{ flex: 1, width: '100%' }} contentContainerStyle={{ alignItems: 'center', paddingBottom: 28 }} bounces={true} alwaysBounceVertical={true} showsVerticalScrollIndicator={false}>
@@ -627,6 +673,21 @@ export default function SettingsScreen({ navigation }) {
             </View>
           ) : null}
 
+        </View>
+
+        {/* Account */}
+        <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8 }}>Account</Text>
+          <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
+            Permanently delete your account.
+          </Text>
+          <TouchableOpacity
+            onPress={confirmAndDeleteAccount}
+            disabled={deleteBusy}
+            style={{ padding: 10, backgroundColor: deleteBusy ? '#9ca3af' : '#b91c1c', borderRadius: 8, alignSelf: 'flex-start' }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700' }}>{deleteBusy ? 'Deleting…' : 'Delete my account'}</Text>
+          </TouchableOpacity>
         </View>
         {/* Dev role switcher moved to DevRoleSwitcher (floating) */}
       </ScrollView>

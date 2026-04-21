@@ -46,6 +46,22 @@
           }
         },
         {
+          "source": "/app-login",
+          "destination": "/app-login/index.html"
+        },
+        {
+          "source": "/app-login/**",
+          "destination": "/app-login/index.html"
+        },
+        {
+          "source": "/delete-account",
+          "destination": "/delete-account/index.html"
+        },
+        {
+          "source": "/delete-account/**",
+          "destination": "/delete-account/index.html"
+        },
+        {
           "source": "/dashboard",
           "destination": "/dashboard/index.html"
         },
@@ -60,56 +76,6 @@
         {
           "source": "/home/**",
           "destination": "/home/index.html"
-        }
-      ]
-    },
-    {
-      "site": "communitybridge-26apr20",
-      "public": "web-dist",
-      "ignore": [
-        "firebase.json",
-        "**/.*",
-        "**/node_modules/**"
-      ],
-      "headers": [
-        {
-          "source": "**/*.html",
-          "headers": [
-            {
-              "key": "Cache-Control",
-              "value": "no-cache"
-            }
-          ]
-        }
-      ],
-      "cleanUrls": true,
-      "trailingSlash": false,
-      "rewrites": [
-        {
-          "source": "/api/**",
-          "run": {
-            "serviceId": "communitybridge",
-            "region": "us-central1"
-          }
-        },
-        {
-          "source": "/uploads/**",
-          "run": {
-            "serviceId": "communitybridge",
-            "region": "us-central1"
-          }
-        },
-        {
-          "source": "/app-login",
-          "destination": "/app-login/index.html"
-        },
-        {
-          "source": "/app-login/**",
-          "destination": "/app-login/index.html"
-        },
-        {
-          "source": "**",
-          "destination": "/index.html"
         }
       ]
     }

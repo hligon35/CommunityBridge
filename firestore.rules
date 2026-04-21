@@ -43,7 +43,8 @@ service cloud.firestore {
         request.resource.data.role == resource.data.role &&
         request.resource.data.mfaVerifiedAt == resource.data.mfaVerifiedAt;
 
-      allow delete: if false;
+      // Allow users to delete their own profile (for account deletion flows).
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
     match /directoryLinks/{uid} {
@@ -57,13 +58,18 @@ service cloud.firestore {
       // All other link mutations are admin-only.
       allow create, update: if isAdmin();
 
-      allow delete: if isAdmin();
+      // Allow users to delete their own self-owned link.
+      allow delete: if isAdmin() || (
+        signedIn() && request.auth.uid == uid &&
+        resource.data.role == 'parent' &&
+        resource.data.parentId == uid
+      );
     }
 
     match /parents/{id} {
       allow read: if isAdmin() || (signedIn() && request.auth.uid == id);
       allow create, update: if isAdmin() || (signedIn() && request.auth.uid == id);
-      allow delete: if false;
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid == id);
     }
 
     match /therapists/{id} {

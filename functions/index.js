@@ -4,6 +4,10 @@ const crypto = require('crypto');
 
 admin.initializeApp();
 
+// Keep all Cloud Functions in a single region for predictable latency/costs.
+// Firebase default is often us-central1, but we make it explicit.
+const regional = functions.region('us-central1');
+
 function safeString(v) {
   try {
     if (v == null) return '';
@@ -252,7 +256,7 @@ function sanitizeChallengeForClient(ch) {
 }
 
 // Optional callable used by the mobile app. Safe no-op stub.
-exports.linkPreview = functions.https.onCall(async (data, context) => {
+exports.linkPreview = regional.https.onCall(async (data, context) => {
   // Signed-in only (mirrors old authMiddleware behavior).
   if (!context.auth) return null;
   const rawUrl = data && data.url ? String(data.url).trim() : '';
@@ -289,7 +293,7 @@ exports.linkPreview = functions.https.onCall(async (data, context) => {
 });
 
 // Send a one-time verification code (email by default; sms optional).
-exports.mfaSendCode = functions.https.onCall(async (data, context) => {
+exports.mfaSendCode = regional.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Sign in required.');
   }
@@ -376,7 +380,7 @@ exports.mfaSendCode = functions.https.onCall(async (data, context) => {
 });
 
 // Verify a submitted code; on success, mark the user as MFA-verified.
-exports.mfaVerifyCode = functions.https.onCall(async (data, context) => {
+exports.mfaVerifyCode = regional.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Sign in required.');
   }
@@ -439,7 +443,75 @@ exports.mfaVerifyCode = functions.https.onCall(async (data, context) => {
   return { ok: true };
 });
 
-exports.onArrivalPingCreate = functions.firestore
+// Delete the caller's account (Auth + key profile docs).
+// NOTE: This intentionally avoids deleting all user-generated content (posts/messages)
+// to prevent accidental data loss and because retention policies may apply.
+exports.deleteMyAccount = regional.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  const uid = safeString(context.auth.uid).trim();
+  if (!uid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  // Simple guard against accidental invocation.
+  if (data?.confirm !== true) {
+    throw new functions.https.HttpsError('failed-precondition', 'Confirmation required.');
+  }
+
+  const fs = admin.firestore();
+
+  // Best-effort: remove push tokens owned by this user.
+  try {
+    const tokensSnap = await fs
+      .collection('pushTokens')
+      .where('userUid', '==', uid)
+      .limit(100)
+      .get();
+
+    if (!tokensSnap.empty) {
+      const batch = fs.batch();
+      tokensSnap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+  } catch (_) {
+    // ignore cleanup failures
+  }
+
+  // Best-effort: delete the user's profile + link docs.
+  try { await fs.collection('directoryLinks').doc(uid).delete(); } catch (_) {}
+  try { await fs.collection('users').doc(uid).delete(); } catch (_) {}
+
+  // Conservatively delete self-owned parent directory record if it matches uid.
+  try {
+    const pRef = fs.collection('parents').doc(uid);
+    const pSnap = await pRef.get();
+    if (pSnap.exists) {
+      const p = pSnap.data() || {};
+      const familyId = safeString(p.familyId).trim();
+      const recUid = safeString(p.uid).trim();
+      if (recUid === uid || familyId === uid) {
+        await pRef.delete();
+      }
+    }
+  } catch (_) {
+    // ignore
+  }
+
+  // Finally, delete the Firebase Auth user.
+  try {
+    await admin.auth().deleteUser(uid);
+  } catch (e) {
+    const msg = safeString(e?.message || e) || 'Account deletion failed.';
+    throw new functions.https.HttpsError('internal', msg);
+  }
+
+  return { ok: true };
+});
+
+exports.onArrivalPingCreate = regional.firestore
   .document('arrivalPings/{pingId}')
   .onCreate(async (snap) => {
     const payload = snap.data() || {};
