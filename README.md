@@ -38,7 +38,7 @@ Notes
 
 - Auth uses token-based approach persisted in `AsyncStorage`.
 - DataContext persists posts and messages in `AsyncStorage` and performs optimistic updates.
-- Media uploads POST to `/api/media/upload`; S3 signing available via `/api/media/sign` in `src/Api.js`.
+- Media uploads use Firebase Storage in the app; legacy API uploads exist at `/api/media/upload` (served under `/uploads/*`).
 - Link previews use `/api/link/preview?url=`.
 - Urgent memos are fetched on app start and acknowledged via `/api/urgent-memos/read`.
 
@@ -116,6 +116,8 @@ Optional:
 API server DB settings:
 - `CB_DATA_DIR` — preferred host directory where CommunityBridge stores runtime data (defaults to `./.data`).
 - Uploads are stored under `${CB_DATA_DIR}/uploads` (or `${BB_DATA_DIR}/uploads`) and served at `/uploads/*` from the API.
+	- In production, `/uploads/*` is protected by default (`CB_REQUIRE_UPLOAD_AUTH=1`) and requires a short-lived signed URL token (`?t=...`) or an API bearer token.
+	- `POST /api/media/upload` returns tokenized URLs automatically when upload auth is required.
 - By default, the API uses SQLite at `${CB_DATA_DIR}/buddyboard.sqlite` (legacy filename preserved).
 - To use Postgres instead, set `CB_DATABASE_URL` (preferred).
 
@@ -123,11 +125,21 @@ Legacy compatibility:
 - All `BB_*` env vars are still supported; `CB_*` is preferred and takes precedence when both are set.
 - `CB_PUBLIC_BASE_URL` — optional; forces the base URL used in uploaded media links (useful behind a reverse proxy/HTTPS).
 - `CB_JWT_SECRET` — required for real logins; set a long random value.
+- `CB_CORS_ORIGINS` — optional; comma-separated allowlist for browser `Origin` (recommended in production). If unset, a safe default allowlist is used in production.
+- `CB_REQUIRE_UPLOAD_AUTH` — optional; set to `0` to temporarily keep `/uploads/*` public (not recommended).
 - `CB_ADMIN_EMAIL` / `CB_ADMIN_PASSWORD` / `CB_ADMIN_NAME` — optional admin seed on first run.
 - `CB_ALLOW_SIGNUP=1` (or `true`) — optional; enables `/api/auth/signup`.
 - `CB_REQUIRE_2FA_ON_SIGNUP=1` (default) — requires 2FA for signup.
 - `CB_DEBUG_2FA_RETURN_CODE=1` — DEV ONLY; returns `devCode` in the signup response and logs it server-side.
 - `CB_ALLOW_DEV_TOKEN=1` (or `true`) — optional; enables accepting `Bearer dev-token` for local/dev only. Default is enabled when `NODE_ENV` is not `production`.
+
+Rate limiting (best-effort, in-memory):
+- `CB_AUTH_RATE_WINDOW_MS` / `CB_AUTH_RATE_MAX` — auth endpoints.
+- `CB_UPLOAD_RATE_WINDOW_MS` / `CB_UPLOAD_RATE_MAX` — upload endpoints.
+
+Secrets hygiene:
+- `npm run check:secrets` scans tracked files for obvious private keys/tokens.
+- The repo includes a pre-commit hook in `.githooks/pre-commit`; `setup.ps1` / `setup.sh` configures `git config core.hooksPath .githooks`.
 
 2FA delivery
 

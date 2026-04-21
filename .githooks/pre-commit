@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Block commits that accidentally include private keys/tokens.
+node "$(git rev-parse --show-toplevel)/scripts/check-secrets.js"

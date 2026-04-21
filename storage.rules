@@ -5,10 +5,19 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function userDoc() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return signedIn() &&
+        firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        (userDoc().data.role == 'admin' || userDoc().data.role == 'administrator');
+    }
+
     match /uploads/{uid}/{allPaths=**} {
-      // Anyone signed in can view media; only the owner can write.
-      allow read: if signedIn();
-      allow write: if signedIn() && request.auth.uid == uid;
+      // Private-by-default: only the owner (or admin) can read/write.
+      allow read, write: if signedIn() && (request.auth.uid == uid || isAdmin());
     }
 
     // Default deny

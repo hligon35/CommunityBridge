@@ -11,6 +11,55 @@ const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const multer = require('multer');
 
+function parseCsvEnv(value) {
+  return String(value || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function getClientIp(req) {
+  try {
+    const xf = req.headers['x-forwarded-for'];
+    const raw = String(Array.isArray(xf) ? xf[0] : xf || '').split(',')[0].trim();
+    return raw || (req.socket && req.socket.remoteAddress ? String(req.socket.remoteAddress) : '') || 'unknown';
+  } catch (_) {
+    return 'unknown';
+  }
+}
+
+function createInMemoryRateLimiter({ windowMs, max, keyFn }) {
+  const hits = new Map();
+
+  return (req, res, next) => {
+    try {
+      const key = keyFn ? String(keyFn(req) || '').trim() : '';
+      if (!key) return next();
+
+      const now = Date.now();
+      const prev = hits.get(key);
+      if (!prev || now >= prev.resetAt) {
+        hits.set(key, { count: 1, resetAt: now + windowMs });
+        return next();
+      }
+
+      prev.count += 1;
+      hits.set(key, prev);
+      if (prev.count <= max) return next();
+
+      const retryAfterSec = Math.max(1, Math.ceil((prev.resetAt - now) / 1000));
+      res.set('Retry-After', String(retryAfterSec));
+      return res.status(429).json({ ok: false, error: 'Too many requests', retryAfterSec });
+    } catch (_) {
+      return next();
+    }
+  };
+}
+
+function safeLower(v) {
+  try { return String(v || '').trim().toLowerCase(); } catch (_) { return ''; }
+}
+
 const PUBLIC_DIR = path.resolve(__dirname, '..', 'public');
 const PUBLIC_DIR_PREFIX = `${PUBLIC_DIR}${path.sep}`;
 // Optional: exported Expo web app bundle.
@@ -84,6 +133,82 @@ if (!DATABASE_URL) {
 const JWT_SECRET = process.env.CB_JWT_SECRET || process.env.BB_JWT_SECRET || '';
 const NODE_ENV = String(process.env.NODE_ENV || '').trim().toLowerCase();
 const PUBLIC_BASE_URL = (process.env.CB_PUBLIC_BASE_URL || process.env.BB_PUBLIC_BASE_URL || '').trim();
+
+// CORS
+const CORS_ORIGINS = parseCsvEnv(process.env.CB_CORS_ORIGINS || process.env.BB_CORS_ORIGINS);
+const DEFAULT_PROD_CORS_ORIGINS = [
+  'https://communitybridge.app',
+  'https://www.communitybridge.app',
+  'https://communitybridge-26apr.web.app',
+  'https://communitybridge-26apr.firebaseapp.com',
+];
+
+function buildCorsOptions() {
+  const allowList = (CORS_ORIGINS && CORS_ORIGINS.length)
+    ? CORS_ORIGINS
+    : (NODE_ENV === 'production' ? DEFAULT_PROD_CORS_ORIGINS : []);
+
+  return {
+    origin: (origin, cb) => {
+      // Native/mobile requests often have no Origin; allow.
+      if (!origin) return cb(null, true);
+      if (!allowList.length) return cb(null, true);
+      const ok = allowList.includes(String(origin));
+      return cb(null, ok);
+    },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Authorization', 'Content-Type'],
+    credentials: true,
+    maxAge: 86400,
+  };
+}
+
+// Upload privacy
+const REQUIRE_UPLOAD_AUTH = envFlag(
+  process.env.CB_REQUIRE_UPLOAD_AUTH || process.env.BB_REQUIRE_UPLOAD_AUTH,
+  NODE_ENV === 'production'
+);
+
+function signUploadAccessToken(reqPath) {
+  if (!JWT_SECRET) return '';
+  const p = String(reqPath || '').trim();
+  if (!p.startsWith('/uploads/')) return '';
+  return jwt.sign({ typ: 'upload', p }, JWT_SECRET, { expiresIn: '1d' });
+}
+
+function uploadAccessMiddleware(req, res, next) {
+  try {
+    if (!REQUIRE_UPLOAD_AUTH) return next();
+    if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'server missing BB_JWT_SECRET' });
+
+    const reqPath = req.path ? `/uploads${String(req.path).startsWith('/') ? '' : '/'}${String(req.path)}` : (req.originalUrl || req.url || '');
+
+    const header = req.headers.authorization || req.headers.Authorization || '';
+    const bearer = String(header).startsWith('Bearer ') ? String(header).slice(7) : '';
+    if (bearer) {
+      try {
+        jwt.verify(bearer, JWT_SECRET);
+        return next();
+      } catch (_) {
+        // fall through
+      }
+    }
+
+    const t = (req.query && (req.query.t || req.query.token)) ? String(req.query.t || req.query.token).trim() : '';
+    if (t) {
+      try {
+        const payload = jwt.verify(t, JWT_SECRET);
+        if (payload && payload.typ === 'upload' && payload.p === reqPath) return next();
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  } catch (_) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+}
 
 function envFlag(value, defaultValue = false) {
   if (value == null) return defaultValue;
@@ -899,11 +1024,38 @@ async function sendExpoPush(tokens, { title, body, data } = {}) {
 }
 
 const app = express();
-app.use(cors());
+app.use(cors(buildCorsOptions()));
 app.use(bodyParser.json({ limit: '2mb' }));
 
 // Serve uploads
-app.use('/uploads', express.static(UPLOAD_DIR));
+app.use('/uploads', uploadAccessMiddleware, express.static(UPLOAD_DIR));
+
+// Rate limits (best-effort, in-memory)
+const AUTH_RATE_WINDOW_MS = Math.max(10_000, Number(process.env.CB_AUTH_RATE_WINDOW_MS || process.env.BB_AUTH_RATE_WINDOW_MS || 5 * 60 * 1000));
+const AUTH_RATE_MAX = Math.max(1, Number(process.env.CB_AUTH_RATE_MAX || process.env.BB_AUTH_RATE_MAX || 30));
+const UPLOAD_RATE_WINDOW_MS = Math.max(10_000, Number(process.env.CB_UPLOAD_RATE_WINDOW_MS || process.env.BB_UPLOAD_RATE_WINDOW_MS || 10 * 60 * 1000));
+const UPLOAD_RATE_MAX = Math.max(1, Number(process.env.CB_UPLOAD_RATE_MAX || process.env.BB_UPLOAD_RATE_MAX || 30));
+
+const authRateLimit = createInMemoryRateLimiter({
+  windowMs: AUTH_RATE_WINDOW_MS,
+  max: AUTH_RATE_MAX,
+  keyFn: (req) => {
+    const ip = getClientIp(req);
+    const email = safeLower(req.body && req.body.email);
+    const route = safeLower(req.path);
+    return `auth:${route}:${ip}:${email}`;
+  },
+});
+
+const uploadRateLimit = createInMemoryRateLimiter({
+  windowMs: UPLOAD_RATE_WINDOW_MS,
+  max: UPLOAD_RATE_MAX,
+  keyFn: (req) => {
+    const ip = getClientIp(req);
+    const route = safeLower(req.path);
+    return `upload:${route}:${ip}`;
+  },
+});
 
 function buildPublicUrl(req, pathname) {
   const p = pathname.startsWith('/') ? pathname : `/${pathname}`;
@@ -1348,7 +1500,7 @@ if (LOG_REQUESTS) {
 }
 
 // Auth
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authRateLimit, async (req, res) => {
   const email = (req.body && req.body.email) ? String(req.body.email).trim().toLowerCase() : '';
   const password = (req.body && req.body.password) ? String(req.body.password) : '';
   if (!email || !password) return res.status(400).json({ ok: false, error: 'email and password required' });
@@ -1369,7 +1521,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Password reset (request a reset code)
-app.post('/api/auth/forgot-password', async (req, res) => {
+app.post('/api/auth/forgot-password', authRateLimit, async (req, res) => {
   const email = (req.body && req.body.email) ? String(req.body.email).trim().toLowerCase() : '';
   if (!email) return res.status(400).json({ ok: false, error: 'email required' });
   if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'server missing BB_JWT_SECRET' });
@@ -1415,7 +1567,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 });
 
 // Password reset (consume code and set a new password)
-app.post('/api/auth/reset-password', async (req, res) => {
+app.post('/api/auth/reset-password', authRateLimit, async (req, res) => {
   const email = (req.body && req.body.email) ? String(req.body.email).trim().toLowerCase() : '';
   const resetCode = (req.body && (req.body.resetCode || req.body.code || req.body.token)) ? String(req.body.resetCode || req.body.code || req.body.token).trim() : '';
   const newPassword = (req.body && req.body.newPassword) ? String(req.body.newPassword) : '';
@@ -1454,7 +1606,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 });
 
-app.post('/api/auth/google', async (req, res) => {
+app.post('/api/auth/google', authRateLimit, async (req, res) => {
   const idToken = (req.body && req.body.idToken) ? String(req.body.idToken).trim() : '';
   if (!idToken) return res.status(400).json({ ok: false, error: 'idToken required' });
   if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'server missing BB_JWT_SECRET' });
@@ -1580,7 +1732,7 @@ app.put('/api/auth/me', authMiddleware, async (req, res) => {
   }
 });
 
-app.post('/api/auth/signup', async (req, res) => {
+app.post('/api/auth/signup', authRateLimit, async (req, res) => {
   if (!ALLOW_SIGNUP) return res.status(403).json({ ok: false, error: 'signup disabled' });
 
   const email = (req.body && req.body.email) ? String(req.body.email).trim().toLowerCase() : '';
@@ -1675,7 +1827,7 @@ app.post('/api/auth/signup', async (req, res) => {
   return res.status(201).json({ token, user, requires2fa: false });
 });
 
-app.post('/api/auth/2fa/verify', async (req, res) => {
+app.post('/api/auth/2fa/verify', authRateLimit, async (req, res) => {
   const challengeId = (req.body && req.body.challengeId) ? String(req.body.challengeId).trim() : '';
   const code = (req.body && req.body.code) ? String(req.body.code).trim() : '';
   if (!challengeId || !code) return res.status(400).json({ ok: false, error: 'challengeId and code required' });
@@ -1693,7 +1845,7 @@ app.post('/api/auth/2fa/verify', async (req, res) => {
   return res.json({ ok: true, token, user });
 });
 
-app.post('/api/auth/2fa/resend', async (req, res) => {
+app.post('/api/auth/2fa/resend', authRateLimit, async (req, res) => {
   const challengeId = (req.body && req.body.challengeId) ? String(req.body.challengeId).trim() : '';
   if (!challengeId) return res.status(400).json({ ok: false, error: 'challengeId required' });
 
@@ -2239,7 +2391,7 @@ app.post('/api/push/unregister', authMiddleware, async (req, res) => {
 });
 
 // Minimal compatibility endpoints
-app.post('/api/media/sign', authMiddleware, (req, res) => {
+app.post('/api/media/sign', authMiddleware, uploadRateLimit, (req, res) => {
   const key = (req.body && req.body.key) ? String(req.body.key) : `uploads/${Date.now()}`;
   res.json({ url: `http://localhost:9000/${key}`, fields: {}, key });
 });
@@ -2249,12 +2401,16 @@ app.get('/api/link/preview', authMiddleware, (req, res) => {
   res.json({ ok: true, url, title: url, description: '', image: '' });
 });
 
-app.post('/api/media/upload', authMiddleware, upload.single('file'), (req, res) => {
+app.post('/api/media/upload', authMiddleware, uploadRateLimit, upload.single('file'), (req, res) => {
   const f = req.file;
   if (!f) return res.status(400).json({ ok: false, error: 'file required' });
 
   const relPath = `/uploads/${encodeURIComponent(f.filename)}`;
-  const url = buildPublicUrl(req, relPath);
+  let url = buildPublicUrl(req, relPath);
+  if (REQUIRE_UPLOAD_AUTH) {
+    const token = signUploadAccessToken(relPath);
+    if (token) url = `${url}${url.includes('?') ? '&' : '?'}t=${encodeURIComponent(token)}`;
+  }
 
   res.status(201).json({
     ok: true,

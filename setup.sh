@@ -9,6 +9,13 @@ fi
 
 npm install
 
+if command -v git >/dev/null 2>&1; then
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Configuring git hooks (.githooks)..."
+    git config core.hooksPath .githooks || true
+  fi
+fi
+
 echo "Installing Expo CLI (if missing)..."
 if ! command -v expo >/dev/null 2>&1; then
   npm install -g expo-cli || true
