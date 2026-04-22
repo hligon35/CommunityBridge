@@ -1,0 +1,14 @@
+node_modules
+.expo
+.expo-shared
+web-dist
+build
+tmp
+android
+ios
+.git
+.gitignore
+.githooks
+.env
+.env.*
+**/*.log
