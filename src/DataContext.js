@@ -145,6 +145,8 @@ export function DataProvider({ children: reactChildren }) {
   const { user, loading, needsMfa, refreshMfaState } = useAuth();
   const needsMfaRef = useRef(Boolean(needsMfa));
   const mfaRefreshInFlightRef = useRef(false);
+  const fetchInFlightRef = useRef(null);
+  const lastFetchAtRef = useRef(0);
   useEffect(() => {
     needsMfaRef.current = Boolean(needsMfa);
   }, [needsMfa]);
@@ -303,100 +305,120 @@ export function DataProvider({ children: reactChildren }) {
     return () => { mounted = false; clearInterval(iv); };
   }, []);
 
-  async function fetchAndSync() {
+  const maybeRefreshMfaOnPermissionDenied = async (e) => {
+    try {
+      const msg = String(e?.message || e || '').toLowerCase();
+      if (!msg.includes('missing or insufficient permissions')) return;
+      if (needsMfaRef.current) return;
+      if (mfaRefreshInFlightRef.current) return;
+      if (typeof refreshMfaState !== 'function') return;
+
+      mfaRefreshInFlightRef.current = true;
+      await refreshMfaState();
+    } catch (_) {
+      // ignore
+    } finally {
+      mfaRefreshInFlightRef.current = false;
+    }
+  };
+
+  async function fetchAndSync(options = {}) {
+    const opts = options && typeof options === 'object' ? options : {};
+    const force = Boolean(opts.force);
+
     // Avoid Firestore reads while MFA is required but not verified.
     if (!user || needsMfaRef.current) return;
 
-    const maybeRefreshMfaOnPermissionDenied = async (e) => {
+    // Dedupe rapid calls (navigation remounts, multiple screens, overlays)
+    if (!force) {
+      if (fetchInFlightRef.current) return fetchInFlightRef.current;
+      const now = Date.now();
+      if (now - lastFetchAtRef.current < 1200) return;
+    }
+
+    const run = (async () => {
       try {
-        const msg = String(e?.message || e || '').toLowerCase();
-        if (!msg.includes('missing or insufficient permissions')) return;
-        if (needsMfaRef.current) return;
-        if (mfaRefreshInFlightRef.current) return;
-        if (typeof refreshMfaState !== 'function') return;
-
-        mfaRefreshInFlightRef.current = true;
-        await refreshMfaState();
-      } catch (_) {
-        // ignore
-      } finally {
-        mfaRefreshInFlightRef.current = false;
-      }
-    };
-    
-    try {
-      const remotePosts = await Api.getPosts();
-      if (Array.isArray(remotePosts)) {
-        const norm = remotePosts.map((p) => {
-          const out = { ...(p || {}) };
-          if (out.text && !out.body) out.body = out.text;
-          if (out.author && typeof out.author === 'string') out.author = { id: null, name: out.author, avatar: null };
-          if (!Array.isArray(out.comments)) out.comments = [];
-          if (typeof out.likes !== 'number') out.likes = Number(out.likes) || 0;
-          if (!out.createdAt) out.createdAt = new Date().toISOString();
-          return out;
-        });
-        setPosts(norm);
-      }
-    } catch (e) {
-      console.warn('getPosts failed', e.message);
-      await maybeRefreshMfaOnPermissionDenied(e);
-    }
-    try {
-      const remoteMessages = await Api.getMessages();
-      if (Array.isArray(remoteMessages)) setMessages(remoteMessages);
-    } catch (e) { console.warn('getMessages failed', e.message); }
-    try {
-      const memos = await Api.getUrgentMemos();
-      setUrgentMemos(Array.isArray(memos) ? memos : (memos?.memos || []));
-    } catch (e) {
-      console.warn('getUrgentMemos failed', e.message);
-      await maybeRefreshMfaOnPermissionDenied(e);
-    }
-    try {
-      const proposals = await Api.getTimeChangeProposals();
-      setTimeChangeProposals(Array.isArray(proposals) ? proposals : (proposals?.proposals || []));
-    } catch (e) {
-      console.warn('getTimeChangeProposals failed', e.message);
-      await maybeRefreshMfaOnPermissionDenied(e);
-    }
-
-    // Directory sync. Admins can read/seed the full directory; non-admins use /api/directory/me.
-    try {
-      const isAdmin = (user && user.role) ? ['admin', 'administrator'].includes(String(user.role).toLowerCase()) : false;
-      let dir = isAdmin ? await Api.getDirectory() : await Api.getDirectoryMe();
-      if (dir && dir.ok) {
-        let remoteChildren = Array.isArray(dir.children) ? dir.children : [];
-        let remoteParents = Array.isArray(dir.parents) ? dir.parents : [];
-        let remoteTherapists = Array.isArray(dir.therapists) ? dir.therapists : [];
-
-        // If server directory is empty and this is an admin session, seed it from local (persisted + additions).
-        if (isAdmin && !remoteChildren.length && !remoteParents.length && !remoteTherapists.length) {
-          const localParents = mergeById(parents || [], additionalParents);
-          const localChildren = mergeById((children || []).map(stripComputedChildFields), additionalChildren);
-          const derivedTherapists = deriveTherapistsFromChildren(localChildren);
-          const localTherapists = mergeById(therapists || [], derivedTherapists);
-
-          await Api.mergeDirectory({
-            parents: localParents,
-            children: localChildren,
-            therapists: localTherapists,
+        const remotePosts = await Api.getPosts();
+        if (Array.isArray(remotePosts)) {
+          const norm = remotePosts.map((p) => {
+            const out = { ...(p || {}) };
+            if (out.text && !out.body) out.body = out.text;
+            if (out.author && typeof out.author === 'string') out.author = { id: null, name: out.author, avatar: null };
+            if (!Array.isArray(out.comments)) out.comments = [];
+            if (typeof out.likes !== 'number') out.likes = Number(out.likes) || 0;
+            if (!out.createdAt) out.createdAt = new Date().toISOString();
+            return out;
           });
-
-          dir = await Api.getDirectory();
-          if (dir && dir.ok) {
-            remoteChildren = Array.isArray(dir.children) ? dir.children : remoteChildren;
-            remoteParents = Array.isArray(dir.parents) ? dir.parents : remoteParents;
-            remoteTherapists = Array.isArray(dir.therapists) ? dir.therapists : remoteTherapists;
-          }
+          setPosts(norm);
         }
-
-        setParents(remoteParents);
-        setTherapists(remoteTherapists);
-        setChildren(attachTherapistsToChildren(remoteChildren, remoteTherapists, dir.aba));
+      } catch (e) {
+        console.warn('getPosts failed', e.message);
+        await maybeRefreshMfaOnPermissionDenied(e);
       }
-    } catch (e) {
-      console.warn('getDirectory failed', e?.message || e);
+      try {
+        const remoteMessages = await Api.getMessages();
+        if (Array.isArray(remoteMessages)) setMessages(remoteMessages);
+      } catch (e) { console.warn('getMessages failed', e.message); }
+      try {
+        const memos = await Api.getUrgentMemos();
+        setUrgentMemos(Array.isArray(memos) ? memos : (memos?.memos || []));
+      } catch (e) {
+        console.warn('getUrgentMemos failed', e.message);
+        await maybeRefreshMfaOnPermissionDenied(e);
+      }
+      try {
+        const proposals = await Api.getTimeChangeProposals();
+        setTimeChangeProposals(Array.isArray(proposals) ? proposals : (proposals?.proposals || []));
+      } catch (e) {
+        console.warn('getTimeChangeProposals failed', e.message);
+        await maybeRefreshMfaOnPermissionDenied(e);
+      }
+
+      // Directory sync. Admins can read/seed the full directory; non-admins use /api/directory/me.
+      try {
+        const isAdmin = (user && user.role) ? ['admin', 'administrator'].includes(String(user.role).toLowerCase()) : false;
+        let dir = isAdmin ? await Api.getDirectory() : await Api.getDirectoryMe();
+        if (dir && dir.ok) {
+          let remoteChildren = Array.isArray(dir.children) ? dir.children : [];
+          let remoteParents = Array.isArray(dir.parents) ? dir.parents : [];
+          let remoteTherapists = Array.isArray(dir.therapists) ? dir.therapists : [];
+
+          // If server directory is empty and this is an admin session, seed it from local (persisted + additions).
+          if (isAdmin && !remoteChildren.length && !remoteParents.length && !remoteTherapists.length) {
+            const localParents = mergeById(parents || [], additionalParents);
+            const localChildren = mergeById((children || []).map(stripComputedChildFields), additionalChildren);
+            const derivedTherapists = deriveTherapistsFromChildren(localChildren);
+            const localTherapists = mergeById(therapists || [], derivedTherapists);
+
+            await Api.mergeDirectory({
+              parents: localParents,
+              children: localChildren,
+              therapists: localTherapists,
+            });
+
+            dir = await Api.getDirectory();
+            if (dir && dir.ok) {
+              remoteChildren = Array.isArray(dir.children) ? dir.children : remoteChildren;
+              remoteParents = Array.isArray(dir.parents) ? dir.parents : remoteParents;
+              remoteTherapists = Array.isArray(dir.therapists) ? dir.therapists : remoteTherapists;
+            }
+          }
+
+          setParents(remoteParents);
+          setTherapists(remoteTherapists);
+          setChildren(attachTherapistsToChildren(remoteChildren, remoteTherapists, dir.aba));
+        }
+      } catch (e) {
+        console.warn('getDirectory failed', e?.message || e);
+      }
+    })();
+
+    fetchInFlightRef.current = run;
+    try {
+      await run;
+    } finally {
+      lastFetchAtRef.current = Date.now();
+      if (fetchInFlightRef.current === run) fetchInFlightRef.current = null;
     }
   }
 

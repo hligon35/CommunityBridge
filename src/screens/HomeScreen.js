@@ -117,8 +117,6 @@ export default function HomeScreen() {
     } catch (e) {}
   }, [posts]);
 
-  useEffect(() => { fetchAndSync(); }, []);
-
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -135,7 +133,7 @@ export default function HomeScreen() {
   async function onRefresh() {
     try {
       setRefreshing(true);
-      await fetchAndSync();
+      await fetchAndSync({ force: true });
     } catch (e) {}
     setRefreshing(false);
   }

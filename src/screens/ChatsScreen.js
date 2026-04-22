@@ -94,8 +94,6 @@ export default function ChatsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [dateFilterDays, setDateFilterDays] = useState(null); // null => no filter
 
-  useEffect(() => { fetchAndSync(); }, []);
-
   // Ensure the native stack header buttons are reset (Fast Refresh can preserve prior setOptions).
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -143,7 +141,7 @@ export default function ChatsScreen({ navigation }) {
     : unarchivedList;
 
   async function onRefresh() {
-    try { setRefreshing(true); await fetchAndSync(); } catch (e) {} finally { setRefreshing(false); }
+    try { setRefreshing(true); await fetchAndSync({ force: true }); } catch (e) {} finally { setRefreshing(false); }
   }
 
   function HeaderIconButton({ name, onPress, accessibilityLabel, active }) {

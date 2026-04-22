@@ -452,10 +452,10 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   // the order of Hooks between renders.
   useEffect(() => {
     if (suppressAutoRedirect) return;
-    if (!auth.loading && auth.token) {
-      navigation.replace('Main');
-    }
-  }, [auth.loading, auth.token, suppressAutoRedirect]);
+    if (auth.loading) return;
+    if (!auth.token) return;
+    navigation.replace(auth.needsMfa ? 'TwoFactor' : 'Main');
+  }, [auth.loading, auth.token, auth.needsMfa, suppressAutoRedirect]);
 
   useEffect(() => {
     let mounted = true;

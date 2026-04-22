@@ -2,10 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, Button, ScrollView, TouchableOpacity, StyleSheet, TouchableWithoutFeedback } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../AuthContext';
+import { useData } from '../DataContext';
 import * as Api from '../Api';
 
 export default function UrgentMemoOverlay() {
   const { user, needsMfa, refreshMfaState } = useAuth();
+  const data = useData();
+  const urgentMemos = Array.isArray(data?.urgentMemos) ? data.urgentMemos : [];
   const [memos, setMemos] = useState([]);
   const [visible, setVisible] = useState(false);
 
@@ -13,9 +16,7 @@ export default function UrgentMemoOverlay() {
     (async () => {
       if (!user || needsMfa) return;
       try {
-        const data = await Api.getUrgentMemos();
-        let list = Array.isArray(data) ? data : (data?.memos || []);
-        if (!Array.isArray(list)) list = [];
+        let list = urgentMemos;
         // Only show broadcast-style urgent memos in this overlay.
         list = list.filter((m) => {
           const t = (m && m.type) ? String(m.type).toLowerCase() : 'urgent_memo';
@@ -40,7 +41,7 @@ export default function UrgentMemoOverlay() {
         const unseen = list.filter((m) => { try { return !seen.includes(m?.id); } catch (e) { return true; } });
         if (unseen.length) setVisible(true);
       } catch (e) {
-        console.warn('urgent memos fetch failed', e.message);
+        console.warn('urgent memos overlay failed', e.message);
         try {
           const msg = String(e?.message || e || '').toLowerCase();
           if (msg.includes('missing or insufficient permissions') && typeof refreshMfaState === 'function') {
@@ -52,7 +53,7 @@ export default function UrgentMemoOverlay() {
       }
     })();
     return () => {};
-  }, [user, needsMfa]);
+  }, [user, needsMfa, urgentMemos]);
 
   async function handleContinue() {
     try {

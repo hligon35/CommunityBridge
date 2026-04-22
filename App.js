@@ -179,6 +179,17 @@ function SettingsStack() {
   );
 }
 
+function MainShell({ currentRoute }) {
+  return (
+    <DataProvider>
+      <MainRoutes />
+      <BottomNav navigationRef={navigationRef} currentRoute={currentRoute} />
+      <UrgentMemoOverlay />
+      <ArrivalDetector />
+    </DataProvider>
+  );
+}
+
 // MainRoutes chooses which top-level stacks to expose based on authenticated user role.
 function MainRoutes() {
   const { user } = useAuth();
@@ -254,17 +265,6 @@ function App() {
     );
   }
 
-  function MainShell() {
-    return (
-      <DataProvider>
-        <MainRoutes />
-        <BottomNav navigationRef={navigationRef} currentRoute={currentRoute} />
-        <UrgentMemoOverlay />
-        <ArrivalDetector />
-      </DataProvider>
-    );
-  }
-
   function AppNavigator() {
     const auth = useAuth();
 
@@ -328,7 +328,9 @@ function App() {
             component={TwoFactorScreen}
             options={{ gestureEnabled: false }}
           />
-          <AppStack.Screen name="Main" component={MainShell} />
+          <AppStack.Screen name="Main">
+            {() => <MainShell currentRoute={currentRoute} />}
+          </AppStack.Screen>
         </AppStack.Navigator>
       </NavigationContainer>
     );
