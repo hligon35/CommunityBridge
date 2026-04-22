@@ -179,7 +179,7 @@ function signUploadAccessToken(reqPath) {
 function uploadAccessMiddleware(req, res, next) {
   try {
     if (!REQUIRE_UPLOAD_AUTH) return next();
-    if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'server missing BB_JWT_SECRET' });
+    if (!JWT_SECRET) return res.status(401).json({ ok: false, error: 'Unauthorized' });
 
     const reqPath = req.path ? `/uploads${String(req.path).startsWith('/') ? '' : '/'}${String(req.path)}` : (req.originalUrl || req.url || '');
 
