@@ -68,13 +68,29 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // If Firestore/Rules deny access, clear auth so the app can re-login cleanly.
+  // Note: Firestore "permission-denied" is commonly caused by security rules (e.g. MFA gates)
+  // and is not the same thing as an invalid/expired login. Treat it as a gate to resolve,
+  // not a reason to sign the user out.
   useEffect(() => {
-    Api.setUnauthorizedHandler(() => {
+    Api.setUnauthorizedHandler(async (info) => {
       try {
-        logger.warn('auth', 'Unauthorized from Firebase; signing out');
+        logger.warn('auth', 'Unauthorized handler invoked', info);
       } catch (_) {}
-      logout().catch(() => {});
+
+      // First, try to refresh MFA gate state. This will allow AppNavigator to push the
+      // user to TwoFactor when org MFA is enabled, without a disruptive sign-out.
+      try {
+        await refreshMfaState();
+      } catch (_) {}
+
+      // If this was a true HTTP 401 (e.g. from a REST endpoint), sign out.
+      // Today the handler is also invoked for Firestore permission errors; do not force
+      // logout for those.
+      const method = info?.method ? String(info.method).toUpperCase() : '';
+      if (method === 'FIRESTORE') return;
+      if (Number(info?.status) === 401) {
+        logout().catch(() => {});
+      }
     });
     return () => Api.setUnauthorizedHandler(null);
   }, []);
@@ -169,12 +185,26 @@ export function AuthProvider({ children }) {
   }
 
   async function logout() {
+    const a = getAuthInstance();
+    let signedOut = false;
     try {
-      const a = getAuthInstance();
-      if (a) await signOut(a);
-    } catch (_) {
-      // ignore
+      if (a) {
+        await signOut(a);
+        signedOut = true;
+      }
+    } catch (e) {
+      // If signOut fails, do NOT clear local auth state. Otherwise we briefly show Login
+      // and then bounce back when Firebase still considers the user signed in.
+      try {
+        logger.warn('auth', 'signOut failed; keeping session', {
+          message: e?.message || String(e),
+          code: e?.code,
+        });
+      } catch (_) {}
+      setAuthError(e);
     }
+
+    if (!signedOut && a?.currentUser) return;
 
     try {
       await SecureStore.deleteItemAsync('bb_bio_enabled');

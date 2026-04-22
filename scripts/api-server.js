@@ -500,10 +500,29 @@ try {
 } catch (e) {
   db = null;
   dbInitError = e || new Error('SQLite initialization failed');
-  if (!ALLOW_NO_DB) throw dbInitError;
+  const msg = String(dbInitError && dbInitError.message ? dbInitError.message : dbInitError || '');
+  const isBindingsMissing =
+    /could not locate the bindings file/i.test(msg) ||
+    /better_sqlite3\.node/i.test(msg) ||
+    /node-v\d+-win32-x64/i.test(msg);
+  const allowAutoNoDb = NODE_ENV !== 'production' && isBindingsMissing;
+
+  if (!ALLOW_NO_DB && !allowAutoNoDb) throw dbInitError;
   try {
-    console.warn('[api] SQLite unavailable; continuing without DB because CB_ALLOW_NO_DB=1 or BB_ALLOW_NO_DB=1');
-    console.warn('[api] SQLite error:', dbInitError && dbInitError.message ? dbInitError.message : String(dbInitError));
+    console.warn(
+      '[api] SQLite unavailable; continuing without DB ' +
+        (ALLOW_NO_DB
+          ? 'because CB_ALLOW_NO_DB=1 or BB_ALLOW_NO_DB=1'
+          : '(auto-fallback for local dev)')
+    );
+    console.warn('[api] SQLite error:', msg || '(unknown)');
+    if (allowAutoNoDb) {
+      console.warn(`[api] Node ${process.versions.node} detected. This repo expects Node 20.x (see package.json engines).`);
+      console.warn('[api] Fix options:');
+      console.warn('  - Use Node 20.x, then reinstall deps (npm install)');
+      console.warn('  - OR set BB_DATABASE_URL to use Postgres (start-server will switch to api-server-pg.js)');
+      console.warn('  - OR set BB_ALLOW_NO_DB=1 to force this mode explicitly');
+    }
   } catch (_) {}
 }
 

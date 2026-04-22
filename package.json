@@ -15,7 +15,7 @@
     "start:expo": "cross-env EXPO_NO_DEPENDENCY_VALIDATION=1 NODE_OPTIONS=--max_old_space_size=8192 expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web",
+    "web": "node ./scripts/start-web-dev.js",
     "update:internal:arm": "bash ./scripts/eas-update-arm.sh --channel internal",
     "update:testflight-internal:arm": "bash ./scripts/eas-update-arm.sh --channel testflight-internal",
     "update:preview:arm": "bash ./scripts/eas-update-arm.sh --channel preview",

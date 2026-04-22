@@ -59,6 +59,9 @@ appstore_connect.json
 /public/assets
 /public/home
 
+# Temp file created by `npm run web` (scripts/start-web-dev.js)
+/public/.index.marketing.backup.html
+
 # Accidental nested clone of this same repo (avoid confusion)
 /BuddyBoard
 
