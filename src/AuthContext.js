@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import * as Api from './Api';
 import { getAuthInstance, getAuthInitError } from './firebase';
@@ -23,7 +23,13 @@ export function AuthProvider({ children }) {
   const [mfaVerified, setMfaVerified] = useState(false);
   const [mfaLoading, setMfaLoading] = useState(false);
 
+  const mfaRequiredRef = useRef(false);
+  useEffect(() => {
+    mfaRequiredRef.current = Boolean(mfaRequired);
+  }, [mfaRequired]);
+
   function markMfaRequired() {
+    if (mfaRequiredRef.current) return;
     // Firestore rules for key collections (posts, urgentMemos, etc.) only deny reads
     // with "Missing or insufficient permissions" when orgSettings/main.mfaEnabled == true
     // and the user isn't verified. Treat that as a reliable signal to gate the UI.

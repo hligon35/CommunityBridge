@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
@@ -7,6 +7,20 @@ const path = require('path');
 function parseNodeMajor(version) {
   const match = String(version || '').match(/^(\d+)/);
   return match ? Number(match[1]) : 0;
+}
+
+function getNodeMajorAtPath(nodeExe) {
+  try {
+    const r = spawnSync(nodeExe, ['-p', 'process.versions.node'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
+    });
+    if (r.status !== 0) return 0;
+    return parseNodeMajor(String(r.stdout || '').trim());
+  } catch (_) {
+    return 0;
+  }
 }
 
 function reexecWithNvmNode20IfNeeded() {
@@ -19,15 +33,28 @@ function reexecWithNvmNode20IfNeeded() {
   if (major > 0 && major < 23) return false;
 
   const candidates = [];
+
+  // nvm4w typically exposes the active version at NVM_SYMLINK\node.exe
+  if (process.env.NVM_SYMLINK) {
+    candidates.push(path.join(process.env.NVM_SYMLINK, 'node.exe'));
+  }
+
+  // Common nvm4w default symlink location
+  candidates.push('C:\\nvm4w\\nodejs\\node.exe');
+
+  // If a versioned install is present, include it as a fallback.
   if (process.env.NVM_HOME) {
     candidates.push(path.join(process.env.NVM_HOME, 'v20.20.0', 'node.exe'));
+    candidates.push(path.join(process.env.NVM_HOME, '20.20.0', 'node.exe'));
   }
   candidates.push('C:\\nvm4w\\v20.20.0\\node.exe');
   candidates.push('C:\\nvm\\v20.20.0\\node.exe');
 
   const node20Exe = candidates.find((p) => {
     try {
-      return fs.existsSync(p);
+      if (!p || !fs.existsSync(p)) return false;
+      const majorAtPath = getNodeMajorAtPath(p);
+      return majorAtPath === 20;
     } catch (_) {
       return false;
     }
@@ -170,6 +197,9 @@ function ensureExpoDevIndex(publicRoot) {
 
 async function main() {
   if (reexecWithNvmNode20IfNeeded()) return;
+
+  console.log(`Using Node.js v${process.versions.node} (${process.execPath})`);
+
   // Expo dev server mounts /_expo and /assets itself.
   // If we leave exported build artifacts under public/, they can conflict with
   // dev routing and cause "Asset not found" errors for hashed export assets.
@@ -205,16 +235,18 @@ async function main() {
   });
 
   const port = await findAvailablePort(8081);
-  const expoCommand = `npx expo start --web --host localhost --port ${port}`;
+  const expoCommand = `npx expo start --web --port ${port} --offline`;
+
+  const expoEnv = { ...process.env, EXPO_OFFLINE: '1' };
 
   const child = isWindows
     ? spawn('cmd.exe', ['/d', '/s', '/c', expoCommand], {
         stdio: 'inherit',
-        env: process.env,
+        env: expoEnv,
       })
-    : spawn('npx', ['expo', 'start', '--web', '--host', 'localhost', '--port', String(port)], {
+    : spawn('npx', ['expo', 'start', '--web', '--port', String(port), '--offline'], {
         stdio: 'inherit',
-        env: process.env,
+        env: expoEnv,
       });
 
   child.on('exit', (code) => {
