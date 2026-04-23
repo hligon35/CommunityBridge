@@ -32,8 +32,12 @@ export default function BottomNav({ navigationRef, currentRoute }) {
   tabs.push({ key: 'Settings', label: 'Settings', icon: (active) => (<Ionicons name={active ? 'settings' : 'settings-outline'} size={22} color={active ? '#0066FF' : '#444'} />) });
   function go(name) {
     logPress('BottomNav:tab', { to: name, from: currentRoute });
-    if (navigationRef && navigationRef.current && navigationRef.current.navigate) {
-      navigationRef.current.navigate(name);
+    try {
+      if (!navigationRef || typeof navigationRef.isReady !== 'function' || !navigationRef.isReady()) return;
+      if (typeof navigationRef.navigate !== 'function') return;
+      navigationRef.navigate(name);
+    } catch (_) {
+      // ignore
     }
   }
 

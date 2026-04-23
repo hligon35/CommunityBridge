@@ -434,7 +434,9 @@ exports.mfaVerifyCode = regional.https.onCall(async (data, context) => {
   );
 
   try {
-    await admin.auth().setCustomUserClaims(uid, { bb_mfa: true });
+    const user = await admin.auth().getUser(uid).catch(() => null);
+    const prev = (user && user.customClaims && typeof user.customClaims === 'object') ? user.customClaims : {};
+    await admin.auth().setCustomUserClaims(uid, { ...prev, bb_mfa: true });
   } catch (_) {
     // Claims are best-effort; Firestore rules primarily rely on mfaVerifiedAt.
   }

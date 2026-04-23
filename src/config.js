@@ -9,6 +9,22 @@ const getExpoPublicEnv = (key) => {
   return '';
 };
 
+function getExpoExtraValue(key) {
+  try {
+    // eslint-disable-next-line global-require
+    const ConstantsModule = require('expo-constants');
+    const Constants = ConstantsModule?.default || ConstantsModule;
+    return (
+      Constants?.expoConfig?.extra?.[key] ??
+      Constants?.easConfig?.extra?.[key] ??
+      Constants?.manifest2?.extra?.[key] ??
+      Constants?.manifest?.extra?.[key]
+    );
+  } catch (_) {
+    return undefined;
+  }
+}
+
 function getWebOrigin() {
   try {
     // In web builds, prefer the current origin so deployments accessed via IP
@@ -99,8 +115,18 @@ const fallbackDevBaseUrl = (() => {
 })();
 
 const fallbackWebBaseUrl = getWebOrigin();
+
+const apiBaseOverride = String(
+  // NOTE: Expo only inlines EXPO_PUBLIC_* for static references.
+  // This file previously used dynamic env lookup (process.env[key]), which can be empty in production.
+  // app.config.js copies EXPO_PUBLIC_* into Constants.expoConfig.extra, so read that too.
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+    getExpoExtraValue('EXPO_PUBLIC_API_BASE_URL') ||
+    ''
+).trim();
+
 export const BASE_URL =
-  getExpoPublicEnv('EXPO_PUBLIC_API_BASE_URL') ||
+  apiBaseOverride ||
   ((typeof __DEV__ !== 'undefined' && __DEV__)
     ? (getWebDevApiBaseUrl() || fallbackDevBaseUrl)
     : (fallbackWebBaseUrl || DEFAULT_PROD_BASE_URL));

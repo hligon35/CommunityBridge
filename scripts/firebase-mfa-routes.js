@@ -396,7 +396,10 @@ function registerFirebaseMfaRoutes(app) {
       );
 
       try {
-        await admin.auth().setCustomUserClaims(uid, { bb_mfa: true });
+        // IMPORTANT: setCustomUserClaims replaces *all* claims. Merge to avoid clobbering other auth flags.
+        const user = await admin.auth().getUser(uid).catch(() => null);
+        const prev = (user && user.customClaims && typeof user.customClaims === 'object') ? user.customClaims : {};
+        await admin.auth().setCustomUserClaims(uid, { ...prev, bb_mfa: true });
       } catch (_) {
         // best-effort
       }
