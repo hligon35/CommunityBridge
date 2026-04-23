@@ -8,6 +8,7 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const { registerFirebaseMfaRoutes } = require('./firebase-mfa-routes');
 
 function parseCsvEnv(value) {
   return String(value || '')
@@ -1120,6 +1121,9 @@ try {
 const app = express();
 app.use(cors(buildCorsOptions()));
 app.use(bodyParser.json({ limit: '2mb' }));
+
+// Firebase-backed MFA endpoints (used by the mobile/web app).
+registerFirebaseMfaRoutes(app);
 
 // Serve uploaded media. Files are stored under the same host-mounted .data dir.
 app.use('/uploads', uploadAccessMiddleware, express.static(UPLOAD_DIR));

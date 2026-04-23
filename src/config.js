@@ -23,6 +23,24 @@ function getWebOrigin() {
   return '';
 }
 
+function getWebDevApiBaseUrl() {
+  try {
+    if (typeof window === 'undefined' || !window.location) return '';
+    const host = String(window.location.hostname || '').trim();
+    const port = String(window.location.port || '').trim();
+
+    // In Expo web dev, the app runs on Metro (usually 8081). The API server is separate (3005).
+    // Use the same hostname so LAN/IP access still works.
+    if ((typeof __DEV__ !== 'undefined' && __DEV__) && (port === '8081' || port === '19006')) {
+      if (host) return `http://${host}:3005`;
+      return 'http://localhost:3005';
+    }
+  } catch (_) {
+    // ignore
+  }
+  return '';
+}
+
 function envFlag(value, defaultValue = false) {
   try {
     if (value == null) return defaultValue;
@@ -83,7 +101,9 @@ const fallbackDevBaseUrl = (() => {
 const fallbackWebBaseUrl = getWebOrigin();
 export const BASE_URL =
   getExpoPublicEnv('EXPO_PUBLIC_API_BASE_URL') ||
-  ((typeof __DEV__ !== 'undefined' && __DEV__) ? fallbackDevBaseUrl : (fallbackWebBaseUrl || DEFAULT_PROD_BASE_URL));
+  ((typeof __DEV__ !== 'undefined' && __DEV__)
+    ? (getWebDevApiBaseUrl() || fallbackDevBaseUrl)
+    : (fallbackWebBaseUrl || DEFAULT_PROD_BASE_URL));
 
 try {
   if (!BASE_URL && !(typeof __DEV__ !== 'undefined' && __DEV__)) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +20,7 @@ export default function TwoFactorScreen({ navigation }) {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
+  const didAutoSendRef = useRef(false);
   const email = auth?.user?.email ? String(auth.user.email) : '';
 
   const fieldWidthStyle = useMemo(() => ({ width: '100%', maxWidth: 360 }), []);
@@ -66,7 +67,9 @@ export default function TwoFactorScreen({ navigation }) {
       return;
     }
 
-    // Auto-send on entry (best effort).
+    // Auto-send once on entry (best effort). Avoid spamming when tokens refresh.
+    if (didAutoSendRef.current) return;
+    didAutoSendRef.current = true;
     sendCode().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth?.token, auth?.needsMfa]);

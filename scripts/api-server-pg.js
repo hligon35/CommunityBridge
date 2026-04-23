@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const multer = require('multer');
+const { registerFirebaseMfaRoutes } = require('./firebase-mfa-routes');
 
 function parseCsvEnv(value) {
   return String(value || '')
@@ -1026,6 +1027,9 @@ async function sendExpoPush(tokens, { title, body, data } = {}) {
 const app = express();
 app.use(cors(buildCorsOptions()));
 app.use(bodyParser.json({ limit: '2mb' }));
+
+// Firebase-backed MFA endpoints (used by the mobile/web app).
+registerFirebaseMfaRoutes(app);
 
 // Serve uploads
 app.use('/uploads', uploadAccessMiddleware, express.static(UPLOAD_DIR));

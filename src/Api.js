@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { logger } from './utils/logger';
 import { getAuthInstance, getAuthInitError, db, storage, functions } from './firebase';
+import { BASE_URL } from './config';
 
 import {
   GoogleAuthProvider,
@@ -220,13 +221,7 @@ export async function signup(payload) {
 }
 
 export async function verify2fa(_) {
-  requireUser();
-  if (!functions) {
-    const err = new Error('Firebase Functions is not initialized.');
-    err.code = 'BB_FUNCTIONS_INIT_FAILED';
-    throw err;
-  }
-
+  const u = requireUser();
   const code = (typeof _ === 'string') ? _ : String(_?.code || '').trim();
   if (!code) {
     const err = new Error('Missing verification code.');
@@ -234,20 +229,47 @@ export async function verify2fa(_) {
     throw err;
   }
 
-  const fn = httpsCallable(functions, 'mfaVerifyCode');
+  // Preferred: call the API server so org policies/IAM can't block browser preflight.
+  // This is also the recommended path for mobile to keep behavior consistent.
   try {
-    await fn({ code });
-  } catch (e) {
-    const msg = String(e?.message || e || '');
-    if (/\b403\b|forbidden|does not have permission/i.test(msg)) {
-      const err = new Error(
-        'Two-step verification is blocked on web dev because the Cloud Function is not publicly invokable (HTTP 403).\n\n' +
-        'Fix: grant roles/cloudfunctions.invoker to allUsers for mfaSendCode + mfaVerifyCode in project communitybridge-26apr (region us-central1).'
-      );
-      err.code = 'BB_MFA_FUNCTION_FORBIDDEN';
+    const token = await u.getIdToken();
+    const resp = await fetch(`${String(BASE_URL || '').replace(/\/$/, '')}/api/mfa/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ code }),
+    });
+
+    const json = await resp.json().catch(() => null);
+    if (!resp.ok || !json || json.ok !== true) {
+      const msg = String(json?.error || json?.message || resp.statusText || 'Verification failed.');
+      const err = new Error(msg);
+      err.code = String(json?.code || 'BB_MFA_VERIFY_FAILED');
       throw err;
     }
-    throw e;
+  } catch (e) {
+    // Fallback for older deployments that don't have /api/mfa yet.
+    if (functions) {
+      try {
+        const fn = httpsCallable(functions, 'mfaVerifyCode');
+        await fn({ code });
+      } catch (err2) {
+        const msg = String(err2?.message || err2 || '');
+        if (/\b403\b|forbidden|does not have permission/i.test(msg)) {
+          const err = new Error(
+            'Two-step verification is blocked because the Cloud Function is not invokable from this client (HTTP 403).\n\n' +
+            'This usually means invoker/IAM is restricted by org policy. Use the /api/mfa endpoints (recommended), or adjust Cloud Function invoker policy to an allowed principal.'
+          );
+          err.code = 'BB_MFA_FUNCTION_FORBIDDEN';
+          throw err;
+        }
+        throw err2;
+      }
+    } else {
+      throw e;
+    }
   }
 
   // Refresh the Firebase ID token (claims may change) and then reload user profile.
@@ -261,32 +283,53 @@ export async function verify2fa(_) {
 }
 
 export async function resend2fa(_) {
-  requireUser();
-  if (!functions) {
-    const err = new Error('Firebase Functions is not initialized.');
-    err.code = 'BB_FUNCTIONS_INIT_FAILED';
-    throw err;
-  }
-
+  const u = requireUser();
   const method = String(_?.method || _?.channel || _?.type || 'email').trim().toLowerCase();
   const phone = _?.phone != null ? String(_?.phone).trim() : '';
-  const fn = httpsCallable(functions, 'mfaSendCode');
-  let resp;
+
+  // Preferred: call the API server so org policies/IAM can't block browser preflight.
   try {
-    resp = await fn({ method: method === 'sms' ? 'sms' : 'email', ...(phone ? { phone } : {}) });
-  } catch (e) {
-    const msg = String(e?.message || e || '');
-    if (/\b403\b|forbidden|does not have permission/i.test(msg)) {
-      const err = new Error(
-        'Could not send verification code because the Cloud Function is not publicly invokable from the browser (HTTP 403).\n\n' +
-        'Fix: grant roles/cloudfunctions.invoker to allUsers for mfaSendCode in project communitybridge-26apr (region us-central1).'
-      );
-      err.code = 'BB_MFA_FUNCTION_FORBIDDEN';
+    const token = await u.getIdToken();
+    const resp = await fetch(`${String(BASE_URL || '').replace(/\/$/, '')}/api/mfa/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ method: method === 'sms' ? 'sms' : 'email', ...(phone ? { phone } : {}) }),
+    });
+
+    const json = await resp.json().catch(() => null);
+    if (!resp.ok || !json || json.ok !== true) {
+      const msg = String(json?.error || json?.message || resp.statusText || 'Could not send code.');
+      const err = new Error(msg);
+      err.code = String(json?.code || 'BB_MFA_SEND_FAILED');
       throw err;
     }
-    throw e;
+
+    return { ok: true, ...(json || {}) };
+  } catch (e) {
+    // Fallback for older deployments that don't have /api/mfa yet.
+    if (!functions) throw e;
+
+    const fn = httpsCallable(functions, 'mfaSendCode');
+    let resp;
+    try {
+      resp = await fn({ method: method === 'sms' ? 'sms' : 'email', ...(phone ? { phone } : {}) });
+    } catch (err2) {
+      const msg = String(err2?.message || err2 || '');
+      if (/\b403\b|forbidden|does not have permission/i.test(msg)) {
+        const err = new Error(
+          'Could not send verification code because the Cloud Function is not invokable from this client (HTTP 403).\n\n' +
+          'This usually means invoker/IAM is restricted by org policy. Use the /api/mfa endpoints (recommended), or adjust Cloud Function invoker policy to an allowed principal.'
+        );
+        err.code = 'BB_MFA_FUNCTION_FORBIDDEN';
+        throw err;
+      }
+      throw err2;
+    }
+    return { ok: true, ...(resp?.data || {}) };
   }
-  return { ok: true, ...(resp?.data || {}) };
 }
 
 export async function requestPasswordReset(email) {

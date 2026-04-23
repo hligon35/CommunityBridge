@@ -78,6 +78,7 @@
     "expo-web-browser": "~15.0.10",
     "express": "^5.2.1",
     "firebase": "^10.12.5",
+    "firebase-admin": "^12.7.0",
     "google-auth-library": "^10.5.0",
     "jimp": "^1.6.0",
     "jsonwebtoken": "^9.0.2",
