@@ -144,11 +144,13 @@ export function DataProvider({ children: reactChildren }) {
   const { user, loading, needsMfa, refreshMfaState, markMfaRequired } = useAuth();
   const needsMfaRef = useRef(Boolean(needsMfa));
   const mfaRefreshInFlightRef = useRef(false);
+  const mfaEscalatedRef = useRef(false);
   const fetchInFlightRef = useRef(null);
   const lastFetchAtRef = useRef(0);
   const initialSyncDoneForUserRef = useRef(null);
   useEffect(() => {
     needsMfaRef.current = Boolean(needsMfa);
+    if (!needsMfa) mfaEscalatedRef.current = false;
   }, [needsMfa]);
   const [posts, setPosts] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -307,13 +309,16 @@ export function DataProvider({ children: reactChildren }) {
   }, []);
 
   const maybeRefreshMfaOnPermissionDenied = async (e) => {
-    try {
-      const msg = String(e?.message || e || '').toLowerCase();
-      if (!msg.includes('missing or insufficient permissions')) return;
+    const code = e?.code ? String(e.code) : '';
+    const msg = String(e?.message || e || '').toLowerCase();
+    const isPermissionDenied = code === 'permission-denied' || msg.includes('missing or insufficient permissions');
+    if (!isPermissionDenied) return;
 
+    try {
       // Based on firestore.rules, this error on core collections is a strong signal
       // that MFA is enabled and the session is not verified.
-      if (typeof markMfaRequired === 'function') {
+      if (!mfaEscalatedRef.current && typeof markMfaRequired === 'function') {
+        mfaEscalatedRef.current = true;
         try { markMfaRequired(); } catch (_) {}
       }
 
