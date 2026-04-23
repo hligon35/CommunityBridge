@@ -29,7 +29,12 @@ export default function TwoFactorScreen({ navigation }) {
     try {
       await Api.resend2fa({ method: 'email' });
     } catch (e) {
-      Alert.alert('Could not send code', e?.message || 'Please try again.');
+      const msg = String(e?.message || '').trim();
+      if (String(e?.code || '').includes('BB_MFA_FUNCTION_FORBIDDEN')) {
+        Alert.alert('Two-step verification is blocked', msg || 'Cloud Function access is forbidden (403).');
+      } else {
+        Alert.alert('Could not send code', msg || 'Please try again.');
+      }
     } finally {
       setSending(false);
     }

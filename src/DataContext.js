@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { InteractionManager, NativeModules } from 'react-native';
+import { InteractionManager, NativeModules, Platform, Share } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Api from './Api';
-import { Share } from 'react-native';
 import { useAuth } from './AuthContext';
 import { additionalChildren, additionalParents } from './seed/directoryAdditions';
 
@@ -142,11 +141,12 @@ const THERAPISTS_KEY = 'bbs_therapists_v1';
 // Directory seed data is provided from `src/seed/directorySeed.js` (imported above)
 
 export function DataProvider({ children: reactChildren }) {
-  const { user, loading, needsMfa, refreshMfaState } = useAuth();
+  const { user, loading, needsMfa, refreshMfaState, markMfaRequired } = useAuth();
   const needsMfaRef = useRef(Boolean(needsMfa));
   const mfaRefreshInFlightRef = useRef(false);
   const fetchInFlightRef = useRef(null);
   const lastFetchAtRef = useRef(0);
+  const initialSyncDoneForUserRef = useRef(null);
   useEffect(() => {
     needsMfaRef.current = Boolean(needsMfa);
   }, [needsMfa]);
@@ -278,6 +278,7 @@ export function DataProvider({ children: reactChildren }) {
   // Dev: poll a dev-clear server running on the packager host to trigger clearing persisted data
   useEffect(() => {
     if (!__DEV__) return undefined;
+    if (Platform.OS === 'web') return undefined;
     let mounted = true;
     const port = process.env.DEV_CLEAR_PORT || 4001;
     // derive packager host from scriptURL
@@ -309,6 +310,13 @@ export function DataProvider({ children: reactChildren }) {
     try {
       const msg = String(e?.message || e || '').toLowerCase();
       if (!msg.includes('missing or insufficient permissions')) return;
+
+      // Based on firestore.rules, this error on core collections is a strong signal
+      // that MFA is enabled and the session is not verified.
+      if (typeof markMfaRequired === 'function') {
+        try { markMfaRequired(); } catch (_) {}
+      }
+
       if (needsMfaRef.current) return;
       if (mfaRefreshInFlightRef.current) return;
       if (typeof refreshMfaState !== 'function') return;
@@ -426,6 +434,12 @@ export function DataProvider({ children: reactChildren }) {
   useEffect(() => {
     let mounted = true;
     if (loading || !user || needsMfa) return () => { mounted = false; };
+
+    const userKey = user?.id || user?.uid || user?.email || null;
+    if (userKey && initialSyncDoneForUserRef.current === userKey) {
+      return () => { mounted = false; };
+    }
+    if (userKey) initialSyncDoneForUserRef.current = userKey;
 
     try {
       InteractionManager.runAfterInteractions(() => {

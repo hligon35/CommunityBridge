@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -267,6 +267,56 @@ function App() {
 
   function AppNavigator() {
     const auth = useAuth();
+    const webEscapeHandledRef = useRef(false);
+
+    useEffect(() => {
+      // Web debugging escape hatch:
+      //  - `/?logout=1` => sign out
+      //  - `/?reset=1`  => sign out + clear storage + reload
+      try {
+        if (Platform.OS !== 'web') return;
+        if (webEscapeHandledRef.current) return;
+
+        const search = String(globalThis?.location?.search || '');
+        if (!search || search === '?') return;
+
+        const params = new URLSearchParams(search);
+        const wantsLogout = params.get('logout') === '1' || params.get('bbLogout') === '1';
+        const wantsReset = params.get('reset') === '1' || params.get('bbReset') === '1';
+        if (!wantsLogout && !wantsReset) return;
+
+        webEscapeHandledRef.current = true;
+
+        (async () => {
+          try {
+            await auth?.logout?.();
+          } catch (_) {}
+
+          if (wantsReset) {
+            try { globalThis?.localStorage?.clear?.(); } catch (_) {}
+            try { globalThis?.sessionStorage?.clear?.(); } catch (_) {}
+            try { globalThis?.indexedDB?.deleteDatabase?.('firebaseLocalStorageDb'); } catch (_) {}
+          }
+
+          // Strip the params so refreshes don't loop.
+          try {
+            const url = new URL(String(globalThis?.location?.href || ''), String(globalThis?.location?.origin || 'http://localhost'));
+            url.searchParams.delete('logout');
+            url.searchParams.delete('bbLogout');
+            url.searchParams.delete('reset');
+            url.searchParams.delete('bbReset');
+            globalThis?.history?.replaceState?.({}, '', url.pathname + url.search + url.hash);
+          } catch (_) {}
+
+          if (wantsReset) {
+            try { globalThis?.location?.reload?.(); } catch (_) {}
+          }
+        })();
+      } catch (_) {
+        // ignore
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [auth?.logout]);
 
     useEffect(() => {
       try {

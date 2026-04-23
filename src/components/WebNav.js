@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import LogoTitle from './LogoTitle';
@@ -6,8 +6,9 @@ import { useAuth } from '../AuthContext';
 
 export default function WebNav() {
   const navigation = useNavigation();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const role = (user && user.role) ? (user.role || '').toString().toLowerCase() : 'parent';
+  const [open, setOpen] = useState(false);
 
   function navTo(route) {
     // WebNav is rendered inside nested stacks (Home/Chats/Settings stacks).
@@ -25,13 +26,30 @@ export default function WebNav() {
           <LogoTitle small />
         </TouchableOpacity>
 
-        <View style={styles.links}>
-          <TouchableOpacity onPress={() => navTo('Home')} style={styles.link}><Text style={styles.linkText}>Home</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => navTo('Chats')} style={styles.link}><Text style={styles.linkText}>Messages</Text></TouchableOpacity>
-          {role === 'therapist' && <TouchableOpacity onPress={() => navTo('MyClass')} style={styles.link}><Text style={styles.linkText}>My Class</Text></TouchableOpacity>}
-          {(role === 'admin' || role === 'administrator') && <TouchableOpacity onPress={() => navTo('Controls')} style={styles.link}><Text style={styles.linkText}>Dashboard</Text></TouchableOpacity>}
-          <TouchableOpacity onPress={() => navTo('Settings')} style={styles.link}><Text style={styles.linkText}>Settings</Text></TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          onPress={() => setOpen((v) => !v)}
+          accessibilityRole="button"
+          accessibilityLabel={open ? 'Close menu' : 'Open menu'}
+          style={styles.hamburger}
+        >
+          <Text style={styles.hamburgerText}>{open ? 'Close' : 'Menu'}</Text>
+        </TouchableOpacity>
+
+        {open ? (
+          <View style={styles.links}>
+            <TouchableOpacity onPress={() => { setOpen(false); navTo('Home'); }} style={styles.link}><Text style={styles.linkText}>Home</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => { setOpen(false); navTo('Chats'); }} style={styles.link}><Text style={styles.linkText}>Messages</Text></TouchableOpacity>
+            {role === 'therapist' && <TouchableOpacity onPress={() => { setOpen(false); navTo('MyClass'); }} style={styles.link}><Text style={styles.linkText}>My Class</Text></TouchableOpacity>}
+            {(role === 'admin' || role === 'administrator') && <TouchableOpacity onPress={() => { setOpen(false); navTo('Controls'); }} style={styles.link}><Text style={styles.linkText}>Dashboard</Text></TouchableOpacity>}
+            <TouchableOpacity onPress={() => { setOpen(false); navTo('Settings'); }} style={styles.link}><Text style={styles.linkText}>Settings</Text></TouchableOpacity>
+
+            {user ? (
+              <TouchableOpacity onPress={() => { setOpen(false); logout && logout(); }} style={styles.link}>
+                <Text style={[styles.linkText, styles.logoutText]}>Logout</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -59,14 +77,39 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   links: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    position: 'absolute',
+    right: 16,
+    top: 56,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    minWidth: 180,
   },
   link: {
-    marginLeft: 18,
+    paddingVertical: 10,
   },
   linkText: {
     color: '#111827',
     fontWeight: '600',
+  },
+  hamburger: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fff',
+  },
+  hamburgerText: {
+    color: '#111827',
+    fontWeight: '700',
+  },
+  logoutText: {
+    color: '#ef4444',
   },
 });

@@ -15,3 +15,17 @@ export function resetToLogin() {
     // ignore
   }
 }
+
+export function resetToTwoFactor() {
+  try {
+    if (!navigationRef.isReady()) return;
+    navigationRef.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: 'TwoFactor' }],
+      })
+    );
+  } catch (e) {
+    // ignore
+  }
+}

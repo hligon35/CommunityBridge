@@ -3,7 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import * as Api from './Api';
 import { getAuthInstance, getAuthInitError } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { resetToLogin } from './navigationRef';
+import { resetToLogin, resetToTwoFactor } from './navigationRef';
 import { logger, setDebugContext } from './utils/logger';
 import { reportErrorToSentry } from './utils/reportError';
 
@@ -22,6 +22,15 @@ export function AuthProvider({ children }) {
   const [mfaRequired, setMfaRequired] = useState(false);
   const [mfaVerified, setMfaVerified] = useState(false);
   const [mfaLoading, setMfaLoading] = useState(false);
+
+  function markMfaRequired() {
+    // Firestore rules for key collections (posts, urgentMemos, etc.) only deny reads
+    // with "Missing or insufficient permissions" when orgSettings/main.mfaEnabled == true
+    // and the user isn't verified. Treat that as a reliable signal to gate the UI.
+    setMfaRequired(true);
+    setMfaVerified(false);
+    resetToTwoFactor();
+  }
 
   function isMfaFresh(profile) {
     try {
@@ -58,7 +67,9 @@ export function AuthProvider({ children }) {
       if (profile) setUser(profile);
 
       const org = await Api.getOrgSettings().catch(() => null);
-      const required = Boolean(org?.item?.mfaEnabled);
+      // If we've already inferred MFA is required from permission-denied errors,
+      // don't accidentally clear the gate due to a transient orgSettings read failure.
+      const required = Boolean(org?.item?.mfaEnabled) || Boolean(mfaRequired);
       const verified = !required || isMfaFresh(profile);
       setMfaRequired(required);
       setMfaVerified(verified);
@@ -125,35 +136,45 @@ export function AuthProvider({ children }) {
           return;
         }
 
+        // Always treat a Firebase user as authenticated, even if downstream Firestore
+        // reads are temporarily blocked by security rules (e.g. MFA gate).
         const t = await fbUser.getIdToken();
         setToken(String(t || ''));
 
-        // Load user profile document (role, etc.)
-        const profile = await Api.me().catch(() => null);
-        setUser(profile || {
-          id: fbUser.uid,
-          name: fbUser.displayName || '',
-          email: fbUser.email || '',
-          role: 'parent',
-        });
+        // Load user profile document (role, etc.). If it fails (permission-denied),
+        // keep a minimal user so the app doesn't bounce to Login.
+        let profile = null;
+        try {
+          profile = await Api.me();
+        } catch (e) {
+          setAuthError(e);
+          profile = null;
+        }
 
-        // Compute MFA gate (based on orgSettings + profile.mfaVerifiedAt)
+        setUser(
+          profile || {
+            id: fbUser.uid,
+            name: fbUser.displayName || '',
+            email: fbUser.email || '',
+            role: 'parent',
+          }
+        );
+
+        // Compute MFA gate (based on orgSettings + profile.mfaVerifiedAt).
+        // If profile cannot be read, treat verification as false when required.
+        let required = false;
         try {
           const org = await Api.getOrgSettings().catch(() => null);
-          const required = Boolean(org?.item?.mfaEnabled);
-          const verified = !required || isMfaFresh(profile);
-          setMfaRequired(required);
-          setMfaVerified(verified);
-        } catch (_) {
-          setMfaRequired(false);
-          setMfaVerified(false);
+          required = Boolean(org?.item?.mfaEnabled);
+        } catch (e) {
+          // If org settings can't be loaded, keep the existing values.
+          setAuthError(e);
+          return;
         }
-      } catch (e) {
-        setAuthError(e);
-        setToken(null);
-        setUser(null);
-        setMfaRequired(false);
-        setMfaVerified(false);
+
+        const verified = !required || (profile ? isMfaFresh(profile) : false);
+        setMfaRequired(required);
+        setMfaVerified(verified);
       } finally {
         setLoading(false);
       }
@@ -239,6 +260,7 @@ export function AuthProvider({ children }) {
       mfaVerified,
       mfaLoading,
       needsMfa: Boolean(mfaRequired && !mfaVerified),
+      markMfaRequired,
       refreshMfaState,
     }),
     [token, user, loading, authError, mfaRequired, mfaVerified, mfaLoading]

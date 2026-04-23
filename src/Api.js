@@ -235,7 +235,20 @@ export async function verify2fa(_) {
   }
 
   const fn = httpsCallable(functions, 'mfaVerifyCode');
-  await fn({ code });
+  try {
+    await fn({ code });
+  } catch (e) {
+    const msg = String(e?.message || e || '');
+    if (/\b403\b|forbidden|does not have permission/i.test(msg)) {
+      const err = new Error(
+        'Two-step verification is blocked on web dev because the Cloud Function is not publicly invokable (HTTP 403).\n\n' +
+        'Fix: grant roles/cloudfunctions.invoker to allUsers for mfaSendCode + mfaVerifyCode in project communitybridge-26apr (region us-central1).'
+      );
+      err.code = 'BB_MFA_FUNCTION_FORBIDDEN';
+      throw err;
+    }
+    throw e;
+  }
 
   // Refresh the Firebase ID token (claims may change) and then reload user profile.
   try {
@@ -258,7 +271,21 @@ export async function resend2fa(_) {
   const method = String(_?.method || _?.channel || _?.type || 'email').trim().toLowerCase();
   const phone = _?.phone != null ? String(_?.phone).trim() : '';
   const fn = httpsCallable(functions, 'mfaSendCode');
-  const resp = await fn({ method: method === 'sms' ? 'sms' : 'email', ...(phone ? { phone } : {}) });
+  let resp;
+  try {
+    resp = await fn({ method: method === 'sms' ? 'sms' : 'email', ...(phone ? { phone } : {}) });
+  } catch (e) {
+    const msg = String(e?.message || e || '');
+    if (/\b403\b|forbidden|does not have permission/i.test(msg)) {
+      const err = new Error(
+        'Could not send verification code because the Cloud Function is not publicly invokable from the browser (HTTP 403).\n\n' +
+        'Fix: grant roles/cloudfunctions.invoker to allUsers for mfaSendCode in project communitybridge-26apr (region us-central1).'
+      );
+      err.code = 'BB_MFA_FUNCTION_FORBIDDEN';
+      throw err;
+    }
+    throw e;
+  }
   return { ok: true, ...(resp?.data || {}) };
 }
 
