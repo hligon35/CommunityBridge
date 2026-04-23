@@ -9,7 +9,15 @@ function getAdmin() {
   firebaseAdmin = require('firebase-admin');
   try {
     if (!firebaseAdmin.apps || !firebaseAdmin.apps.length) {
-      firebaseAdmin.initializeApp();
+      const projectId = safeString(
+        process.env.CB_FIREBASE_PROJECT_ID ||
+        process.env.BB_FIREBASE_PROJECT_ID ||
+        process.env.FIREBASE_PROJECT_ID ||
+        process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ||
+        process.env.GCLOUD_PROJECT ||
+        process.env.GCP_PROJECT
+      ).trim();
+      firebaseAdmin.initializeApp(projectId ? { projectId } : undefined);
     }
   } catch (_) {
     // initializeApp can throw if called twice; ignore.

@@ -231,9 +231,10 @@ export async function verify2fa(_) {
 
   // Preferred: call the API server so org policies/IAM can't block browser preflight.
   // This is also the recommended path for mobile to keep behavior consistent.
-  try {
-    const token = await u.getIdToken();
-    const resp = await fetch(`${String(BASE_URL || '').replace(/\/$/, '')}/api/mfa/verify`, {
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  const tryApi = async ({ forceRefresh } = {}) => {
+    const token = await u.getIdToken(!!forceRefresh);
+    const resp = await fetch(`${apiBase}/api/mfa/verify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -243,32 +244,53 @@ export async function verify2fa(_) {
     });
 
     const json = await resp.json().catch(() => null);
+    return { resp, json };
+  };
+
+  try {
+    let { resp, json } = await tryApi({ forceRefresh: false });
+
+    // Token may be stale; retry once on auth failures.
+    if (resp.status === 401) {
+      ({ resp, json } = await tryApi({ forceRefresh: true }));
+    }
+
+    if (resp.status === 404) {
+      const err = new Error('MFA API endpoint not found.');
+      err.code = 'BB_MFA_API_NOT_FOUND';
+      throw err;
+    }
+
     if (!resp.ok || !json || json.ok !== true) {
       const msg = String(json?.error || json?.message || resp.statusText || 'Verification failed.');
       const err = new Error(msg);
       err.code = String(json?.code || 'BB_MFA_VERIFY_FAILED');
+      err.httpStatus = resp.status;
       throw err;
     }
   } catch (e) {
-    // Fallback for older deployments that don't have /api/mfa yet.
-    if (functions) {
-      try {
-        const fn = httpsCallable(functions, 'mfaVerifyCode');
-        await fn({ code });
-      } catch (err2) {
-        const msg = String(err2?.message || err2 || '');
-        if (/\b403\b|forbidden|does not have permission/i.test(msg)) {
-          const err = new Error(
-            'Two-step verification is blocked because the Cloud Function is not invokable from this client (HTTP 403).\n\n' +
-            'This usually means invoker/IAM is restricted by org policy. Use the /api/mfa endpoints (recommended), or adjust Cloud Function invoker policy to an allowed principal.'
-          );
-          err.code = 'BB_MFA_FUNCTION_FORBIDDEN';
-          throw err;
-        }
-        throw err2;
+    // Only fall back if the API endpoint is missing/unreachable (older deployments).
+    const shouldFallback = !!functions && (
+      e?.code === 'BB_MFA_API_NOT_FOUND' ||
+      (typeof e?.message === 'string' && /fetch failed|network|ECONNREFUSED/i.test(e.message))
+    );
+
+    if (!shouldFallback) throw e;
+
+    try {
+      const fn = httpsCallable(functions, 'mfaVerifyCode');
+      await fn({ code });
+    } catch (err2) {
+      const msg = String(err2?.message || err2 || '');
+      if (/\b403\b|forbidden|does not have permission/i.test(msg)) {
+        const err = new Error(
+          'Two-step verification is blocked because the Cloud Function is not invokable from this client (HTTP 403).\n\n' +
+          'This usually means invoker/IAM is restricted by org policy. Use the /api/mfa endpoints (recommended), or adjust Cloud Function invoker policy to an allowed principal.'
+        );
+        err.code = 'BB_MFA_FUNCTION_FORBIDDEN';
+        throw err;
       }
-    } else {
-      throw e;
+      throw err2;
     }
   }
 
@@ -288,9 +310,10 @@ export async function resend2fa(_) {
   const phone = _?.phone != null ? String(_?.phone).trim() : '';
 
   // Preferred: call the API server so org policies/IAM can't block browser preflight.
-  try {
-    const token = await u.getIdToken();
-    const resp = await fetch(`${String(BASE_URL || '').replace(/\/$/, '')}/api/mfa/send`, {
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  const tryApi = async ({ forceRefresh } = {}) => {
+    const token = await u.getIdToken(!!forceRefresh);
+    const resp = await fetch(`${apiBase}/api/mfa/send`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -300,17 +323,40 @@ export async function resend2fa(_) {
     });
 
     const json = await resp.json().catch(() => null);
+    return { resp, json };
+  };
+
+  try {
+    let { resp, json } = await tryApi({ forceRefresh: false });
+
+    // Token may be stale; retry once on auth failures.
+    if (resp.status === 401) {
+      ({ resp, json } = await tryApi({ forceRefresh: true }));
+    }
+
+    if (resp.status === 404) {
+      const err = new Error('MFA API endpoint not found.');
+      err.code = 'BB_MFA_API_NOT_FOUND';
+      throw err;
+    }
+
     if (!resp.ok || !json || json.ok !== true) {
       const msg = String(json?.error || json?.message || resp.statusText || 'Could not send code.');
       const err = new Error(msg);
       err.code = String(json?.code || 'BB_MFA_SEND_FAILED');
+      err.httpStatus = resp.status;
       throw err;
     }
 
     return { ok: true, ...(json || {}) };
   } catch (e) {
-    // Fallback for older deployments that don't have /api/mfa yet.
-    if (!functions) throw e;
+    // Only fall back if the API endpoint is missing/unreachable (older deployments).
+    const shouldFallback = !!functions && (
+      e?.code === 'BB_MFA_API_NOT_FOUND' ||
+      (typeof e?.message === 'string' && /fetch failed|network|ECONNREFUSED/i.test(e.message))
+    );
+
+    if (!shouldFallback) throw e;
 
     const fn = httpsCallable(functions, 'mfaSendCode');
     let resp;

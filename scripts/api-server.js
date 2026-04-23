@@ -94,6 +94,26 @@ function loadDotEnvFile(filePath) {
 // This enables CB_* (preferred) and BB_* (legacy) env toggles.
 loadDotEnvFile(path.resolve(process.cwd(), '.env.local'));
 loadDotEnvFile(path.resolve(process.cwd(), '.env'));
+
+function inferFirebaseProjectIdFromEas() {
+  try {
+    const p = path.resolve(process.cwd(), 'eas.json');
+    if (!fs.existsSync(p)) return '';
+    const raw = fs.readFileSync(p, 'utf8');
+    const eas = JSON.parse(raw);
+    const env = eas?.build?.internal?.env || eas?.build?.development?.env || null;
+    const projectId = env && env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ? String(env.EXPO_PUBLIC_FIREBASE_PROJECT_ID).trim() : '';
+    return projectId;
+  } catch (_) {
+    return '';
+  }
+}
+
+// Ensure firebase-admin can verify Firebase ID tokens reliably in local dev.
+if (!process.env.CB_FIREBASE_PROJECT_ID && !process.env.BB_FIREBASE_PROJECT_ID) {
+  const inferred = inferFirebaseProjectIdFromEas();
+  if (inferred) process.env.CB_FIREBASE_PROJECT_ID = inferred;
+}
 let SqliteDatabase = null;
 function getSqliteDatabaseCtor() {
   if (SqliteDatabase) return SqliteDatabase;
