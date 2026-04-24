@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { spawn, spawnSync } = require('child_process');
+const { spawnSync } = require('child_process');
 
 function parseNodeMajor(version) {
   const match = String(version || '').match(/^(\d+)/);
@@ -63,20 +63,13 @@ function reexecWithNvmNode20IfNeeded() {
     process.exit(1);
   }
 
-  const child = spawn(node20Exe, [process.argv[1], ...process.argv.slice(2)], {
+  const r = spawnSync(node20Exe, [process.argv[1], ...process.argv.slice(2)], {
     stdio: 'inherit',
     env: { ...process.env, BB_NODE_REEXEC: '1' },
-    detached: true,
+    windowsHide: true,
   });
 
-  // Detach so the parent can exit immediately without tearing down the child.
-  try {
-    child.unref();
-  } catch (_) {
-    // ignore
-  }
-
-  process.exit(0);
+  process.exit(typeof r.status === 'number' ? r.status : 1);
 }
 
 reexecWithNvmNode20IfNeeded();

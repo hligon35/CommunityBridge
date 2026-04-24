@@ -38,7 +38,7 @@
     "build:ios:production": "eas build -p ios --profile production --non-interactive",
     "submit:ios:production": "eas submit -p ios --profile production --latest --non-interactive",
     "dev-clear-server": "node ./scripts/dev-clear-server.js",
-    "api:server": "node ./scripts/api-server.js",
+    "api:server": "cross-env PORT=3005 node ./scripts/api-server.js",
     "api:mock": "cross-env PORT=3006 node ./scripts/api-mock.js",
     "smoke": "node ./scripts/smoke-e2e.js",
     "smoke:mock": "cross-env BB_BASE_URL=http://127.0.0.1:3006 node ./scripts/smoke-e2e.js",
