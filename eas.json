@@ -162,13 +162,13 @@
     },
     "testflight-internal": {
       "ios": {
-        "ascAppId": "6756227915",
+        "ascAppId": "6762587863",
         "appleId": "ligon88harold@gmail.com"
       }
     },
     "production": {
       "ios": {
-        "ascAppId": "6756227915",
+        "ascAppId": "6762587863",
         "appleId": "ligon88harold@gmail.com"
       }
     }
