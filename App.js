@@ -218,9 +218,138 @@ function MainRoutes() {
   );
 }
 
+// IMPORTANT: AppNavigator MUST be defined at module scope.
+// Previously it was declared inside `App()` and React therefore created a
+// fresh component type on every render of `App`. Whenever `setCurrentRoute`
+// fired from `onStateChange`, `App` re-rendered, the `AppNavigator` function
+// identity changed, and React unmounted + remounted the entire tree
+// (NavigationContainer, all stacks, DataProvider, every screen). That reset
+// the navigation state back to `initialRouteName="Login"` on every tab tap,
+// which is the main navigation bug reported in production.
+function AppNavigator() {
+  const auth = useAuth();
+  const [currentRoute, setCurrentRoute] = useState('Login');
+  const webEscapeHandledRef = useRef(false);
+
+  useEffect(() => {
+    // Web debugging escape hatch:
+    //  - `/?logout=1` => sign out
+    //  - `/?reset=1`  => sign out + clear storage + reload
+    try {
+      if (Platform.OS !== 'web') return;
+      if (webEscapeHandledRef.current) return;
+
+      const search = String(globalThis?.location?.search || '');
+      if (!search || search === '?') return;
+
+      const params = new URLSearchParams(search);
+      const wantsLogout = params.get('logout') === '1' || params.get('bbLogout') === '1';
+      const wantsReset = params.get('reset') === '1' || params.get('bbReset') === '1';
+      if (!wantsLogout && !wantsReset) return;
+
+      webEscapeHandledRef.current = true;
+
+      (async () => {
+        try {
+          await auth?.logout?.();
+        } catch (_) {}
+
+        if (wantsReset) {
+          try { globalThis?.localStorage?.clear?.(); } catch (_) {}
+          try { globalThis?.sessionStorage?.clear?.(); } catch (_) {}
+          try { globalThis?.indexedDB?.deleteDatabase?.('firebaseLocalStorageDb'); } catch (_) {}
+        }
+
+        // Strip the params so refreshes don't loop.
+        try {
+          const url = new URL(String(globalThis?.location?.href || ''), String(globalThis?.location?.origin || 'http://localhost'));
+          url.searchParams.delete('logout');
+          url.searchParams.delete('bbLogout');
+          url.searchParams.delete('reset');
+          url.searchParams.delete('bbReset');
+          globalThis?.history?.replaceState?.({}, '', url.pathname + url.search + url.hash);
+        } catch (_) {}
+
+        if (wantsReset) {
+          try { globalThis?.location?.reload?.(); } catch (_) {}
+        }
+      })();
+    } catch (_) {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth?.logout]);
+
+  useEffect(() => {
+    try {
+      if (!navigationRef.isReady()) return;
+      if (auth?.loading) return;
+      if (!auth?.token) return;
+
+      // If orgSettings turns on MFA (or the user isn't verified), prevent access to Main.
+      if (auth?.needsMfa) {
+        const r = navigationRef.getCurrentRoute();
+        const name = r?.name ? String(r.name) : '';
+        if (name && name !== 'Login' && name !== 'TwoFactor') {
+          navigationRef.dispatch(
+            CommonActions.reset({ index: 0, routes: [{ name: 'TwoFactor' }] })
+          );
+        }
+      }
+    } catch (_) {
+      // ignore
+    }
+  }, [auth?.loading, auth?.token, auth?.needsMfa]);
+
+  return (
+    <NavigationContainer
+      ref={navigationRef}
+      onStateChange={() => {
+        try {
+          const r = navigationRef.getCurrentRoute();
+          if (r && r.name) {
+            // Map nested route names back to top-level stack keys so BottomNav highlights correctly
+            const map = {
+              Main: 'Home',
+              CommunityMain: 'Home',
+              PostThread: 'Home',
+              ChatsList: 'Chats',
+              ChatThread: 'Chats',
+              NewThread: 'Chats',
+              MyChildMain: 'MyChild',
+              SettingsMain: 'Settings',
+              MyClassMain: 'MyClass',
+              ControlsMain: 'Controls',
+            };
+            const next = map[r.name] || r.name;
+            setCurrentRoute((prev) => (prev === next ? prev : next));
+            setDebugContext({ route: next });
+            logger.debug('nav', 'Route change', { route: next });
+          }
+        } catch (e) {
+          // ignore
+        }
+      }}
+    >
+      <AppStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
+        <AppStack.Screen name="Login">
+          {(props) => <LoginScreen {...props} suppressAutoRedirect={false} />}
+        </AppStack.Screen>
+        <AppStack.Screen
+          name="TwoFactor"
+          component={TwoFactorScreen}
+          options={{ gestureEnabled: false }}
+        />
+        <AppStack.Screen name="Main">
+          {() => <MainShell currentRoute={currentRoute} />}
+        </AppStack.Screen>
+      </AppStack.Navigator>
+    </NavigationContainer>
+  );
+}
+
 function App() {
   const [problem, setProblem] = useState(null);
-  const [currentRoute, setCurrentRoute] = useState('Login');
 
   useEffect(() => {
     try {
@@ -262,127 +391,6 @@ function App() {
         <Text>{problem.join(', ')}</Text>
         <Text style={{ marginTop: 12, color: '#666' }}>Check the import paths and default exports for those files.</Text>
       </View>
-    );
-  }
-
-  function AppNavigator() {
-    const auth = useAuth();
-    const webEscapeHandledRef = useRef(false);
-
-    useEffect(() => {
-      // Web debugging escape hatch:
-      //  - `/?logout=1` => sign out
-      //  - `/?reset=1`  => sign out + clear storage + reload
-      try {
-        if (Platform.OS !== 'web') return;
-        if (webEscapeHandledRef.current) return;
-
-        const search = String(globalThis?.location?.search || '');
-        if (!search || search === '?') return;
-
-        const params = new URLSearchParams(search);
-        const wantsLogout = params.get('logout') === '1' || params.get('bbLogout') === '1';
-        const wantsReset = params.get('reset') === '1' || params.get('bbReset') === '1';
-        if (!wantsLogout && !wantsReset) return;
-
-        webEscapeHandledRef.current = true;
-
-        (async () => {
-          try {
-            await auth?.logout?.();
-          } catch (_) {}
-
-          if (wantsReset) {
-            try { globalThis?.localStorage?.clear?.(); } catch (_) {}
-            try { globalThis?.sessionStorage?.clear?.(); } catch (_) {}
-            try { globalThis?.indexedDB?.deleteDatabase?.('firebaseLocalStorageDb'); } catch (_) {}
-          }
-
-          // Strip the params so refreshes don't loop.
-          try {
-            const url = new URL(String(globalThis?.location?.href || ''), String(globalThis?.location?.origin || 'http://localhost'));
-            url.searchParams.delete('logout');
-            url.searchParams.delete('bbLogout');
-            url.searchParams.delete('reset');
-            url.searchParams.delete('bbReset');
-            globalThis?.history?.replaceState?.({}, '', url.pathname + url.search + url.hash);
-          } catch (_) {}
-
-          if (wantsReset) {
-            try { globalThis?.location?.reload?.(); } catch (_) {}
-          }
-        })();
-      } catch (_) {
-        // ignore
-      }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [auth?.logout]);
-
-    useEffect(() => {
-      try {
-        if (!navigationRef.isReady()) return;
-        if (auth?.loading) return;
-        if (!auth?.token) return;
-
-        // If orgSettings turns on MFA (or the user isn't verified), prevent access to Main.
-        if (auth?.needsMfa) {
-          const r = navigationRef.getCurrentRoute();
-          const name = r?.name ? String(r.name) : '';
-          if (name && name !== 'Login' && name !== 'TwoFactor') {
-            navigationRef.dispatch(
-              CommonActions.reset({ index: 0, routes: [{ name: 'TwoFactor' }] })
-            );
-          }
-        }
-      } catch (_) {
-        // ignore
-      }
-    }, [auth?.loading, auth?.token, auth?.needsMfa]);
-
-    return (
-      <NavigationContainer
-        ref={navigationRef}
-        onStateChange={() => {
-          try {
-            const r = navigationRef.getCurrentRoute();
-            if (r && r.name) {
-              // Map nested route names back to top-level stack keys so BottomNav highlights correctly
-              const map = {
-                Main: 'Home',
-                CommunityMain: 'Home',
-                PostThread: 'Home',
-                ChatsList: 'Chats',
-                ChatThread: 'Chats',
-                NewThread: 'Chats',
-                MyChildMain: 'MyChild',
-                SettingsMain: 'Settings',
-                MyClassMain: 'MyClass',
-                ControlsMain: 'Controls',
-              };
-              const next = map[r.name] || r.name;
-              setCurrentRoute(next);
-              setDebugContext({ route: next });
-              logger.debug('nav', 'Route change', { route: next });
-            }
-          } catch (e) {
-            // ignore
-          }
-        }}
-      >
-        <AppStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
-          <AppStack.Screen name="Login">
-            {(props) => <LoginScreen {...props} suppressAutoRedirect={false} />}
-          </AppStack.Screen>
-          <AppStack.Screen
-            name="TwoFactor"
-            component={TwoFactorScreen}
-            options={{ gestureEnabled: false }}
-          />
-          <AppStack.Screen name="Main">
-            {() => <MainShell currentRoute={currentRoute} />}
-          </AppStack.Screen>
-        </AppStack.Navigator>
-      </NavigationContainer>
     );
   }
 

@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import LogoTitle from './LogoTitle';
 import { useAuth } from '../AuthContext';
+import { navigationRef } from '../navigationRef';
 
 export default function WebNav() {
   const navigation = useNavigation();
@@ -11,9 +12,16 @@ export default function WebNav() {
   const [open, setOpen] = useState(false);
 
   function navTo(route) {
-    // WebNav is rendered inside nested stacks (Home/Chats/Settings stacks).
-    // Those child navigators don't know sibling routes like "Chats" or "Settings".
-    // Navigate via the parent (root) navigator so these top-level links work.
+    // Top-level tab targets (Home/Chats/Settings/Controls/MyClass/MyChild)
+    // live inside the `Main` screen of the outer AppStack. Use the root
+    // navigationRef with an explicit nested-screen payload so the call works
+    // regardless of how deep in the stack tree this component is rendered.
+    try {
+      if (navigationRef?.isReady?.() && typeof navigationRef.navigate === 'function') {
+        navigationRef.navigate('Main', { screen: route });
+        return;
+      }
+    } catch (_) {}
     const parent = navigation?.getParent?.();
     if (parent?.navigate) parent.navigate(route);
     else if (navigation?.navigate) navigation.navigate(route);

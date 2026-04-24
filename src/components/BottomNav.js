@@ -35,7 +35,13 @@ export default function BottomNav({ navigationRef, currentRoute }) {
     try {
       if (!navigationRef || typeof navigationRef.isReady !== 'function' || !navigationRef.isReady()) return;
       if (typeof navigationRef.navigate !== 'function') return;
-      navigationRef.navigate(name);
+      // Tab targets (Home/Chats/MyChild/Controls/MyClass/Settings) live inside
+      // the nested `RootStack` rendered by `MainShell -> MainRoutes`, which is
+      // itself the `Main` screen of the outer `AppStack`. Calling
+      // `navigate(name)` at the container level is ambiguous (React Navigation
+      // may not find the nested route if the user is currently on `Login` or
+      // `TwoFactor`). Use the explicit nested form so it is always deterministic.
+      navigationRef.navigate('Main', { screen: name });
     } catch (_) {
       // ignore
     }

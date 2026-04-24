@@ -162,9 +162,19 @@ export function DataProvider({ children: reactChildren }) {
   const [therapists, setTherapists] = useState([]);
   const [blockedUserIds, setBlockedUserIds] = useState([]);
 
-  // Hydrate from storage then attempt remote sync
+  // Hydrate from storage then attempt remote sync.
+  //
+  // This effect must NOT re-run on every `user` object reference change;
+  // otherwise each re-render of AuthContext (which produces a new user object)
+  // replays the hydration, clobbering state that `fetchAndSync` has already
+  // populated and causing UI flicker / race conditions. Dedupe on the stable
+  // user id so we only hydrate once per signed-in identity.
+  const hydratedForUserRef = useRef(null);
   useEffect(() => {
     let mounted = true;
+    const userKey = user?.id || user?.uid || user?.email || '__anon__';
+    if (hydratedForUserRef.current === userKey) return undefined;
+    hydratedForUserRef.current = userKey;
     (async () => {
       try {
         const [postsRaw, mRaw, uRaw, cRaw, pRaw, tRaw, aRaw] = await Promise.all([
