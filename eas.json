@@ -45,7 +45,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDP9ZCQ3MSzo5ugidAbdqw7f20ZUU2gf68",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "communitybridge-26apr.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "communitybridge-26apr",
         "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "communitybridge-26apr.firebasestorage.app",
@@ -53,9 +53,9 @@
         "EXPO_PUBLIC_FIREBASE_APP_ID": "1:752508556236:android:11f36ea05c441340c14369",
         "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-HYK2C00ZRK",
         "EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION": "us-central1",
-        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "705959942740-dlu9qqt6pukb5nedchf54qijoa1lpnp2.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "705959942740-jsplm4go5rlvdia77tbgvtfebuoee63d.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "705959942740-qfoan37p3bf6klqi1r4solk2segk5phh.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "752508556236-91cfpo8cgeo8vt80ee49vgsojf9m19e5.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",
         "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "testflight-internal",
         "EXPO_PUBLIC_SENTRY_DSN": "https://2dfd13b6f80e20096c7d4d613052814c@o4510654674632704.ingest.us.sentry.io/4511236400873472",
         "SENTRY_ORG": "azlabsllc",
@@ -76,7 +76,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDP9ZCQ3MSzo5ugidAbdqw7f20ZUU2gf68",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "communitybridge-26apr.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "communitybridge-26apr",
         "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "communitybridge-26apr.firebasestorage.app",
@@ -84,10 +84,9 @@
         "EXPO_PUBLIC_FIREBASE_APP_ID": "1:752508556236:android:11f36ea05c441340c14369",
         "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-HYK2C00ZRK",
         "EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION": "us-central1",
-        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "705959942740-dlu9qqt6pukb5nedchf54qijoa1lpnp2.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "705959942740-jsplm4go5rlvdia77tbgvtfebuoee63d.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "705959942740-qfoan37p3bf6klqi1r4solk2segk5phh.apps.googleusercontent.com",
-        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "development",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "752508556236-91cfpo8cgeo8vt80ee49vgsojf9m19e5.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "development",
         "SENTRY_ORG": "azlabsllc",
         "SENTRY_PROJECT": "communitybridge",
         "SENTRY_ALLOW_FAILURE": "true",
@@ -106,7 +105,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDP9ZCQ3MSzo5ugidAbdqw7f20ZUU2gf68",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "communitybridge-26apr.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "communitybridge-26apr",
         "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "communitybridge-26apr.firebasestorage.app",
@@ -114,10 +113,9 @@
         "EXPO_PUBLIC_FIREBASE_APP_ID": "1:752508556236:android:11f36ea05c441340c14369",
         "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-HYK2C00ZRK",
         "EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION": "us-central1",
-        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "705959942740-dlu9qqt6pukb5nedchf54qijoa1lpnp2.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "705959942740-jsplm4go5rlvdia77tbgvtfebuoee63d.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "705959942740-qfoan37p3bf6klqi1r4solk2segk5phh.apps.googleusercontent.com",
-        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "preview",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "752508556236-91cfpo8cgeo8vt80ee49vgsojf9m19e5.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "preview",
         "SENTRY_ORG": "azlabsllc",
         "SENTRY_PROJECT": "communitybridge",
         "SENTRY_ALLOW_FAILURE": "true",
@@ -136,7 +134,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDP9ZCQ3MSzo5ugidAbdqw7f20ZUU2gf68",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "communitybridge-26apr.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "communitybridge-26apr",
         "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "communitybridge-26apr.firebasestorage.app",
@@ -144,10 +142,9 @@
         "EXPO_PUBLIC_FIREBASE_APP_ID": "1:752508556236:android:11f36ea05c441340c14369",
         "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-HYK2C00ZRK",
         "EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION": "us-central1",
-        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "705959942740-dlu9qqt6pukb5nedchf54qijoa1lpnp2.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "705959942740-jsplm4go5rlvdia77tbgvtfebuoee63d.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "705959942740-qfoan37p3bf6klqi1r4solk2segk5phh.apps.googleusercontent.com",
-        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "752508556236-91cfpo8cgeo8vt80ee49vgsojf9m19e5.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "production",
         "SENTRY_ORG": "azlabsllc",
         "SENTRY_PROJECT": "communitybridge",
         "SENTRY_ALLOW_FAILURE": "true",
@@ -159,7 +156,7 @@
   "submit": {
     "internal": {
       "android": {
-        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "serviceAccountKeyPath": "./google-services.json",
         "track": "internal"
       }
     },
