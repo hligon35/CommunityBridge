@@ -22,6 +22,36 @@ function run(command, args) {
   }
 }
 
+function runNode(scriptPath, args) {
+  const resolved = path.resolve(process.cwd(), scriptPath);
+  const result = spawnSync(process.execPath, [resolved, ...(args || [])], {
+    stdio: 'inherit',
+    shell: false,
+    windowsHide: true,
+  });
+
+  if (result.status !== 0) {
+    throw new Error(`Command failed: node ${scriptPath} ${(args || []).join(' ')}`);
+  }
+}
+
+function getExpoCliEntry() {
+  // Expo SDK vendors @expo/cli under the expo package.
+  // Calling the JS entry directly avoids relying on global npx/cmd shims.
+  const candidate = path.join(
+    process.cwd(),
+    'node_modules',
+    'expo',
+    'node_modules',
+    '@expo',
+    'cli',
+    'build',
+    'bin',
+    'cli'
+  );
+  return candidate;
+}
+
 function copyIfExists(src, dest) {
   if (!fs.existsSync(src)) return;
   fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -83,7 +113,14 @@ function main() {
   removeDirIfExists(path.join('public', 'home'));
   removeDirIfExists(path.join('public', 'dashboard'));
 
-  run('npx', ['expo', 'export', '--platform', 'web', '--output-dir', 'web-dist']);
+  const expoCli = getExpoCliEntry();
+  if (!fs.existsSync(expoCli)) {
+    throw new Error('Expo CLI entry not found under node_modules. Run `npm install` first.');
+  }
+
+  // Keep builds stable in CI/local: skip network dependency validation.
+  process.env.EXPO_NO_DEPENDENCY_VALIDATION = process.env.EXPO_NO_DEPENDENCY_VALIDATION || '1';
+  runNode(expoCli, ['export', '--platform', 'web', '--output-dir', 'web-dist']);
 
   // Expo export currently generates the JS bundle, but may not generate a usable HTML shell
   // if the project has a marketing `public/index.html`. We generate an explicit shell that
@@ -139,7 +176,7 @@ function main() {
   copyDirIfExists(path.join('web-dist', 'assets'), publicAssetsDir);
 
   // Generate a favicon.ico from public/icon.png (preserves transparency if present).
-  run('node', ['scripts/generate-favicon.js']);
+  runNode('scripts/generate-favicon.js');
 }
 
 main();
