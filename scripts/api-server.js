@@ -237,8 +237,12 @@ const CORS_ORIGINS = parseCsvEnv(process.env.CB_CORS_ORIGINS || process.env.BB_C
 const DEFAULT_PROD_CORS_ORIGINS = [
   'https://communitybridge.app',
   'https://www.communitybridge.app',
+  'https://app.communitybridge.app',
   'https://communitybridge-26apr.web.app',
   'https://communitybridge-26apr.firebaseapp.com',
+  'https://communitybridge-app-20260424.web.app',
+  'https://communitybridge-app-20260424.firebaseapp.com',
+  'https://communitybridge--communitybridge-26apr.us-east5.hosted.app',
 ];
 
 function buildCorsOptions() {

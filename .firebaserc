@@ -3,6 +3,17 @@
     "default": "communitybridge-26apr",
     "BETA": "communitybridge-26apr"
   },
-  "targets": {},
+  "targets": {
+    "communitybridge-26apr": {
+      "hosting": {
+        "marketing": [
+          "communitybridge-26apr"
+        ],
+        "app": [
+          "communitybridge-app-20260424"
+        ]
+      }
+    }
+  },
   "etags": {}
 }

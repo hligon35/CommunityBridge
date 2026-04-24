@@ -2,11 +2,10 @@ CommunityBridge — Application & Page Inventory
 Generated: 2026-04-20
 
 Domains (intended production routing)
-- communitybridge.app                 -> Firebase Hosting site: communitybridge-26apr (public/)
-- dashboard.communitybridge.app        -> Firebase Hosting site: communitybridge-26apr20 (web-dist/)
-- auth.communitybridge.app             -> Authentication UI (login/signup/2FA/reset)
-- api.communitybridge.app              -> Cloud Run service: communitybridge
-- admin.communitybridge.app            -> Admin-only UI
+- communitybridge.app                 -> Firebase Hosting site: communitybridge-26apr (public/) [target: marketing]
+- app.communitybridge.app              -> Firebase Hosting site: communitybridge-app-20260424 (web-dist/) [target: app]
+- api.communitybridge.app              -> Cloud Run service: communitybridge (us-central1)
+- admin.communitybridge.app            -> (reserved for future admin-only UI)
 
 ====================================================================
 A) Applications (user-facing surfaces)
@@ -21,8 +20,9 @@ A) Applications (user-facing surfaces)
   - Type: static marketing/support pages + static “dashboard” shell
    - Firebase config: firebase.json hosting[0]
 
-3) Firebase Hosting site: communitybridge-26apr20
+3) Firebase Hosting site: communitybridge-app-20260424 (target: app)
    - Source folder: web-dist/
+   - Custom domain: app.communitybridge.app
    - Type: SPA web build (catch-all rewrite to /index.html) + static support pages
    - Firebase config: firebase.json hosting[1]
 
