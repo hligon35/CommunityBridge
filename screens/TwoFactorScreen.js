@@ -61,8 +61,10 @@ export default function TwoFactorScreen({ navigation }) {
   }
 
   useEffect(() => {
+    try { console.info('[TwoFactor] mount effect', { hasToken: !!auth?.token, needsMfa: !!auth?.needsMfa, loading: !!auth?.loading }); } catch (_) {}
     if (!auth?.token) return;
     if (!auth?.needsMfa) {
+      try { console.info('[TwoFactor] needsMfa false → replacing with Main'); } catch (_) {}
       navigation.replace('Main');
       return;
     }

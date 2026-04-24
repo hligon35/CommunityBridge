@@ -29,7 +29,11 @@ export function AuthProvider({ children }) {
   }, [mfaRequired]);
 
   function markMfaRequired() {
-    if (mfaRequiredRef.current) return;
+    if (mfaRequiredRef.current) {
+      try { console.info('[auth] markMfaRequired: already gated, skipping'); } catch (_) {}
+      return;
+    }
+    try { console.info('[auth] markMfaRequired: gating UI and resetting to TwoFactor'); } catch (_) {}
     // Firestore rules for key collections (posts, urgentMemos, etc.) only deny reads
     // with "Missing or insufficient permissions" when orgSettings/main.mfaEnabled == true
     // and the user isn't verified. Treat that as a reliable signal to gate the UI.
