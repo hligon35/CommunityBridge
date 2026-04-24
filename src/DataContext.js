@@ -320,6 +320,8 @@ export function DataProvider({ children: reactChildren }) {
       if (!mfaEscalatedRef.current && typeof markMfaRequired === 'function') {
         mfaEscalatedRef.current = true;
         try { markMfaRequired(); } catch (_) {}
+        // Prevent rapid re-fetching before AuthContext state propagates.
+        needsMfaRef.current = true;
       }
 
       if (needsMfaRef.current) return;

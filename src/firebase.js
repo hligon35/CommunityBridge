@@ -242,6 +242,11 @@ async function initWebAppCheckMaybe(app) {
     if (Platform.OS !== 'web') return;
 
     const enabledFlag = parseBooleanLike(getExpoPublicEnv('EXPO_PUBLIC_ENABLE_APP_CHECK'));
+    // In local dev, default App Check to OFF unless explicitly enabled.
+    // This avoids reCAPTCHA failures (ad blockers, localhost, CSP) from
+    // spamming logs and interfering with auth/network requests.
+    if ((typeof __DEV__ !== 'undefined' && __DEV__) && enabledFlag !== true) return;
+
     if (enabledFlag === false) return;
 
     const siteKey = String(getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY') || '').trim();

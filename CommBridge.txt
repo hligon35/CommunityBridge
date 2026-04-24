@@ -1,0 +1,183 @@
+CommunityBridge / BuddyBoard — Env Setup (no .env inspection)
+
+Scope
+- This list is derived from code + config usage (Expo client, API server, Firebase Functions).
+- Prefer `CB_*` variables (new). `BB_*` are legacy aliases still supported by the server/functions.
+- Secrets (JWT, SMTP creds, Twilio token, etc.) should be stored in Secret Manager (or EAS Secrets) and injected at runtime/build.
+
+Goal: start at ~50k users, scale later
+- For 50k users, you should NOT rely on SQLite (`CB_DB_PATH`) for production traffic.
+- Use Postgres (`CB_DATABASE_URL`) + Cloud Run autoscaling + Firebase Auth/Firestore rules.
+- Add abuse controls early (App Check + server-side rate limiting + CORS allowlist).
+
+====================
+CRUCIAL (must set)
+====================
+
+A) Expo client (build-time EXPO_PUBLIC_*)
+These are required for Firebase SDK initialization and core app functionality.
+- EXPO_PUBLIC_FIREBASE_API_KEY
+- EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN
+- EXPO_PUBLIC_FIREBASE_PROJECT_ID
+- EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET
+- EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+- EXPO_PUBLIC_FIREBASE_APP_ID
+- EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION
+  - Used by: `src/firebase.js`
+
+API routing for the app:
+- EXPO_PUBLIC_API_BASE_URL
+  - Used by: `src/config.js`
+  - Notes:
+    - In dev it falls back to `http://<devhost>:3005`.
+    - In production it falls back to `https://api.communitybridge.app`, but you should set this explicitly per environment.
+
+B) API server (Cloud Run / production runtime)
+- PORT
+  - Cloud Run sets this automatically (usually 8080), but keep it supported.
+- CB_JWT_SECRET (or BB_JWT_SECRET)
+  - Used by: `scripts/api-server.js`, `scripts/api-server-pg.js`
+  - Required for: auth tokens, upload signed URL tokens, and general API auth.
+- CB_DATABASE_URL (or BB_DATABASE_URL / DATABASE_URL)
+  - Used by: `scripts/api-server-pg.js` (Postgres mode)
+  - Required for production-scale persistence.
+
+C) MFA delivery (pick at least one in production)
+Email OTP (recommended default path):
+- CB_SMTP_URL (or BB_SMTP_URL)
+- CB_EMAIL_FROM (or BB_EMAIL_FROM)
+  - Used by: `scripts/api-server*.js`, `functions/index.js`, `scripts/firebase-mfa-routes.js`
+
+OR SMS OTP (Twilio):
+- CB_TWILIO_ACCOUNT_SID (or BB_TWILIO_ACCOUNT_SID)
+- CB_TWILIO_AUTH_TOKEN (or BB_TWILIO_AUTH_TOKEN)
+- One of:
+  - CB_TWILIO_MESSAGING_SERVICE_SID (or BB_TWILIO_MESSAGING_SERVICE_SID)
+  - CB_TWILIO_FROM (or BB_TWILIO_FROM)  (E.164 like +15551234567)
+
+D) Firebase Admin context (server-side MFA routes / verification)
+In Cloud Run / GCP, ADC usually provides credentials automatically.
+- CB_FIREBASE_PROJECT_ID (or BB_FIREBASE_PROJECT_ID)
+  - Used by: `scripts/api-server.js` (dev inference), `scripts/firebase-mfa-routes.js`
+  - Notes: code can infer from `eas.json` in local dev; still set explicitly in prod.
+
+=========================
+RECOMMENDED (should set)
+=========================
+
+A) Client security + abuse protection
+- EXPO_PUBLIC_ENABLE_APP_CHECK
+- EXPO_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY
+- EXPO_PUBLIC_FIREBASE_APP_CHECK_DEBUG_TOKEN  (dev only)
+  - Used by: `src/firebase.js`
+  - Why for 50k: protects against automated abuse of Firebase resources.
+
+B) Observability
+- EXPO_PUBLIC_SENTRY_DSN
+- EXPO_PUBLIC_SENTRY_ENVIRONMENT
+  - Used by: `src/sentry.js`
+
+If you upload sourcemaps/releases in CI (common with EAS):
+- SENTRY_ORG
+- SENTRY_PROJECT
+- (and typically) SENTRY_AUTH_TOKEN  (not referenced directly in app runtime, but needed for CI uploads)
+
+C) CORS + origin safety (API server)
+- CB_CORS_ORIGINS (comma-separated) (or BB_CORS_ORIGINS)
+  - Used by: `scripts/api-server*.js`
+  - Recommendation: set explicitly in production to only the web origins you expect.
+
+D) File upload privacy
+- CB_REQUIRE_UPLOAD_AUTH (or BB_REQUIRE_UPLOAD_AUTH)
+  - Default is production-safe behavior, but set explicitly.
+
+E) API base URL correctness
+- CB_PUBLIC_BASE_URL (or BB_PUBLIC_BASE_URL)
+  - Used by: `scripts/api-server*.js`
+  - Helps generate absolute links, password reset URLs, etc.
+
+F) Google OAuth client IDs (if Google sign-in is enabled)
+- EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
+- EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
+- EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+  - Used by: `screens/LoginScreen.js`
+
+G) Postgres SSL compatibility
+- CB_PG_SSL=1 (or BB_PG_SSL=1)
+  - Used by: `scripts/api-server-pg.js`
+  - Note: code also auto-detects SSL requirement for `.supabase.co` hosts.
+
+H) Disable risky dev fallbacks in production
+- NODE_ENV=production
+  - Used by: server + MFA routes to disable dev OTP fallbacks.
+
+====================
+OPTIONAL (nice-to-have / dev / toggles)
+====================
+
+A) Dev convenience toggles (server)
+- CB_ALLOW_SIGNUP (default true)
+- CB_REQUIRE_2FA_ON_SIGNUP (default false)
+- CB_DEBUG_2FA_RETURN_CODE (default false)
+- CB_DEBUG_2FA_DELIVERY_ERRORS (default false)
+- CB_DEBUG_REQUESTS (default true)
+- CB_ALLOW_NO_DB (default false)  (static-hosting-only debug mode)
+- CB_ALLOW_DEV_TOKEN (default true unless production)
+  - Used by: `scripts/api-server*.js`
+
+B) Data / upload paths (server)
+- CB_DATA_DIR
+- CB_UPLOAD_DIR
+  - Used by: `scripts/api-server-pg.js`
+
+C) SQLite mode (dev only)
+- CB_DB_PATH
+  - Used by: `scripts/api-server.js`
+
+D) Password reset behavior
+- CB_RETURN_PASSWORD_RESET_CODE (dev-only convenience; default true outside prod)
+- CB_PASSWORD_RESET_TTL_MINUTES (default 30)
+- CB_EMAIL_PASSWORD_RESET_SUBJECT
+  - Used by: `scripts/api-server*.js`
+
+E) Email customization
+- CB_EMAIL_2FA_SUBJECT
+- CB_SMTP_FROM
+  - Used by: MFA email sending (server/functions)
+
+F) SMS sending preferences
+- CB_ENABLE_SMS_2FA (default false)
+- CB_ENABLE_EMAIL_2FA (default true)
+  - Used by: `scripts/api-server*.js`
+
+G) API server serving the web app bundle
+- CB_SERVE_WEB_APP=1
+  - Used by: `scripts/api-server-pg.js` (serves `web-dist` and public pages when host starts with `app.`)
+
+H) Client UX/testing toggles
+- EXPO_PUBLIC_GOOGLE_PLACES_API_KEY  (address autocomplete in admin screens)
+- EXPO_PUBLIC_DISABLE_DEV_AUTOLOGIN
+- EXPO_PUBLIC_DEV_AUTO_LOGIN
+  - Used by: `src/config.js`
+
+====================
+Scaling notes (practical)
+====================
+
+For ~50k users initial load:
+- Use Postgres (CB_DATABASE_URL) + Cloud Run autoscaling.
+- Keep JWT secret stable and rotate via staged rollout (don’t break existing sessions unexpectedly).
+- Turn on App Check early to protect Firebase.
+- Use an SMTP provider that can handle spikes, or Twilio Verify (if you migrate) for higher deliverability.
+
+Not currently controlled by env in code (infra-level knobs you’ll likely tune later):
+- Cloud Run:
+  - concurrency, min instances, max instances
+  - CPU/memory
+  - request timeout
+- Postgres:
+  - connection limits and pooling (consider PgBouncer or Cloud SQL connector + pooling)
+- Rate limiting:
+  - the current server limiter is in-memory; for scale, move to a shared store (Redis / Memorystore).
+
+End.

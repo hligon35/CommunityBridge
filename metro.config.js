@@ -35,6 +35,7 @@ const WEB_AUTH_INTERNAL_ENTRY = path.join(__dirname, 'node_modules', 'firebase',
 config.resolver.resolveRequest = (context, moduleName, platform) => {
 	try {
 		const isNative = platform === 'ios' || platform === 'android';
+		const isWeb = platform === 'web';
 
 		// Force Firebase Auth public entrypoints to the React Native build.
 		// Firebase 10.x does not export `firebase/auth/react-native`, and the default
@@ -45,6 +46,16 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
 		}
 		if (isNative && moduleName === 'firebase/auth/internal' && fs.existsSync(RN_AUTH_INTERNAL_ENTRY)) {
 			return { type: 'sourceFile', filePath: RN_AUTH_INTERNAL_ENTRY };
+		}
+
+		// Web bundles must NOT use the RN auth build. Because we enable the
+		// `react-native` condition for native correctness, some Metro/export
+		// combinations can accidentally pick RN exports even for platform=web.
+		if (isWeb && moduleName === 'firebase/auth' && fs.existsSync(WEB_AUTH_ENTRY)) {
+			return { type: 'sourceFile', filePath: WEB_AUTH_ENTRY };
+		}
+		if (isWeb && moduleName === 'firebase/auth/internal' && fs.existsSync(WEB_AUTH_INTERNAL_ENTRY)) {
+			return { type: 'sourceFile', filePath: WEB_AUTH_INTERNAL_ENTRY };
 		}
 
 		// Force @firebase/auth to the appropriate build:

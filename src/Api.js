@@ -85,6 +85,28 @@ function requireAuth() {
 
 export const API_BASE_URL = '';
 
+function isLikelyNetworkError(e) {
+  try {
+    const msg = String(e?.message || e || '').toLowerCase();
+    const name = String(e?.name || '').toLowerCase();
+
+    // Browser fetch failures often show as TypeError("Failed to fetch") or
+    // messages that include ERR_CONNECTION_REFUSED.
+    if (name === 'typeerror' && msg.includes('fetch')) return true;
+    if (msg.includes('failed to fetch')) return true;
+    if (msg.includes('fetch failed')) return true;
+    if (msg.includes('networkerror')) return true;
+    if (msg.includes('network request failed')) return true;
+    if (msg.includes('err_connection_refused')) return true;
+    if (msg.includes('econnrefused')) return true;
+    if (msg.includes('connection refused')) return true;
+    if (msg.includes('load failed')) return true;
+  } catch (_) {
+    // ignore
+  }
+  return false;
+}
+
 let unauthorizedHandler = null;
 export function setUnauthorizedHandler(fn) {
   unauthorizedHandler = typeof fn === 'function' ? fn : null;
@@ -272,7 +294,7 @@ export async function verify2fa(_) {
     // Only fall back if the API endpoint is missing/unreachable (older deployments).
     const shouldFallback = !!functions && (
       e?.code === 'BB_MFA_API_NOT_FOUND' ||
-      (typeof e?.message === 'string' && /fetch failed|network|ECONNREFUSED/i.test(e.message))
+      isLikelyNetworkError(e)
     );
 
     if (!shouldFallback) throw e;
@@ -353,7 +375,7 @@ export async function resend2fa(_) {
     // Only fall back if the API endpoint is missing/unreachable (older deployments).
     const shouldFallback = !!functions && (
       e?.code === 'BB_MFA_API_NOT_FOUND' ||
-      (typeof e?.message === 'string' && /fetch failed|network|ECONNREFUSED/i.test(e.message))
+      isLikelyNetworkError(e)
     );
 
     if (!shouldFallback) throw e;

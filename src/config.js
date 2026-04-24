@@ -116,6 +116,8 @@ const fallbackDevBaseUrl = (() => {
 
 const fallbackWebBaseUrl = getWebOrigin();
 
+const webDevApiBaseUrl = getWebDevApiBaseUrl();
+
 const apiBaseOverride = String(
   // NOTE: Expo only inlines EXPO_PUBLIC_* for static references.
   // This file previously used dynamic env lookup (process.env[key]), which can be empty in production.
@@ -126,10 +128,15 @@ const apiBaseOverride = String(
 ).trim();
 
 export const BASE_URL =
-  apiBaseOverride ||
-  ((typeof __DEV__ !== 'undefined' && __DEV__)
-    ? (getWebDevApiBaseUrl() || fallbackDevBaseUrl)
-    : (fallbackWebBaseUrl || DEFAULT_PROD_BASE_URL));
+  // In Expo web dev (Metro), always prefer the local API server on :3005.
+  // This prevents dev sessions from accidentally targeting production when
+  // EXPO_PUBLIC_API_BASE_URL is set for release builds.
+  (((typeof __DEV__ !== 'undefined' && __DEV__) && webDevApiBaseUrl)
+    ? webDevApiBaseUrl
+    : (apiBaseOverride ||
+      ((typeof __DEV__ !== 'undefined' && __DEV__)
+        ? fallbackDevBaseUrl
+        : (fallbackWebBaseUrl || DEFAULT_PROD_BASE_URL))));
 
 try {
   if (!BASE_URL && !(typeof __DEV__ !== 'undefined' && __DEV__)) {

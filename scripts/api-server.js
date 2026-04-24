@@ -1,5 +1,86 @@
 #!/usr/bin/env node
 
+const { spawn, spawnSync } = require('child_process');
+
+function parseNodeMajor(version) {
+  const match = String(version || '').match(/^(\d+)/);
+  return match ? Number(match[1]) : 0;
+}
+
+function getNodeMajorAtPath(nodeExe) {
+  try {
+    const r = spawnSync(nodeExe, ['-p', 'process.versions.node'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
+    });
+    if (r.status !== 0) return 0;
+    return parseNodeMajor(String(r.stdout || '').trim());
+  } catch (_) {
+    return 0;
+  }
+}
+
+function reexecWithNvmNode20IfNeeded() {
+  if (process.platform !== 'win32') return false;
+  if (process.env.BB_NODE_REEXEC === '1') return false;
+
+  const major = parseNodeMajor(process.versions && process.versions.node);
+  // This repo targets Node 20.x (see package.json engines). Avoid very new majors.
+  if (major === 20) return false;
+
+  const fs = require('fs');
+  const path = require('path');
+  const candidates = [];
+
+  if (process.env.NVM_SYMLINK) {
+    candidates.push(path.join(process.env.NVM_SYMLINK, 'node.exe'));
+  }
+
+  candidates.push('C:\\nvm4w\\nodejs\\node.exe');
+
+  if (process.env.NVM_HOME) {
+    candidates.push(path.join(process.env.NVM_HOME, 'v20.20.0', 'node.exe'));
+    candidates.push(path.join(process.env.NVM_HOME, '20.20.0', 'node.exe'));
+  }
+  candidates.push('C:\\nvm4w\\v20.20.0\\node.exe');
+  candidates.push('C:\\nvm\\v20.20.0\\node.exe');
+
+  const node20Exe = candidates.find((p) => {
+    try {
+      if (!p || !fs.existsSync(p)) return false;
+      return getNodeMajorAtPath(p) === 20;
+    } catch (_) {
+      return false;
+    }
+  });
+
+  if (!node20Exe) {
+    console.error(
+      `\nUnsupported Node.js v${process.versions.node} for local API server in this repo.\n` +
+        `Install/use Node 20.x (nvm4w) and re-run: npm run api:server\n`
+    );
+    process.exit(1);
+  }
+
+  const child = spawn(node20Exe, [process.argv[1], ...process.argv.slice(2)], {
+    stdio: 'inherit',
+    env: { ...process.env, BB_NODE_REEXEC: '1' },
+    detached: true,
+  });
+
+  // Detach so the parent can exit immediately without tearing down the child.
+  try {
+    child.unref();
+  } catch (_) {
+    // ignore
+  }
+
+  process.exit(0);
+}
+
+reexecWithNvmNode20IfNeeded();
+
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
