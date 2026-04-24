@@ -69,18 +69,20 @@ export function AuthProvider({ children }) {
 
     setMfaLoading(true);
     try {
-      // Ensure token is current.
-      const t = await fbUser.getIdToken();
+      // Ensure token is current. Force-refresh so any new custom claims (e.g. bb_mfa)
+      // set right after a successful verify are picked up immediately.
+      const t = await fbUser.getIdToken(true);
       setToken(String(t || ''));
 
-      const profile = await Api.me().catch(() => null);
+      const profile = await Api.me().catch((e) => { try { console.warn('[auth] refreshMfaState: me() failed', e?.code, e?.message); } catch (_) {} return null; });
       if (profile) setUser(profile);
 
-      const org = await Api.getOrgSettings().catch(() => null);
+      const org = await Api.getOrgSettings().catch((e) => { try { console.warn('[auth] refreshMfaState: getOrgSettings() failed', e?.code, e?.message); } catch (_) {} return null; });
       // If we've already inferred MFA is required from permission-denied errors,
       // don't accidentally clear the gate due to a transient orgSettings read failure.
-      const required = Boolean(org?.item?.mfaEnabled) || Boolean(mfaRequired);
+      const required = Boolean(org?.item?.mfaEnabled) || Boolean(mfaRequiredRef.current);
       const verified = !required || isMfaFresh(profile);
+      try { console.info('[auth] refreshMfaState result', { required, verified, hasProfile: !!profile, mfaVerifiedAt: profile?.mfaVerifiedAt }); } catch (_) {}
       setMfaRequired(required);
       setMfaVerified(verified);
       return { required, verified, needsMfa: required && !verified };
@@ -174,7 +176,7 @@ export function AuthProvider({ children }) {
 
         // If the profile read was blocked by security rules, this is almost certainly
         // the MFA gate. Mark required immediately so the UI never briefly flashes Main.
-        const isPermDenied = profileErrorCode.includes('permission-denied');
+        const isPermDenied = !!profileErrorCode && profileErrorCode.includes('permission-denied');
         if (isPermDenied) {
           try { console.info('[auth] profile read permission-denied on sign-in → gating MFA'); } catch (_) {}
           setMfaRequired(true);

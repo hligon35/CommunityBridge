@@ -92,6 +92,11 @@ function buildSpaIndexHtml({ title, appEntrySrc }) {
     <link rel="icon" type="image/png" href="/icon.png" sizes="any" />
     <link rel="apple-touch-icon" href="/icon.png" />
     <title>${title}</title>
+    <style>
+      html, body, #root { height: 100%; margin: 0; padding: 0; }
+      body { background: #ffffff; -webkit-font-smoothing: antialiased; }
+      #root { display: flex; flex-direction: column; min-height: 100vh; }
+    </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

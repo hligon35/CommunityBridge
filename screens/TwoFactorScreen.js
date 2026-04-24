@@ -50,10 +50,20 @@ export default function TwoFactorScreen({ navigation }) {
 
     setBusy(true);
     try {
+      try { console.info('[TwoFactor] verify: calling Api.verify2fa', { codeLen: cleaned.length }); } catch (_) {}
       await Api.verify2fa({ code: cleaned });
-      await auth.refreshMfaState();
+      try { console.info('[TwoFactor] verify: api success, refreshing MFA state'); } catch (_) {}
+      const gate = await auth.refreshMfaState();
+      try { console.info('[TwoFactor] verify: gate', gate); } catch (_) {}
+      if (gate && gate.needsMfa) {
+        try { console.warn('[TwoFactor] verify: gate still needsMfa=true after refresh; not navigating'); } catch (_) {}
+        Alert.alert('Verification incomplete', 'The server accepted the code but the session is still gated. Please refresh and try again.');
+        return;
+      }
+      try { console.info('[TwoFactor] verify: navigating to Main'); } catch (_) {}
       navigation.replace('Main');
     } catch (e) {
+      try { console.error('[TwoFactor] verify failed', { code: e?.code, status: e?.httpStatus, message: e?.message }); } catch (_) {}
       Alert.alert('Verification failed', e?.message || 'Please check the code and try again.');
     } finally {
       setBusy(false);
@@ -80,7 +90,7 @@ export default function TwoFactorScreen({ navigation }) {
 
   if (auth?.loading) {
     return (
-      <View style={[styles.screen, { alignItems: 'center', justifyContent: 'center' }]}>
+      <View style={[styles.screen, Platform.OS === 'web' ? { minHeight: '100vh' } : null, { alignItems: 'center', justifyContent: 'center' }]}>
         <ActivityIndicator size="large" color="#2563eb" />
         <Text style={{ marginTop: 12, color: '#374151', fontSize: 16 }}>Loading two-step verification…</Text>
       </View>
@@ -90,9 +100,14 @@ export default function TwoFactorScreen({ navigation }) {
   let logoSource = null;
   try { logoSource = require('../public/logo.png'); } catch (_) { logoSource = null; }
 
+  // On web, use real viewport height so the centered card can't render at 0 height.
+  const webViewportStyle = Platform.OS === 'web'
+    ? { minHeight: '100vh', width: '100%' }
+    : null;
+
   return (
-    <View style={styles.screen}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <View style={[styles.screen, webViewportStyle]}>
+      <KeyboardAvoidingView style={{ flex: 1, minHeight: Platform.OS === 'web' ? '100vh' : undefined }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
           <View style={styles.brandSection}>
             {logoSource ? (
