@@ -76,24 +76,32 @@ export default function TwoFactorScreen({ navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth?.token, auth?.needsMfa]);
 
+  try { console.info('[TwoFactor] render', { loading: !!auth?.loading, needsMfa: !!auth?.needsMfa, hasToken: !!auth?.token, email }); } catch (_) {}
+
   if (auth?.loading) {
     return (
       <View style={[styles.screen, { alignItems: 'center', justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color="#2563eb" />
+        <Text style={{ marginTop: 12, color: '#374151', fontSize: 16 }}>Loading two-step verification…</Text>
       </View>
     );
   }
+
+  let logoSource = null;
+  try { logoSource = require('../public/logo.png'); } catch (_) { logoSource = null; }
 
   return (
     <View style={styles.screen}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
           <View style={styles.brandSection}>
-            <Image
-              source={require('../public/logo.png')}
-              accessibilityLabel="CommunityBridge"
-              style={styles.logo}
-            />
+            {logoSource ? (
+              <Image
+                source={logoSource}
+                accessibilityLabel="CommunityBridge"
+                style={styles.logo}
+              />
+            ) : null}
           </View>
 
           <View style={styles.card}>

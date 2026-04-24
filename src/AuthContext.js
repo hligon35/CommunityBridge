@@ -154,10 +154,12 @@ export function AuthProvider({ children }) {
         // Load user profile document (role, etc.). If it fails (permission-denied),
         // keep a minimal user so the app doesn't bounce to Login.
         let profile = null;
+        let profileErrorCode = null;
         try {
           profile = await Api.me();
         } catch (e) {
           setAuthError(e);
+          profileErrorCode = String(e?.code || '').toLowerCase();
           profile = null;
         }
 
@@ -170,12 +172,23 @@ export function AuthProvider({ children }) {
           }
         );
 
+        // If the profile read was blocked by security rules, this is almost certainly
+        // the MFA gate. Mark required immediately so the UI never briefly flashes Main.
+        const isPermDenied = profileErrorCode.includes('permission-denied');
+        if (isPermDenied) {
+          try { console.info('[auth] profile read permission-denied on sign-in → gating MFA'); } catch (_) {}
+          setMfaRequired(true);
+          setMfaVerified(false);
+          // Best-effort navigate; stack may not be ready yet, resetToTwoFactor retries.
+          try { resetToTwoFactor(); } catch (_) {}
+        }
+
         // Compute MFA gate (based on orgSettings + profile.mfaVerifiedAt).
         // If profile cannot be read, treat verification as false when required.
-        let required = false;
+        let required = isPermDenied; // start with the inferred gate
         try {
           const org = await Api.getOrgSettings().catch(() => null);
-          required = Boolean(org?.item?.mfaEnabled);
+          required = Boolean(org?.item?.mfaEnabled) || required;
         } catch (e) {
           // If org settings can't be loaded, keep the existing values.
           setAuthError(e);
