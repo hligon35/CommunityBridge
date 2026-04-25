@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Api from './Api';
 import { getAuthInstance, getAuthInitError } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -8,6 +9,7 @@ import { logger, setDebugContext } from './utils/logger';
 import { reportErrorToSentry } from './utils/reportError';
 
 const AuthContext = createContext(null);
+const MFA_VERIFIED_CACHE_KEY = 'bb_mfa_verified_at_cache_v1';
 
 export function useAuth() {
   return useContext(AuthContext);
@@ -58,6 +60,35 @@ export function AuthProvider({ children }) {
     }
   }
 
+  async function readCachedMfaVerifiedAt() {
+    try {
+      const raw = await AsyncStorage.getItem(MFA_VERIFIED_CACHE_KEY);
+      return raw ? String(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function writeCachedMfaVerifiedAt(value) {
+    try {
+      if (!value) {
+        await AsyncStorage.removeItem(MFA_VERIFIED_CACHE_KEY);
+        return;
+      }
+      await AsyncStorage.setItem(MFA_VERIFIED_CACHE_KEY, String(value));
+    } catch (_) {
+      // ignore cache failures
+    }
+  }
+
+  async function clearCachedMfaVerifiedAt() {
+    try {
+      await AsyncStorage.removeItem(MFA_VERIFIED_CACHE_KEY);
+    } catch (_) {
+      // ignore cache failures
+    }
+  }
+
   async function refreshMfaState() {
     const a = getAuthInstance();
     const fbUser = a?.currentUser || null;
@@ -101,12 +132,19 @@ export function AuthProvider({ children }) {
 
       const profile = await readProfileWithRetry();
       if (profile) setUser(profile);
+      if (isMfaFresh(profile)) {
+        await writeCachedMfaVerifiedAt(profile?.mfaVerifiedAt);
+      }
 
       const org = await Api.getOrgSettings().catch((e) => { try { console.warn('[auth] refreshMfaState: getOrgSettings() failed', e?.code, e?.message); } catch (_) {} return null; });
       // If we've already inferred MFA is required from permission-denied errors,
       // don't accidentally clear the gate due to a transient orgSettings read failure.
       const required = Boolean(org?.item?.mfaEnabled) || Boolean(mfaRequiredRef.current);
-      const verified = !required || isMfaFresh(profile);
+      let verified = !required || isMfaFresh(profile);
+      if (!verified && required && !profile) {
+        const cachedMfaVerifiedAt = await readCachedMfaVerifiedAt();
+        verified = isMfaFresh({ mfaVerifiedAt: cachedMfaVerifiedAt, mfaVerifiedAtIsTimestamp: true });
+      }
       try { console.info('[auth] refreshMfaState result', { required, verified, hasProfile: !!profile, mfaVerifiedAt: profile?.mfaVerifiedAt }); } catch (_) {}
       setMfaRequired(required);
       setMfaVerified(verified);
@@ -222,7 +260,15 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        const verified = !required || (profile ? isMfaFresh(profile) : false);
+        if (isMfaFresh(profile)) {
+          await writeCachedMfaVerifiedAt(profile?.mfaVerifiedAt);
+        }
+
+        let verified = !required || (profile ? isMfaFresh(profile) : false);
+        if (!verified && required && !isPermDenied && !profile) {
+          const cachedMfaVerifiedAt = await readCachedMfaVerifiedAt();
+          verified = isMfaFresh({ mfaVerifiedAt: cachedMfaVerifiedAt, mfaVerifiedAtIsTimestamp: true });
+        }
         setMfaRequired(required);
         setMfaVerified(verified);
       } finally {
@@ -283,6 +329,8 @@ export function AuthProvider({ children }) {
     } catch (_) {
       // ignore
     }
+
+    await clearCachedMfaVerifiedAt();
 
     setToken(null);
     setUser(null);
