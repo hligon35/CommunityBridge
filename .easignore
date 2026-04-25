@@ -3,6 +3,8 @@
 .git/
 .expo/
 .vscode/
+.firebase/
+.agents/
 
 env/
 
@@ -10,12 +12,31 @@ node_modules/
 
 dist/
 build/
-.web-dist/
+tmp/
+web/
+web-dist/
+
+# Firebase Hosting / Expo web export output is not needed for native EAS builds.
+public/**
+!public/icon.png
+!public/cblogo.png
+!public/favicon.ico
+
+# Server-side and packaging artifacts are not used by the mobile app build.
+functions/
+BuddyBoard_Client_Packet/
 
 android/**/build/
 ios/**/build/
 
 .data/
+
+# Local secrets and ad-hoc artifacts
+*.p8
+client_secret*.json
+tmp-login.json
+CommBridge.txt
+domainPaths.txt
 
 *.log
 npm-debug.log*
