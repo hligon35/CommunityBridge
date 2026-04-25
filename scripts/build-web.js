@@ -161,6 +161,10 @@ function main() {
   fs.writeFileSync(path.join(publicDashboardDir, 'index.html'), spaIndexHtml, 'utf8');
   copyIfExists(path.join('web-dist', 'metadata.json'), path.join(publicDashboardDir, 'metadata.json'));
 
+  // Some exported asset URLs resolve relative to /dashboard in the marketing-hosted SPA.
+  // Mirror the exported asset tree under /dashboard so nested route asset lookups still resolve.
+  copyDirIfExists(path.join('web-dist', 'assets'), path.join(publicDashboardDir, 'assets'));
+
   // Legacy: keep /home working by redirecting to /dashboard.
   const publicHomeDir = path.join('public', 'home');
   removeDirIfExists(publicHomeDir);

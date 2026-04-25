@@ -57,6 +57,26 @@ function getWebDevApiBaseUrl() {
   return '';
 }
 
+function getPreferredWebApiBaseUrl() {
+  try {
+    if (typeof window === 'undefined' || !window.location) return '';
+
+    const origin = String(window.location.origin || '').trim();
+    const port = String(window.location.port || '').trim();
+    if (!origin) return '';
+
+    // Expo web dev runs on Metro and needs the separate local API server.
+    if ((typeof __DEV__ !== 'undefined' && __DEV__) && (port === '8081' || port === '19006')) {
+      return '';
+    }
+
+    // Hosted web builds should use the same origin and rely on /api rewrites.
+    return origin;
+  } catch (_) {
+    return '';
+  }
+}
+
 function envFlag(value, defaultValue = false) {
   try {
     if (value == null) return defaultValue;
@@ -117,6 +137,7 @@ const fallbackDevBaseUrl = (() => {
 const fallbackWebBaseUrl = getWebOrigin();
 
 const webDevApiBaseUrl = getWebDevApiBaseUrl();
+const preferredWebApiBaseUrl = getPreferredWebApiBaseUrl();
 
 const apiBaseOverride = String(
   // NOTE: Expo only inlines EXPO_PUBLIC_* for static references.
@@ -133,7 +154,8 @@ export const BASE_URL =
   // EXPO_PUBLIC_API_BASE_URL is set for release builds.
   (((typeof __DEV__ !== 'undefined' && __DEV__) && webDevApiBaseUrl)
     ? webDevApiBaseUrl
-    : (apiBaseOverride ||
+    : (preferredWebApiBaseUrl ||
+      apiBaseOverride ||
       ((typeof __DEV__ !== 'undefined' && __DEV__)
         ? fallbackDevBaseUrl
         : (fallbackWebBaseUrl || DEFAULT_PROD_BASE_URL))));
