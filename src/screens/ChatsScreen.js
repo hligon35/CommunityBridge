@@ -97,8 +97,8 @@ export default function ChatsScreen({ navigation }) {
   // Ensure the native stack header buttons are reset (Fast Refresh can preserve prior setOptions).
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerLeft: () => <HelpButton />,
-      headerRight: () => <LogoutButton />,
+      headerLeft: Platform.OS === 'web' ? undefined : () => <HelpButton />,
+      headerRight: Platform.OS === 'web' ? undefined : () => <LogoutButton />,
     });
   }, [navigation]);
 

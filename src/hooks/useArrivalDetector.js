@@ -5,10 +5,11 @@ import * as Api from '../Api';
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
 import { setArrivalBackgroundState, startArrivalBackgroundLocation, stopArrivalBackgroundLocation } from '../utils/arrivalBackgroundLocation';
+import { SETTINGS_KEYS, readBooleanSetting, readJsonSetting, subscribeToSetting } from '../utils/appSettings';
 
-const ARRIVAL_KEY = 'settings_arrival_enabled_v1';
-const BUSINESS_ADDR_KEY = 'business_address_v1';
-const ORG_ARRIVAL_KEY = 'settings_arrival_org_enabled_v1';
+const ARRIVAL_KEY = SETTINGS_KEYS.arrivalEnabled;
+const BUSINESS_ADDR_KEY = SETTINGS_KEYS.businessAddress;
+const ORG_ARRIVAL_KEY = SETTINGS_KEYS.orgArrivalEnabled;
 
 // Default window (minutes) to check around scheduled times
 const DEFAULT_WINDOW_MIN = 30; // start 30 minutes before
@@ -96,13 +97,12 @@ export default function useArrivalDetector() {
     let mounted = true;
     async function refreshFromStorage() {
       try {
-        const a = await AsyncStorage.getItem(ARRIVAL_KEY);
-        const o = await AsyncStorage.getItem(ORG_ARRIVAL_KEY);
-        const bRaw = await AsyncStorage.getItem(BUSINESS_ADDR_KEY);
+        const a = await readBooleanSetting(ARRIVAL_KEY, false);
+        const o = await readBooleanSetting(ORG_ARRIVAL_KEY, true);
+        const bRaw = await readJsonSetting(BUSINESS_ADDR_KEY, null);
         if (!mounted) return;
-        setEnabled(a === '1');
-        // default to enabled when not set
-        setOrgEnabled(o !== '0');
+        setEnabled(!!a);
+        setOrgEnabled(!!o);
         if (bRaw) setBusiness(JSON.parse(bRaw));
 
         // Prefer server-backed org settings when available (keeps all devices consistent).
@@ -130,8 +130,20 @@ export default function useArrivalDetector() {
 
     refreshFromStorage();
 
+    const unsubArrival = subscribeToSetting(ARRIVAL_KEY, (value) => setEnabled(!!value));
+    const unsubOrgArrival = subscribeToSetting(ORG_ARRIVAL_KEY, (value) => setOrgEnabled(value !== false));
+    const unsubBusiness = subscribeToSetting(BUSINESS_ADDR_KEY, (value) => {
+      setBusiness(value && typeof value === 'object' ? value : null);
+    });
+
     const sub = AppState.addEventListener ? AppState.addEventListener('change', (next) => _handleAppState(next, refreshFromStorage)) : null;
-    return () => { mounted = false; if (sub && sub.remove) sub.remove(); };
+    return () => {
+      mounted = false;
+      try { unsubArrival(); } catch (_) {}
+      try { unsubOrgArrival(); } catch (_) {}
+      try { unsubBusiness(); } catch (_) {}
+      if (sub && sub.remove) sub.remove();
+    };
   }, []);
 
   useEffect(() => {

@@ -11,27 +11,32 @@ export default function WebNav() {
   const role = (user && user.role) ? (user.role || '').toString().toLowerCase() : 'parent';
   const [open, setOpen] = useState(false);
 
-  function navTo(route) {
+  function navTo(route, params) {
     // Top-level tab targets (Home/Chats/Settings/Controls/MyClass/MyChild)
     // live inside the `Main` screen of the outer AppStack. Use the root
     // navigationRef with an explicit nested-screen payload so the call works
     // regardless of how deep in the stack tree this component is rendered.
     try {
       if (navigationRef?.isReady?.() && typeof navigationRef.navigate === 'function') {
-        navigationRef.navigate('Main', { screen: route });
+        navigationRef.navigate('Main', { screen: route, ...(params ? { params } : {}) });
         return;
       }
     } catch (_) {}
     const parent = navigation?.getParent?.();
-    if (parent?.navigate) parent.navigate(route);
-    else if (navigation?.navigate) navigation.navigate(route);
+    if (parent?.navigate) parent.navigate(route, params);
+    else if (navigation?.navigate) navigation.navigate(route, params);
+  }
+
+  function openHelp() {
+    setOpen(false);
+    navTo('Settings', { screen: 'Help' });
   }
 
   return (
     <View style={styles.container}>
       <View style={styles.inner}>
         <TouchableOpacity onPress={() => navTo('Home')} style={styles.logoWrap}>
-          <LogoTitle small />
+          <LogoTitle width={240} height={72} />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -47,9 +52,11 @@ export default function WebNav() {
           <View style={styles.links}>
             <TouchableOpacity onPress={() => { setOpen(false); navTo('Home'); }} style={styles.link}><Text style={styles.linkText}>Home</Text></TouchableOpacity>
             <TouchableOpacity onPress={() => { setOpen(false); navTo('Chats'); }} style={styles.link}><Text style={styles.linkText}>Messages</Text></TouchableOpacity>
+            {role !== 'therapist' && <TouchableOpacity onPress={() => { setOpen(false); navTo('MyChild'); }} style={styles.link}><Text style={styles.linkText}>My Child</Text></TouchableOpacity>}
             {role === 'therapist' && <TouchableOpacity onPress={() => { setOpen(false); navTo('MyClass'); }} style={styles.link}><Text style={styles.linkText}>My Class</Text></TouchableOpacity>}
             {(role === 'admin' || role === 'administrator') && <TouchableOpacity onPress={() => { setOpen(false); navTo('Controls'); }} style={styles.link}><Text style={styles.linkText}>Dashboard</Text></TouchableOpacity>}
             <TouchableOpacity onPress={() => { setOpen(false); navTo('Settings'); }} style={styles.link}><Text style={styles.linkText}>Settings</Text></TouchableOpacity>
+            <TouchableOpacity onPress={openHelp} style={styles.link}><Text style={styles.linkText}>Help</Text></TouchableOpacity>
 
             {user ? (
               <TouchableOpacity onPress={() => { setOpen(false); logout && logout(); }} style={styles.link}>
@@ -80,12 +87,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 16,
     zIndex: 1000,
   },
   logoWrap: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'center',
   },
   links: {
@@ -93,7 +100,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     position: 'absolute',
     right: 16,
-    top: 56,
+    top: 72,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#e5e7eb',

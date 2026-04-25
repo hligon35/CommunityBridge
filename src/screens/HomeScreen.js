@@ -12,6 +12,7 @@ import * as Api from '../Api';
 import PostCard from '../components/PostCard';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
+import { applyCurrentUserPrivacySettings } from '../utils/appSettings';
 
 // PostCard is now a shared component in ../components/PostCard
 
@@ -288,18 +289,7 @@ export default function HomeScreen() {
                 const found = tryFind(children) || tryFind(therapists);
                 if (found) full = { ...found, ...full };
                 // If the tapped user is the current user, respect local privacy settings persisted in AsyncStorage
-                try {
-                  const SHOW_EMAIL_KEY = 'settings_show_email_v1';
-                  const SHOW_PHONE_KEY = 'settings_show_phone_v1';
-                  if (full && user && full.id && user.id && full.id === user.id) {
-                    const se = await AsyncStorage.getItem(SHOW_EMAIL_KEY);
-                    const sp = await AsyncStorage.getItem(SHOW_PHONE_KEY);
-                    if (se !== null) full.showEmail = (se === '1');
-                    if (sp !== null) full.showPhone = (sp === '1');
-                  }
-                } catch (e) {
-                  // ignore
-                }
+                full = await applyCurrentUserPrivacySettings(full, user);
                 setSelectedUser(full);
                 setShowUserModal(true);
               }}

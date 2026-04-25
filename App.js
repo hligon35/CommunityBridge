@@ -54,12 +54,14 @@ const AppStack = createNativeStackNavigator();
 const HEADER_LOGO_WIDTH = 240;
 const HEADER_LOGO_HEIGHT = 72;
 const HEADER_HEIGHT = 96;
+const SHOW_STACK_HEADERS = Platform.OS !== 'web';
 
 const MyClassStackNav = createNativeStackNavigator();
 function MyClassStack() {
   return (
     <MyClassStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
+        headerShown: SHOW_STACK_HEADERS,
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
@@ -77,6 +79,7 @@ function ControlsStack() {
   return (
     <ControlsStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
+        headerShown: SHOW_STACK_HEADERS,
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
@@ -110,7 +113,7 @@ function CommunityStack() {
   return (
     <CommunityStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
-        headerShown: true,
+        headerShown: SHOW_STACK_HEADERS,
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
@@ -129,6 +132,7 @@ function MyChildStack() {
   return (
     <MyChildStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
+        headerShown: SHOW_STACK_HEADERS,
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
@@ -146,6 +150,7 @@ function ChatsStack() {
   return (
     <ChatsStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
+        headerShown: SHOW_STACK_HEADERS,
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
@@ -165,6 +170,7 @@ function SettingsStack() {
   return (
     <SettingsStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
+        headerShown: SHOW_STACK_HEADERS,
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },

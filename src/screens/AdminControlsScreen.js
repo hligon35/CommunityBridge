@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GOOGLE_PLACES_API_KEY } from '../config';
 import * as FileSystem from 'expo-file-system';
 import * as Api from '../Api';
+import { SETTINGS_KEYS, readJsonSetting, writeBooleanSetting, writeJsonSetting } from '../utils/appSettings';
 
 const APP_BUNDLE_ID = (() => {
   try {
@@ -20,8 +21,8 @@ const APP_BUNDLE_ID = (() => {
   }
 })();
 
-const BUSINESS_ADDR_KEY = 'business_address_v1';
-const ORG_ARRIVAL_KEY = 'settings_arrival_org_enabled_v1';
+const BUSINESS_ADDR_KEY = SETTINGS_KEYS.businessAddress;
+const ORG_ARRIVAL_KEY = SETTINGS_KEYS.orgArrivalEnabled;
 
 export default function AdminControlsScreen() {
   const navigation = useNavigation();
@@ -227,13 +228,13 @@ export default function AdminControlsScreen() {
             if (typeof item.dropZoneMiles === 'number') setDropZoneMiles(String(item.dropZoneMiles));
             // Cache locally as fallback.
             try {
-              await AsyncStorage.setItem(ORG_ARRIVAL_KEY, item.orgArrivalEnabled === false ? '0' : '1');
-              await AsyncStorage.setItem(BUSINESS_ADDR_KEY, JSON.stringify({
+              await writeBooleanSetting(ORG_ARRIVAL_KEY, item.orgArrivalEnabled !== false);
+              await writeJsonSetting(BUSINESS_ADDR_KEY, {
                 address: item.address,
                 lat: item.lat,
                 lng: item.lng,
                 dropZoneMiles: item.dropZoneMiles,
-              }));
+              });
             } catch (e) {}
             return;
           }
@@ -246,10 +247,10 @@ export default function AdminControlsScreen() {
         // default to enabled when not set
         setOrgArrivalEnabled(orgRaw !== '0');
 
-        const raw = await AsyncStorage.getItem(BUSINESS_ADDR_KEY);
+        const raw = await readJsonSetting(BUSINESS_ADDR_KEY, null);
         if (!mounted) return;
         if (raw) {
-          const parsed = JSON.parse(raw);
+          const parsed = raw;
           if (parsed && typeof parsed === 'object') {
             if (parsed.address) {
               suppressAutocompleteRef.current = 1;
@@ -299,7 +300,7 @@ export default function AdminControlsScreen() {
         dropZoneMiles: Number.isFinite(Number(dropZoneMiles)) ? Number(dropZoneMiles) : null,
         orgArrivalEnabled: next,
       });
-      await AsyncStorage.setItem(ORG_ARRIVAL_KEY, next ? '1' : '0');
+      await writeBooleanSetting(ORG_ARRIVAL_KEY, next);
     } catch (e) {
       // revert on failure
       setOrgArrivalEnabled(!next);
@@ -360,7 +361,7 @@ export default function AdminControlsScreen() {
     };
     try {
       await Api.updateOrgSettings({ ...obj, orgArrivalEnabled });
-      await AsyncStorage.setItem(BUSINESS_ADDR_KEY, JSON.stringify(obj));
+      await writeJsonSetting(BUSINESS_ADDR_KEY, obj);
       Alert.alert('Saved', 'Arrival detection controls updated.');
     } catch (e) {
       Alert.alert('Error', 'Could not save arrival detection controls.');

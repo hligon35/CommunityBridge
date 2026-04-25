@@ -7,6 +7,7 @@ import { useData } from '../DataContext';
 import PostCard from '../components/PostCard';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { avatarSourceFor } from '../utils/idVisibility';
+import { applyCurrentUserPrivacySettings } from '../utils/appSettings';
 
 export default function PostThreadScreen() {
   const route = useRoute();
@@ -61,16 +62,7 @@ export default function PostThreadScreen() {
           const tryFind = (list) => (list || []).find((u) => (u.id && full.id && u.id === full.id) || (u.name && full.name && u.name === full.name));
           const found = tryFind(children) || tryFind(therapists);
           if (found) full = { ...found, ...full };
-          try {
-            const SHOW_EMAIL_KEY = 'settings_show_email_v1';
-            const SHOW_PHONE_KEY = 'settings_show_phone_v1';
-            if (full && user && full.id && user.id && full.id === user.id) {
-              const se = await AsyncStorage.getItem(SHOW_EMAIL_KEY);
-              const sp = await AsyncStorage.getItem(SHOW_PHONE_KEY);
-              if (se !== null) full.showEmail = (se === '1');
-              if (sp !== null) full.showPhone = (sp === '1');
-            }
-          } catch (e) {}
+          full = await applyCurrentUserPrivacySettings(full, user);
           setSelectedUser(full);
           setShowUserModal(true);
         }}

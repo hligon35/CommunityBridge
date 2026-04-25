@@ -1,7 +1,7 @@
 // Central helper for ID visibility and safe avatar seeds
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SETTINGS_KEYS, readBooleanSetting, writeBooleanSetting } from './appSettings';
 
-const SHOW_IDS_KEY = 'settings_show_ids_v1';
+const SHOW_IDS_KEY = SETTINGS_KEYS.showIds;
 
 export const DEFAULT_AVATAR_SOURCE = require('../../assets/avatar.png');
 
@@ -9,8 +9,7 @@ let idVisibilityEnabled = false; // module-level cache
 
 export async function initIdVisibilityFromStorage() {
   try {
-    const v = await AsyncStorage.getItem(SHOW_IDS_KEY);
-    idVisibilityEnabled = (v === '1');
+    idVisibilityEnabled = await readBooleanSetting(SHOW_IDS_KEY, false);
     return idVisibilityEnabled;
   } catch (e) {
     return idVisibilityEnabled;
@@ -20,7 +19,7 @@ export async function initIdVisibilityFromStorage() {
 export function setIdVisibilityEnabled(val) {
   idVisibilityEnabled = !!val;
   try {
-    AsyncStorage.setItem(SHOW_IDS_KEY, idVisibilityEnabled ? '1' : '0');
+    writeBooleanSetting(SHOW_IDS_KEY, idVisibilityEnabled);
   } catch (e) {}
 }
 

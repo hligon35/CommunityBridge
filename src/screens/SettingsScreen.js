@@ -11,8 +11,9 @@ import { registerForExpoPushTokenAsync } from '../utils/pushNotifications';
 import * as Api from '../Api';
 import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
+import { SETTINGS_KEYS, readBooleanSetting, writeBooleanSetting, writeJsonSetting } from '../utils/appSettings';
 
-const ARRIVAL_KEY = 'settings_arrival_enabled_v1';
+const ARRIVAL_KEY = SETTINGS_KEYS.arrivalEnabled;
 const PUSH_KEY = 'settings_push_enabled_v1';
 const PUSH_CHATS_KEY = 'settings_push_chats_v1';
 const PUSH_TIMELINE_POSTS_KEY = 'settings_push_timeline_posts_v1';
@@ -22,10 +23,10 @@ const PUSH_REPLIES_COMMENTS_KEY = 'settings_push_replies_comments_v1';
 const PUSH_MENTIONS_COMMENTS_KEY = 'settings_push_mentions_comments_v1';
 const PUSH_UPDATES_KEY = 'settings_push_updates_v1';
 const PUSH_OTHER_KEY = 'settings_push_other_v1';
-const SHOW_EMAIL_KEY = 'settings_show_email_v1';
-const SHOW_PHONE_KEY = 'settings_show_phone_v1';
-const SHOW_IDS_KEY = 'settings_show_ids_v1';
-const BUSINESS_ADDR_KEY = 'business_address_v1';
+const SHOW_EMAIL_KEY = SETTINGS_KEYS.showEmail;
+const SHOW_PHONE_KEY = SETTINGS_KEYS.showPhone;
+const SHOW_IDS_KEY = SETTINGS_KEYS.showIds;
+const BUSINESS_ADDR_KEY = SETTINGS_KEYS.businessAddress;
 
 export default function SettingsScreen({ navigation }) {
   const { user, logout, setRole } = useAuth();
@@ -70,7 +71,7 @@ export default function SettingsScreen({ navigation }) {
     let mounted = true;
     const load = async () => {
       try {
-        const a = await AsyncStorage.getItem(ARRIVAL_KEY);
+        const a = await readBooleanSetting(ARRIVAL_KEY, false);
         const p = await AsyncStorage.getItem(PUSH_KEY);
         const pc = await AsyncStorage.getItem(PUSH_CHATS_KEY);
         const pt = await AsyncStorage.getItem(PUSH_TIMELINE_POSTS_KEY);
@@ -81,7 +82,7 @@ export default function SettingsScreen({ navigation }) {
         const pu = await AsyncStorage.getItem(PUSH_UPDATES_KEY);
         const po = await AsyncStorage.getItem(PUSH_OTHER_KEY);
         if (!mounted) return;
-        if (a !== null) setArrivalEnabled(a === '1');
+        setArrivalEnabled(!!a);
         if (p !== null) setPushEnabled(p === '1');
         if (pc !== null) setPushChats(pc === '1');
         if (pt !== null) setPushTimelinePosts(pt === '1');
@@ -184,7 +185,7 @@ export default function SettingsScreen({ navigation }) {
           }
         }
       } catch (e) {}
-      await AsyncStorage.setItem(BUSINESS_ADDR_KEY, JSON.stringify(merged));
+      await writeJsonSetting(BUSINESS_ADDR_KEY, merged);
       setBusinessAddress(merged.address || '');
     } catch (e) {}
   }
@@ -219,7 +220,7 @@ export default function SettingsScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
-    AsyncStorage.setItem(ARRIVAL_KEY, arrivalEnabled ? '1' : '0').catch(() => {});
+    writeBooleanSetting(ARRIVAL_KEY, arrivalEnabled).catch(() => {});
   }, [arrivalEnabled]);
 
   useEffect(() => {
@@ -315,16 +316,14 @@ export default function SettingsScreen({ navigation }) {
   ]);
 
   useEffect(() => {
-    AsyncStorage.setItem(SHOW_EMAIL_KEY, showEmail ? '1' : '0').catch(() => {});
+    writeBooleanSetting(SHOW_EMAIL_KEY, showEmail).catch(() => {});
   }, [showEmail]);
 
   useEffect(() => {
-    AsyncStorage.setItem(SHOW_PHONE_KEY, showPhone ? '1' : '0').catch(() => {});
+    writeBooleanSetting(SHOW_PHONE_KEY, showPhone).catch(() => {});
   }, [showPhone]);
 
   useEffect(() => {
-    AsyncStorage.setItem(SHOW_IDS_KEY, showIds ? '1' : '0').catch(() => {});
-    // update module-level visibility immediately
     setIdVisibilityEnabled(!!showIds);
   }, [showIds]);
 
@@ -583,12 +582,19 @@ export default function SettingsScreen({ navigation }) {
           {/* Updates & Reminders */}
           <View style={{ marginTop: 8, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>
             <Text style={{ fontSize: 14, fontWeight: '700', marginBottom: 6 }}>Updates & Reminders</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <View style={{ flex: 1, paddingRight: 8 }}>
                 <Text style={{ fontSize: 14 }}>Updates & reminders</Text>
                 <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Reminders for events, schedule changes, and urgent updates.</Text>
               </View>
               <Switch value={pushUpdates} onValueChange={setPushUpdates} disabled={!pushEnabled} />
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={{ fontSize: 14 }}>Other activity</Text>
+                <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Low-priority notices that do not fit the categories above.</Text>
+              </View>
+              <Switch value={pushOther} onValueChange={setPushOther} disabled={!pushEnabled} />
             </View>
           </View>
         </View>
