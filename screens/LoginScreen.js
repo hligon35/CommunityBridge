@@ -501,8 +501,10 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     return () => { mounted = false; };
   }, [auth.loading, showSignUp]);
 
-  // Keep the logo closer to the form on mobile.
-  const brandSectionMinHeight = Math.max(140, Math.round(windowHeight * 0.22));
+  // Keep the mobile sign-in stack closer to screen center while preserving web spacing.
+  const brandSectionMinHeight = Platform.OS === 'web'
+    ? Math.max(140, Math.round(windowHeight * 0.22))
+    : Math.max(120, Math.round(windowHeight * 0.18));
   const OuterWrapper = Platform.OS === 'web' ? View : TouchableWithoutFeedback;
   const outerWrapperProps = Platform.OS === 'web' ? {} : { onPress: Keyboard.dismiss, accessible: false };
 
@@ -521,13 +523,16 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       >
         <OuterWrapper {...outerWrapperProps}>
           <ScrollView
-            contentContainerStyle={styles.scrollContainer}
+            contentContainerStyle={[
+              styles.scrollContainer,
+              Platform.OS === 'web' ? styles.scrollContainerWeb : styles.scrollContainerMobile,
+            ]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
             <View style={[styles.brandSection, { minHeight: brandSectionMinHeight }]}>
               <Image
-                source={require('../public/logo.png')}
+                source={require('../assets/logo.png')}
                 accessibilityLabel="CommunityBridge"
                 style={[styles.loginLogo, { height: Math.min(180, Math.round(brandSectionMinHeight * 0.65)) }]}
               />
@@ -738,7 +743,9 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#fff' },
-  scrollContainer: { flexGrow: 1, padding: 20, alignItems: 'center', justifyContent: 'flex-start' },
+  scrollContainer: { flexGrow: 1, padding: 20, alignItems: 'center' },
+  scrollContainerWeb: { justifyContent: 'flex-start' },
+  scrollContainerMobile: { justifyContent: 'center', paddingTop: 32, paddingBottom: 32 },
   brandSection: { width: '100%', maxWidth: 420, alignItems: 'center', justifyContent: 'center' },
   loginLogo: { width: '100%', maxWidth: 320, resizeMode: 'contain' },
   formCard: { width: '100%', maxWidth: 420, alignSelf: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },

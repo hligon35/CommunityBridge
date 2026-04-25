@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, NativeModules, Platform, Share } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Api from './Api';
@@ -15,6 +15,7 @@ const POSTS_KEY = 'bbs_posts_v1';
 const MESSAGES_KEY = 'bbs_messages_v1';
 const MEMOS_KEY = 'bbs_memos_v1';
 const ARCHIVED_KEY = 'bbs_archived_threads_v1';
+const THREAD_READS_KEY = 'bbs_thread_reads_v1';
 const CHILDREN_KEY = 'bbs_children_v1';
 const BLOCKED_KEY = 'bbs_blocked_v1';
 
@@ -154,6 +155,7 @@ export function DataProvider({ children: reactChildren }) {
   }, [needsMfa]);
   const [posts, setPosts] = useState([]);
   const [messages, setMessages] = useState([]);
+  const [threadReads, setThreadReads] = useState({});
   const [urgentMemos, setUrgentMemos] = useState([]);
   const [timeChangeProposals, setTimeChangeProposals] = useState([]);
   const [archivedThreads, setArchivedThreads] = useState([]);
@@ -177,7 +179,7 @@ export function DataProvider({ children: reactChildren }) {
     hydratedForUserRef.current = userKey;
     (async () => {
       try {
-        const [postsRaw, mRaw, uRaw, cRaw, pRaw, tRaw, aRaw] = await Promise.all([
+        const [postsRaw, mRaw, uRaw, cRaw, pRaw, tRaw, aRaw, threadReadsRaw] = await Promise.all([
           AsyncStorage.getItem(POSTS_KEY),
           AsyncStorage.getItem(MESSAGES_KEY),
           AsyncStorage.getItem(MEMOS_KEY),
@@ -185,6 +187,7 @@ export function DataProvider({ children: reactChildren }) {
           AsyncStorage.getItem(PARENTS_KEY),
           AsyncStorage.getItem(THERAPISTS_KEY),
           AsyncStorage.getItem(ARCHIVED_KEY),
+          AsyncStorage.getItem(THREAD_READS_KEY),
         ]);
         const blockedRaw = await AsyncStorage.getItem(BLOCKED_KEY);
         if (!mounted) return;
@@ -205,6 +208,16 @@ export function DataProvider({ children: reactChildren }) {
         // Messages and memos
         if (mRaw) setMessages(JSON.parse(mRaw));
         else setMessages([]);
+        if (threadReadsRaw) {
+          try {
+            const parsed = JSON.parse(threadReadsRaw);
+            setThreadReads(parsed && typeof parsed === 'object' ? parsed : {});
+          } catch (e) {
+            setThreadReads({});
+          }
+        } else {
+          setThreadReads({});
+        }
         if (uRaw) setUrgentMemos(uRaw ? JSON.parse(uRaw) : []);
 
         // Parents & Therapists (set first so children can attach references)
@@ -270,6 +283,9 @@ export function DataProvider({ children: reactChildren }) {
   useEffect(() => {
     AsyncStorage.setItem(MESSAGES_KEY, JSON.stringify(messages)).catch(() => {});
   }, [messages]);
+  useEffect(() => {
+    AsyncStorage.setItem(THREAD_READS_KEY, JSON.stringify(threadReads || {})).catch(() => {});
+  }, [threadReads]);
   useEffect(() => {
     AsyncStorage.setItem(ARCHIVED_KEY, JSON.stringify(archivedThreads)).catch(() => {});
   }, [archivedThreads]);
@@ -714,6 +730,17 @@ export function DataProvider({ children: reactChildren }) {
     }
   }
 
+  function markThreadRead(threadId, readAt) {
+    const key = threadId != null ? String(threadId) : '';
+    if (!key) return;
+    const iso = readAt ? new Date(readAt).toISOString() : new Date().toISOString();
+    setThreadReads((prev) => {
+      const current = prev && typeof prev === 'object' ? prev : {};
+      if (current[key] === iso) return current;
+      return { ...current, [key]: iso };
+    });
+  }
+
   function archiveThread(threadId) {
     try {
       setArchivedThreads((s) => {
@@ -740,9 +767,15 @@ export function DataProvider({ children: reactChildren }) {
 
   function deleteThread(threadId) {
     try {
-      setMessages((s) => (s || []).filter((m) => (m.threadId || m.id) !== threadId));
+      const key = threadId != null ? String(threadId) : '';
+      setMessages((s) => (s || []).filter((m) => String(m.threadId || m.id) !== key));
       setArchivedThreads((s) => (s || []).filter((t) => t !== threadId));
-      AsyncStorage.setItem(MESSAGES_KEY, JSON.stringify((messages || []).filter((m) => (m.threadId || m.id) !== threadId))).catch(() => {});
+      setThreadReads((s) => {
+        const next = { ...(s || {}) };
+        delete next[key];
+        return next;
+      });
+      AsyncStorage.setItem(MESSAGES_KEY, JSON.stringify((messages || []).filter((m) => String(m.threadId || m.id) !== key))).catch(() => {});
       AsyncStorage.setItem(ARCHIVED_KEY, JSON.stringify((archivedThreads || []).filter((t) => t !== threadId))).catch(() => {});
     } catch (e) {
       console.warn('deleteThread failed', e?.message || e);
@@ -862,8 +895,10 @@ export function DataProvider({ children: reactChildren }) {
   function clearMessages() {
     try {
       setMessages([]);
+      setThreadReads({});
       setArchivedThreads([]);
       AsyncStorage.removeItem(MESSAGES_KEY).catch(() => {});
+      AsyncStorage.removeItem(THREAD_READS_KEY).catch(() => {});
       AsyncStorage.removeItem(ARCHIVED_KEY).catch(() => {});
     } catch (e) {
       console.warn('clearMessages failed', e?.message || e);
@@ -872,10 +907,11 @@ export function DataProvider({ children: reactChildren }) {
 
   async function clearAllData() {
     try {
-      const keys = [POSTS_KEY, MESSAGES_KEY, MEMOS_KEY, ARCHIVED_KEY, CHILDREN_KEY, PARENTS_KEY, THERAPISTS_KEY, BLOCKED_KEY];
+      const keys = [POSTS_KEY, MESSAGES_KEY, MEMOS_KEY, ARCHIVED_KEY, THREAD_READS_KEY, CHILDREN_KEY, PARENTS_KEY, THERAPISTS_KEY, BLOCKED_KEY];
       await AsyncStorage.multiRemove(keys);
       setPosts([]);
       setMessages([]);
+      setThreadReads({});
       setArchivedThreads([]);
       setUrgentMemos([]);
       setChildren([]);
@@ -920,6 +956,30 @@ export function DataProvider({ children: reactChildren }) {
     }
   }
 
+  const unreadThreadCount = useMemo(() => {
+    const uid = user?.id ? String(user.id) : '';
+    if (!uid) return 0;
+
+    const latestIncomingByThread = new Map();
+    (messages || []).forEach((message) => {
+      const threadKey = message?.threadId != null ? String(message.threadId) : (message?.id != null ? String(message.id) : '');
+      if (!threadKey) return;
+      const senderId = message?.sender?.id != null ? String(message.sender.id) : '';
+      if (!senderId || senderId === uid) return;
+      const createdAtMs = Date.parse(String(message?.createdAt || ''));
+      if (!Number.isFinite(createdAtMs)) return;
+      const prev = latestIncomingByThread.get(threadKey) || 0;
+      if (createdAtMs > prev) latestIncomingByThread.set(threadKey, createdAtMs);
+    });
+
+    let count = 0;
+    latestIncomingByThread.forEach((latestMs, threadKey) => {
+      const readAtMs = Date.parse(String((threadReads || {})[threadKey] || ''));
+      if (!Number.isFinite(readAtMs) || latestMs > readAtMs) count += 1;
+    });
+    return count;
+  }, [messages, threadReads, user]);
+
   return (
     <DataContext.Provider value={{
       posts,
@@ -948,6 +1008,9 @@ export function DataProvider({ children: reactChildren }) {
       share,
       recordShare,
       sendMessage,
+      markThreadRead,
+      threadReads,
+      unreadThreadCount,
       fetchAndSync,
       markUrgentRead,
       sendAdminMemo,

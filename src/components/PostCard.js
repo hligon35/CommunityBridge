@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Image, TouchableOpacity, Pressable, StyleSheet, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
@@ -83,18 +83,32 @@ export default function PostCard({ post, onLike, onComment, onShare, onAvatarPre
 }
 
 const pcStyles = StyleSheet.create({
-  card: { marginTop: 12, padding: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb', backgroundColor: '#fff' },
+  card: {
+    marginTop: 12,
+    padding: 16,
+    borderBottomWidth: Platform.OS === 'web' ? 0 : 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#fff',
+    borderRadius: Platform.OS === 'web' ? 18 : 0,
+    borderWidth: Platform.OS === 'web' ? 1 : 0,
+    borderColor: '#e5e7eb',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: Platform.OS === 'web' ? 0.05 : 0,
+    shadowRadius: 12,
+    elevation: Platform.OS === 'web' ? 2 : 0,
+  },
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   avatar: { width: 50, height: 50, borderRadius: 25, marginRight: 10 },
-  author: { fontWeight: '700' },
+  author: { fontWeight: '700', color: '#0f172a' },
   time: { color: '#6b7280', fontSize: 12 },
-  title: { fontSize: 16, fontWeight: '700', marginTop: 4 },
-  body: { marginTop: 6, color: '#374151' },
-  image: { height: 180, marginTop: 8, borderRadius: 6 },
-  preview: { padding: 8, borderWidth: 1, borderColor: '#e6e7ea', backgroundColor: '#f8fafc', marginTop: 8 },
+  title: { fontSize: 17, fontWeight: '800', marginTop: 4, color: '#0f172a' },
+  body: { marginTop: 8, color: '#334155', lineHeight: 21 },
+  image: { height: 220, marginTop: 12, borderRadius: 14 },
+  preview: { padding: 12, borderWidth: 1, borderColor: '#e6e7ea', backgroundColor: '#f8fafc', marginTop: 12, borderRadius: 14 },
   previewTitle: { fontWeight: '700' },
   previewDesc: { fontSize: 12, color: '#6b7280' },
-  actions: { flexDirection: 'row', marginTop: 10, justifyContent: 'space-evenly' },
+  actions: { flexDirection: 'row', marginTop: 14, justifyContent: 'flex-start' },
   actionBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#fff', marginHorizontal: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 1.5, elevation: 2 },
   actionText: { color: '#374151', marginLeft: 4 },
   actionBtnPressed: {

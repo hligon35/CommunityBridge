@@ -27,10 +27,24 @@ config.resolver.unstable_conditionNames = Array.from(
 //   "Component auth has not been registered yet"
 // Force `@firebase/auth` and `@firebase/auth/internal` to the RN build shipped
 // within the `firebase` package.
-const RN_AUTH_ENTRY = path.join(__dirname, 'node_modules', 'firebase', 'node_modules', '@firebase', 'auth', 'dist', 'rn', 'index.js');
-const RN_AUTH_INTERNAL_ENTRY = path.join(__dirname, 'node_modules', 'firebase', 'node_modules', '@firebase', 'auth', 'dist', 'rn', 'internal.js');
-const WEB_AUTH_ENTRY = path.join(__dirname, 'node_modules', 'firebase', 'node_modules', '@firebase', 'auth', 'dist', 'esm2017', 'index.js');
-const WEB_AUTH_INTERNAL_ENTRY = path.join(__dirname, 'node_modules', 'firebase', 'node_modules', '@firebase', 'auth', 'dist', 'esm2017', 'internal.js');
+function firstExistingPath(candidates) {
+	for (const candidate of candidates) {
+		if (fs.existsSync(candidate)) return candidate;
+	}
+	return null;
+}
+
+function firebaseAuthDistPath(...segments) {
+	return firstExistingPath([
+		path.join(__dirname, 'node_modules', 'firebase', 'node_modules', '@firebase', 'auth', 'dist', ...segments),
+		path.join(__dirname, 'node_modules', '@firebase', 'auth', 'dist', ...segments),
+	]);
+}
+
+const RN_AUTH_ENTRY = firebaseAuthDistPath('rn', 'index.js');
+const RN_AUTH_INTERNAL_ENTRY = firebaseAuthDistPath('rn', 'internal.js');
+const WEB_AUTH_ENTRY = firebaseAuthDistPath('esm2017', 'index.js');
+const WEB_AUTH_INTERNAL_ENTRY = firebaseAuthDistPath('esm2017', 'internal.js');
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
 	try {
@@ -41,20 +55,20 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
 		// Firebase 10.x does not export `firebase/auth/react-native`, and the default
 		// `firebase/auth` export chain can select the web build in some Metro setups.
 		// This mapping ensures Auth registers its component on native.
-		if (isNative && moduleName === 'firebase/auth' && fs.existsSync(RN_AUTH_ENTRY)) {
+		if (isNative && moduleName === 'firebase/auth' && RN_AUTH_ENTRY) {
 			return { type: 'sourceFile', filePath: RN_AUTH_ENTRY };
 		}
-		if (isNative && moduleName === 'firebase/auth/internal' && fs.existsSync(RN_AUTH_INTERNAL_ENTRY)) {
+		if (isNative && moduleName === 'firebase/auth/internal' && RN_AUTH_INTERNAL_ENTRY) {
 			return { type: 'sourceFile', filePath: RN_AUTH_INTERNAL_ENTRY };
 		}
 
 		// Web bundles must NOT use the RN auth build. Because we enable the
 		// `react-native` condition for native correctness, some Metro/export
 		// combinations can accidentally pick RN exports even for platform=web.
-		if (isWeb && moduleName === 'firebase/auth' && fs.existsSync(WEB_AUTH_ENTRY)) {
+		if (isWeb && moduleName === 'firebase/auth' && WEB_AUTH_ENTRY) {
 			return { type: 'sourceFile', filePath: WEB_AUTH_ENTRY };
 		}
-		if (isWeb && moduleName === 'firebase/auth/internal' && fs.existsSync(WEB_AUTH_INTERNAL_ENTRY)) {
+		if (isWeb && moduleName === 'firebase/auth/internal' && WEB_AUTH_INTERNAL_ENTRY) {
 			return { type: 'sourceFile', filePath: WEB_AUTH_INTERNAL_ENTRY };
 		}
 
@@ -62,18 +76,18 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
 		// - native (iOS/Android): RN build (registers Auth component)
 		// - everything else (web/export/etc): web ESM build
 		if (moduleName === '@firebase/auth') {
-			if (isNative && fs.existsSync(RN_AUTH_ENTRY)) {
+			if (isNative && RN_AUTH_ENTRY) {
 				return { type: 'sourceFile', filePath: RN_AUTH_ENTRY };
 			}
-			if (fs.existsSync(WEB_AUTH_ENTRY)) {
+			if (WEB_AUTH_ENTRY) {
 				return { type: 'sourceFile', filePath: WEB_AUTH_ENTRY };
 			}
 		}
 		if (moduleName === '@firebase/auth/internal') {
-			if (isNative && fs.existsSync(RN_AUTH_INTERNAL_ENTRY)) {
+			if (isNative && RN_AUTH_INTERNAL_ENTRY) {
 				return { type: 'sourceFile', filePath: RN_AUTH_INTERNAL_ENTRY };
 			}
-			if (fs.existsSync(WEB_AUTH_INTERNAL_ENTRY)) {
+			if (WEB_AUTH_INTERNAL_ENTRY) {
 				return { type: 'sourceFile', filePath: WEB_AUTH_INTERNAL_ENTRY };
 			}
 		}

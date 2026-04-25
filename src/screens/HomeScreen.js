@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Button, FlatList, Image, TouchableOpacity, ActivityIndicator, StyleSheet, Modal, Alert, TouchableWithoutFeedback, Linking, Platform, Share, RefreshControl, Keyboard } from 'react-native';
-import { ScreenWrapper, CenteredContainer } from '../components/ScreenWrapper';
+import { ScreenWrapper, CenteredContainer, WebColumns, WebStickySection, WebSurface } from '../components/ScreenWrapper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../AuthContext';
@@ -103,6 +103,7 @@ export default function HomeScreen() {
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [shareTargetPost, setShareTargetPost] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const isWeb = Platform.OS === 'web';
   const displayedPosts = React.useMemo(() => (posts || []), [posts]);
   const feedItems = React.useMemo(() => {
     const items = [{ __type: 'composer', id: '__composer__' }];
@@ -117,6 +118,12 @@ export default function HomeScreen() {
       console.log('HomeScreen: posts updated', (posts || []).length, (posts && posts[0] && (posts[0].body || posts[0].text || posts[0].title)));
     } catch (e) {}
   }, [posts]);
+
+  const quickStats = React.useMemo(() => ([
+    { label: 'Posts', value: displayedPosts.length },
+    { label: 'Students', value: (children || []).length },
+    { label: 'Staff', value: (therapists || []).length },
+  ]), [children, displayedPosts.length, therapists]);
 
   useEffect(() => {
     let mounted = true;
@@ -235,69 +242,156 @@ export default function HomeScreen() {
     }
   }
 
+  const renderComposer = () => (
+    <>
+      {isWeb ? (
+        <WebSurface style={{ marginBottom: 16 }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: '#0f172a' }}>Post Board</Text>
+          <Text style={{ marginTop: 6, marginBottom: 14, color: '#64748b' }}>Share updates, reminders, and media with your community.</Text>
+          <View style={[styles.inputTileCompact, { marginTop: 0, marginBottom: 0, backgroundColor: 'transparent', paddingHorizontal: 0, paddingVertical: 0 }]}> 
+            <Image source={avatarSourceFor(user)} style={styles.inputAvatarCompact} />
+            <TextInput
+              placeholder="Share something..."
+              value={body}
+              onChangeText={setBody}
+              style={[styles.inputTextCompact, { flex: 1, marginHorizontal: 8, minHeight: 52 }]}
+              multiline
+            />
+            <TouchableOpacity style={[styles.pickButtonCompact, { width: 44, height: 44 }]} onPress={onAttachPress} accessibilityLabel="Attach">
+              <MaterialIcons name="attach-file" size={20} color="#444" />
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.postButtonCompact, { width: 44, height: 44 }]} onPress={handlePost} accessibilityLabel="Post">
+              <Ionicons name="send" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </WebSurface>
+      ) : (
+        <View>
+          <View style={{ width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#fff', alignItems: 'center' }}>
+            <Text style={{ fontSize: 18, fontWeight: '700' }}>Post Board</Text>
+          </View>
+          <View style={styles.inputTileCompact}>
+            <Image source={avatarSourceFor(user)} style={styles.inputAvatarCompact} />
+            <TextInput
+              placeholder="Share something..."
+              value={body}
+              onChangeText={setBody}
+              style={[styles.inputTextCompact, { flex: 1, marginHorizontal: 6 }]}
+              multiline
+            />
+            <TouchableOpacity style={styles.pickButtonCompact} onPress={onAttachPress} accessibilityLabel="Attach">
+              <MaterialIcons name="attach-file" size={20} color="#444" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.postButtonCompact} onPress={handlePost} accessibilityLabel="Post">
+              <Ionicons name="send" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </>
+  );
+
+  const renderFeedItem = ({ item }) => (
+    <PostCard
+      post={item}
+      onLike={() => like(item.id)}
+      onComment={() => navigation.navigate('PostThread', { postId: item.id })}
+      onShare={() => openShareModal(item)}
+      onAvatarPress={async (author) => {
+        let full = author || {};
+        const tryFind = (list) => (list || []).find((u) => (u.id && full.id && u.id === full.id) || (u.name && full.name && u.name === full.name));
+        const found = tryFind(children) || tryFind(therapists);
+        if (found) full = { ...found, ...full };
+        full = await applyCurrentUserPrivacySettings(full, user);
+        setSelectedUser(full);
+        setShowUserModal(true);
+      }}
+    />
+  );
+
   return (
     <ScreenWrapper bannerShowBack={false} hideBanner={true}>
       <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
-        <CenteredContainer>
-      <FlatList
-        data={feedItems}
-        onTouchStart={() => Keyboard.dismiss()}
-        keyExtractor={(i) => (i && i.id ? String(i.id) : String(i?.__type || Math.random()))}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        renderItem={({ item }) => (
-          item?.__type === 'composer' ? (
-            <View>
-              <View style={{ width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#fff', alignItems: 'center' }}>
-                <Text style={{ fontSize: 18, fontWeight: '700' }}>Post Board</Text>
-              </View>
-              <View style={styles.inputTileCompact}>
-                <Image source={avatarSourceFor(user)} style={styles.inputAvatarCompact} />
-
-                <TextInput
-                  placeholder="Share something..."
-                  value={body}
-                  onChangeText={setBody}
-                  style={[styles.inputTextCompact, { flex: 1, marginHorizontal: 6 }]}
-                  multiline
-                />
-
-                <TouchableOpacity style={styles.pickButtonCompact} onPress={onAttachPress} accessibilityLabel="Attach">
-                  <MaterialIcons name="attach-file" size={20} color="#444" />
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.postButtonCompact} onPress={handlePost} accessibilityLabel="Post">
-                  <Ionicons name="send" size={18} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : item?.__type === 'empty' ? (
-            <View style={{ padding: 20, alignItems: 'center' }}>
-              <Text style={{ fontSize: 16, color: '#6b7280' }}>No posts yet...</Text>
-            </View>
-          ) : (
-            <PostCard
-              post={item}
-              onLike={() => like(item.id)}
-              onComment={() => navigation.navigate('PostThread', { postId: item.id })}
-              onShare={() => openShareModal(item)}
-              onAvatarPress={async (author) => {
-                // attempt to enrich author with known records (children/therapists)
-                let full = author || {};
-                const tryFind = (list) => (list || []).find((u) => (u.id && full.id && u.id === full.id) || (u.name && full.name && u.name === full.name));
-                const found = tryFind(children) || tryFind(therapists);
-                if (found) full = { ...found, ...full };
-                // If the tapped user is the current user, respect local privacy settings persisted in AsyncStorage
-                full = await applyCurrentUserPrivacySettings(full, user);
-                setSelectedUser(full);
-                setShowUserModal(true);
-              }}
+        <CenteredContainer contentStyle={isWeb ? { maxWidth: 1120 } : null}>
+          {isWeb ? (
+            <WebColumns
+              left={(
+                <WebStickySection>
+                  <WebSurface>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+                      <Image source={avatarSourceFor(user)} style={{ width: 64, height: 64, borderRadius: 32, marginRight: 12 }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 18, fontWeight: '800', color: '#0f172a' }}>{user?.name || 'Community Member'}</Text>
+                        <Text style={{ color: '#64748b', marginTop: 4 }}>{user?.email || 'Signed in'}</Text>
+                      </View>
+                    </View>
+                    {quickStats.map((stat) => (
+                      <View key={stat.label} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#eef2f7' }}>
+                        <Text style={{ color: '#475569', fontWeight: '600' }}>{stat.label}</Text>
+                        <Text style={{ color: '#0f172a', fontSize: 18, fontWeight: '800' }}>{stat.value}</Text>
+                      </View>
+                    ))}
+                  </WebSurface>
+                </WebStickySection>
+              )}
+              main={(
+                <View>
+                  {renderComposer()}
+                  <WebSurface style={{ padding: 0, overflow: 'hidden' }}>
+                    <View style={{ paddingHorizontal: 18, paddingTop: 16, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#eef2f7' }}>
+                      <Text style={{ fontSize: 18, fontWeight: '800', color: '#0f172a' }}>Community Feed</Text>
+                      <Text style={{ marginTop: 4, color: '#64748b' }}>Recent updates, classroom notes, and announcements.</Text>
+                    </View>
+                    <FlatList
+                      data={showWall ? displayedPosts : []}
+                      onTouchStart={() => Keyboard.dismiss()}
+                      keyExtractor={(i) => String(i.id)}
+                      keyboardShouldPersistTaps="handled"
+                      keyboardDismissMode="on-drag"
+                      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                      renderItem={renderFeedItem}
+                      ListEmptyComponent={<View style={{ padding: 24, alignItems: 'center' }}><Text style={{ fontSize: 15, color: '#6b7280' }}>No posts yet. Start the conversation above.</Text></View>}
+                    />
+                  </WebSurface>
+                </View>
+              )}
+              right={(
+                <WebStickySection>
+                  <WebSurface compact>
+                    <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a' }}>Quick Actions</Text>
+                    <TouchableOpacity style={{ marginTop: 12, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#dbeafe' }} onPress={() => navigation.navigate('Chats')}>
+                      <Text style={{ color: '#1d4ed8', fontWeight: '800' }}>Open messages</Text>
+                      <Text style={{ marginTop: 4, color: '#64748b', fontSize: 12 }}>Jump into conversations and follow-ups.</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ marginTop: 10, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0' }} onPress={() => navigation.navigate('Settings')}>
+                      <Text style={{ color: '#0f172a', fontWeight: '800' }}>Profile settings</Text>
+                      <Text style={{ marginTop: 4, color: '#64748b', fontSize: 12 }}>Adjust notifications, privacy, and account settings.</Text>
+                    </TouchableOpacity>
+                  </WebSurface>
+                  <WebSurface compact style={{ marginTop: 16 }}>
+                    <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a' }}>Feed Tips</Text>
+                    <Text style={{ marginTop: 10, color: '#475569', lineHeight: 20 }}>Keep posts short and specific. Use attachments for forms or images, and direct messages for one-to-one follow-up.</Text>
+                  </WebSurface>
+                </WebStickySection>
+              )}
             />
-          )
-        )}
-        
-      />
+          ) : (
+            <FlatList
+              data={feedItems}
+              onTouchStart={() => Keyboard.dismiss()}
+              keyExtractor={(i) => (i && i.id ? String(i.id) : String(i?.__type || Math.random()))}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+              renderItem={({ item }) => (
+                item?.__type === 'composer' ? renderComposer() : item?.__type === 'empty' ? (
+                  <View style={{ padding: 20, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 16, color: '#6b7280' }}>No posts yet...</Text>
+                  </View>
+                ) : renderFeedItem({ item })
+              )}
+            />
+          )}
       {/* Modals moved outside the header so they don't become sticky */}
       {showLinkModal && (
         <Modal transparent visible animationType="fade">

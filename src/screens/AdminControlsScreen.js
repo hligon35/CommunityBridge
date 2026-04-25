@@ -27,6 +27,7 @@ const ORG_ARRIVAL_KEY = SETTINGS_KEYS.orgArrivalEnabled;
 export default function AdminControlsScreen() {
   const navigation = useNavigation();
   const { posts, messages, children, parents = [], therapists = [], urgentMemos = [] } = useData();
+  const isWeb = Platform.OS === 'web';
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [importPickedFile, setImportPickedFile] = useState(null);
@@ -688,6 +689,27 @@ export default function AdminControlsScreen() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
+            {isWeb ? (
+              <View style={{ marginBottom: 16 }}>
+                <View style={{ backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#e5e7eb', padding: 18, shadowColor: '#0f172a', shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2 }}>
+                  <Text style={{ fontSize: 22, fontWeight: '800', color: '#0f172a' }}>Admin Dashboard</Text>
+                  <Text style={{ marginTop: 6, color: '#64748b' }}>Key operations, directories, and alerts in one place.</Text>
+                  <View style={{ flexDirection: 'row', marginTop: 16 }}>
+                    {[
+                      { label: 'Students', value: (children || []).length },
+                      { label: 'Parents', value: (parents || []).length },
+                      { label: 'Faculty', value: facultyCount },
+                      { label: 'Pending alerts', value: pendingAlertCount },
+                    ].map((item, index) => (
+                      <View key={item.label} style={{ flex: 1, padding: 14, borderRadius: 14, backgroundColor: index === 3 ? '#fff1f2' : '#f8fafc', borderWidth: 1, borderColor: index === 3 ? '#fecdd3' : '#e2e8f0', marginRight: index === 3 ? 0 : 12 }}>
+                        <Text style={{ color: '#64748b', fontSize: 12, fontWeight: '700', textTransform: 'uppercase' }}>{item.label}</Text>
+                        <Text style={{ marginTop: 8, fontSize: 26, fontWeight: '800', color: index === 3 ? '#be123c' : '#0f172a' }}>{item.value}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            ) : null}
 
             <View style={styles.dirGridRow}>
               <TouchableOpacity

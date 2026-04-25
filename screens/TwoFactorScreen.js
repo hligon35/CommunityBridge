@@ -10,6 +10,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useAuth } from '../src/AuthContext';
@@ -17,6 +18,7 @@ import * as Api from '../src/Api';
 
 export default function TwoFactorScreen({ navigation }) {
   const auth = useAuth();
+  const { height: windowHeight } = useWindowDimensions();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
@@ -98,23 +100,32 @@ export default function TwoFactorScreen({ navigation }) {
   }
 
   let logoSource = null;
-  try { logoSource = require('../public/logo.png'); } catch (_) { logoSource = null; }
+  try { logoSource = require('../assets/logo.png'); } catch (_) { logoSource = null; }
 
   // On web, use real viewport height so the centered card can't render at 0 height.
   const webViewportStyle = Platform.OS === 'web'
     ? { minHeight: '100vh', width: '100%' }
     : null;
+  const brandSectionMinHeight = Platform.OS === 'web'
+    ? 120
+    : Math.max(110, Math.round(windowHeight * 0.16));
 
   return (
     <View style={[styles.screen, webViewportStyle]}>
       <KeyboardAvoidingView style={{ flex: 1, minHeight: Platform.OS === 'web' ? '100vh' : undefined }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-          <View style={styles.brandSection}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContainer,
+            Platform.OS === 'web' ? styles.scrollContainerWeb : styles.scrollContainerMobile,
+          ]}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={[styles.brandSection, { minHeight: brandSectionMinHeight }]}>
             {logoSource ? (
               <Image
                 source={logoSource}
                 accessibilityLabel="CommunityBridge"
-                style={styles.logo}
+                style={[styles.logo, { height: Math.min(130, Math.round(brandSectionMinHeight * 0.72)) }]}
               />
             ) : null}
           </View>
@@ -173,7 +184,9 @@ export default function TwoFactorScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#fff' },
-  scrollContainer: { flexGrow: 1, padding: 20, alignItems: 'center', justifyContent: 'flex-start' },
+  scrollContainer: { flexGrow: 1, padding: 20, alignItems: 'center' },
+  scrollContainerWeb: { justifyContent: 'flex-start' },
+  scrollContainerMobile: { justifyContent: 'center', paddingTop: 32, paddingBottom: 32 },
   brandSection: { width: '100%', maxWidth: 420, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
   logo: { width: '100%', maxWidth: 260, height: 110, resizeMode: 'contain' },
   card: {

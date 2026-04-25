@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, TextInput, Button, RefreshControl, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard, Platform } from 'react-native';
 // removed SafeAreaView usage to avoid shifting content down
 import { useData } from '../DataContext';
@@ -8,13 +8,22 @@ import { useHeaderHeight } from '@react-navigation/elements';
 
 export default function ChatThreadScreen({ route }) {
   const { threadId, isNew, to: initialTo } = route.params || {};
-  const { messages, sendMessage } = useData();
+  const { messages, sendMessage, markThreadRead } = useData();
   const [text, setText] = useState('');
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const headerHeight = useHeaderHeight ? useHeaderHeight() : 0;
 
   const threadMessages = useMemo(() => messages.filter((m) => (m.threadId || m.id) === threadId).sort((a,b)=> new Date(a.createdAt)-new Date(b.createdAt)), [messages, threadId]);
+
+  useEffect(() => {
+    if (!threadId || !threadMessages.length || !user?.id) return;
+    const latestIncoming = [...threadMessages]
+      .reverse()
+      .find((message) => String(message?.sender?.id || '') !== String(user.id));
+    if (!latestIncoming?.createdAt) return;
+    markThreadRead(threadId, latestIncoming.createdAt);
+  }, [markThreadRead, threadId, threadMessages, user]);
 
   // authorization: only participants or admin may view the thread
   const isParticipant = useMemo(() => {

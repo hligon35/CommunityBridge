@@ -1,11 +1,11 @@
 ﻿{
   "name": "CommunityBridge",
-  "slug": "buddyboard-mobile",
+  "slug": "communitybridge",
   "version": "1.0.1",
   "sdkVersion": "54.0.0",
   "cli": { "appVersionSource": "local" },
   "ios": {
-    "bundleIdentifier": "com.azlabs.buddyboard",
+    "bundleIdentifier": "com.azlabs.communitybridge",
     "buildNumber": "1.0.10",
     "infoPlist": {
       "ITSAppUsesNonExemptEncryption": false,
@@ -26,7 +26,7 @@
       "@sentry/react-native/expo",
       {
         "url": "https://sentry.io/",
-        "project": "buddyboard",
+        "project": "communitybridge",
         "organization": "azlabsllc"
       }
     ]
@@ -38,7 +38,7 @@
     "backgroundColor": "#ffffff"
   },
   "android": {
-    "package": "com.azlabs.buddyboard",
+    "package": "com.azlabs.communitybridge",
     "versionCode": 10,
     "softwareKeyboardLayoutMode": "resize",
     "adaptiveIcon": {
@@ -46,7 +46,7 @@
       "backgroundColor": "#ffffff"
     }
   },
-  "web": { "favicon": "./public/icon.png" },
+  "web": { "favicon": "./assets/logo.png" },
   "extra": { "eas": { "projectId": "38ed77a1-3892-42c8-b7cf-9cebe6d98545" } },
   "owner": "hligon"
 }

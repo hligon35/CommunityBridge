@@ -25,7 +25,7 @@ export default function BottomNav({ navigationRef, currentRoute }) {
   // don't show mobile bottom nav on web
   if (Platform.OS === 'web') return null;
   const { user } = useAuth();
-  const { urgentMemos = [] } = useData();
+  const { urgentMemos = [], unreadThreadCount = 0 } = useData();
   const role = (user && user.role) ? (user.role || '').toString().toLowerCase() : 'parent';
 
   // For parents, show any pending urgent alerts they created on the MyChild tab
@@ -34,7 +34,7 @@ export default function BottomNav({ navigationRef, currentRoute }) {
   // define tabs depending on role
   let tabs = [
     { key: 'Home', label: 'Home', icon: (active) => (<NavImageIcon source={homeIcon} active={active} />) },
-    { key: 'Chats', label: 'Chats', icon: (active) => (<NavImageIcon source={active ? messagesBadgeIcon : messagesIcon} active={active} />) },
+    { key: 'Chats', label: 'Chats', icon: (active) => (<NavImageIcon source={unreadThreadCount > 0 ? messagesBadgeIcon : messagesIcon} active={active} />), count: unreadThreadCount },
   ];
   if (role === 'therapist') {
     tabs.push({ key: 'MyClass', label: 'My Class', icon: (active) => (<NavImageIcon source={calendarIcon} active={active} />) });

@@ -74,7 +74,7 @@
       }
     },
     "web": {
-      "favicon": "./public/icon.png"
+      "favicon": "./assets/logo.png"
     },
     "extra": {
       "eas": {

@@ -16,6 +16,8 @@
     </script>
 
     <script type="module">
+      // If already signed in on this origin, go straight to the app.
+      // This keeps communitybridge.app as marketing, and communitybridge.app/dashboard as the web app entry.
       try {
         const path = String(window.location.pathname || '/');
         if (path === '/' || path === '/index.html') {
@@ -29,8 +31,10 @@
               const res = await fetch('/__/firebase/init.json', { cache: 'no-store' });
               if (res.ok) return await res.json();
             } catch (_) {
+              // ignore
             }
 
+            // Fallback (kept in sync with the CommunityBridge Firebase project)
             return {
               apiKey: 'AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ',
               authDomain: 'communitybridge-26apr.firebaseapp.com',
@@ -43,6 +47,7 @@
           }
 
           const firebaseConfig = await loadFirebaseConfig();
+
           const app = initializeApp(firebaseConfig);
           const auth = getAuth(app);
           onAuthStateChanged(auth, (user) => {
@@ -50,19 +55,27 @@
           });
         }
       } catch (_) {
+        // ignore
       }
     </script>
     <title>CommunityBridge</title>
     <meta name="description" content="CommunityBridge keeps parents, caregivers, and providers aligned with updates, messages, and schedules." />
+
     <meta property="og:title" content="CommunityBridge" />
     <meta property="og:description" content="One place for family updates and therapy schedules." />
     <meta property="og:type" content="website" />
+
     <style>
       :root {
+        --bg: #ffffff;
+        --card: #ffffff;
         --text: #0f172a;
         --muted: #475569;
         --accent: #16a34a;
+        --accent2: #2563eb;
         --line: rgba(15, 23, 42, 0.12);
+
+        /* Container (card) theme — matches the previous dark background */
         --containerBg: #0b1220;
         --containerText: #e5e7eb;
         --containerMuted: #94a3b8;
@@ -80,9 +93,11 @@
         color: var(--text);
       }
       a { color: inherit; }
+
       .wrap { max-width: 1080px; margin: 0 auto; padding: 44px 18px; }
       .nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
       .navActions { display: flex; gap: 10px; align-items: center; }
+
       .brand { display: flex; flex-direction: column; gap: 6px; text-decoration: none; }
       .brandLogo {
         height: 120px;
@@ -90,6 +105,11 @@
         max-width: min(600px, 100%);
         display: inline-block;
         object-fit: contain;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+        box-shadow: none;
         filter: drop-shadow(0 12px 28px rgba(15, 23, 42, 0.18));
       }
       .brandTag {
@@ -98,6 +118,7 @@
         letter-spacing: 0.2px;
         color: var(--muted);
       }
+
       .btn {
         display: inline-flex;
         align-items: center;
@@ -115,6 +136,7 @@
         color: #ffffff;
       }
       .btnGhost { background: transparent; }
+
       .hero { margin-top: 30px; }
       .card {
         background:
@@ -126,16 +148,21 @@
         color: var(--containerText);
         box-shadow: 0 18px 46px rgba(15, 23, 42, 0.18);
       }
-      .card p, .card .list { color: var(--containerMuted); }
+      .card p { color: var(--containerMuted); }
+      .card .list { color: var(--containerMuted); }
+      .card .label { color: var(--containerMuted); }
+      .card .mono { color: rgba(229, 231, 235, 0.78); }
       .card .btn:not(.btnPrimary) {
         background: rgba(255, 255, 255, 0.07);
         border-color: rgba(255, 255, 255, 0.14);
         color: var(--containerText);
       }
       .card .btnGhost:not(.btnPrimary) { background: transparent; }
+
       h1 { margin: 0 0 10px; font-size: 42px; line-height: 1.07; letter-spacing: -0.4px; }
       p { margin: 0 0 14px; color: var(--muted); line-height: 1.6; }
       .ctaRow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; justify-content: center; }
+
       .heroTop {
         display: grid;
         grid-template-columns: 1.2fr 0.8fr;
@@ -145,6 +172,7 @@
       .heroCopy { text-align: center; }
       .heroCopy p { margin-left: auto; margin-right: auto; }
       .heroMedia { display: grid; gap: 12px; justify-items: center; }
+
       .storeRow { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px; justify-content: center; }
       .storeBtn {
         display: inline-flex;
@@ -154,11 +182,15 @@
         border: 1px solid var(--containerLine);
         background: rgba(255, 255, 255, 0.06);
       }
-      .storeBtn img { height: 44px; width: auto; display: block; }
+      .storeBtn img { height: 44px; width: auto; display:block; }
+
       .featuresBlock { margin-top: 18px; text-align: center; }
       .featuresTitle { font-weight: 900; margin-top: 16px; margin-bottom: 10px; }
-      .list { display: inline-block; margin: 0; padding-left: 18px; text-align: left; }
+      .list { display: inline-block; margin: 0; padding-left: 18px; color: var(--muted); text-align: left; }
       .list li { margin: 8px 0; }
+
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
       .heroArt {
         display: grid;
         place-items: center;
@@ -175,7 +207,10 @@
         height: 100%;
         display: block;
         object-fit: contain;
+        border-radius: 0;
+        box-shadow: none;
       }
+
       .foot {
         margin-top: 26px;
         display: flex;
@@ -189,9 +224,11 @@
       .links { display: flex; gap: 10px; flex-wrap: wrap; }
       .links a { color: var(--muted); text-decoration: none; border-bottom: 1px solid rgba(15,23,42,0.0); }
       .links a:hover { color: var(--text); border-bottom-color: rgba(15,23,42,0.25); }
+
       @media (max-width: 900px) {
         .heroTop { grid-template-columns: 1fr; }
         h1 { font-size: 34px; }
+
         .nav { justify-content: center; }
         .brand { width: 100%; align-items: center; text-align: center; }
         .navActions { width: 100%; justify-content: center; }
@@ -205,6 +242,7 @@
           <img class="brandLogo" src="/cblogo.png" alt="CommunityBridge" />
           <div class="brandTag">Family updates • messages • schedules</div>
         </a>
+
         <div class="navActions">
           <a class="btn btnGhost" href="/login">Login</a>
           <a class="btn btnGhost" href="/support">Support</a>
@@ -221,10 +259,12 @@
                 CommunityBridge helps parents, caregivers, and providers stay aligned with board posts, direct messages,
                 urgent memos, and time-change requests.
               </p>
+
               <div class="ctaRow" id="get">
                 <a class="btn btnPrimary" href="/login">Login</a>
                 <a class="btn" href="#features">See features</a>
               </div>
+
               <div class="featuresBlock" id="features">
                 <div class="featuresTitle">What CommunityBridge includes</div>
                 <ul class="list">
@@ -241,11 +281,22 @@
               <div class="heroArt" aria-label="CommunityBridge app icon">
                 <img class="heroImg" src="/icon.png" alt="CommunityBridge app icon" />
               </div>
+
               <div class="storeRow" aria-label="App store buttons">
-                <a class="storeBtn" href="https://testflight.apple.com/join/REPLACE_ME" target="_blank" rel="noopener" title="TestFlight link for iPhone/iPad testers">
+                <a
+                  class="storeBtn"
+                  href="https://testflight.apple.com/join/REPLACE_ME"
+                  target="_blank"
+                  rel="noopener"
+                  title="TestFlight link for iPhone/iPad testers"
+                >
                   <img src="/appleStore.png" alt="Download on the App Store" />
                 </a>
-                <a class="storeBtn" href="/downloads/buddyboard-android.apk" title="Android APK for testers">
+                <a
+                  class="storeBtn"
+                  href="/downloads/buddyboard-android.apk"
+                  title="Android APK for testers"
+                >
                   <img src="/googleStore.png" alt="Get it on Google Play" />
                 </a>
               </div>

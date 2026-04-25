@@ -30,6 +30,7 @@ const BUSINESS_ADDR_KEY = SETTINGS_KEYS.businessAddress;
 
 export default function SettingsScreen({ navigation }) {
   const { user, logout, setRole } = useAuth();
+  const isWeb = Platform.OS === 'web';
 
   const appVersion = Constants?.expoConfig?.version || Constants?.manifest?.version || '';
   const iosBuildNumber = Constants?.expoConfig?.ios?.buildNumber || '';
@@ -440,8 +441,27 @@ export default function SettingsScreen({ navigation }) {
 
   return (
     <ScreenWrapper bannerShowBack={false} style={{ flex: 1 }}>
-      <ScrollView style={{ flex: 1, width: '100%' }} contentContainerStyle={{ alignItems: 'center', paddingBottom: 28 }} bounces={true} alwaysBounceVertical={true} showsVerticalScrollIndicator={false}>
-        <View style={{ width: '100%', maxWidth: 720, borderRadius: 14, backgroundColor: '#fff', padding: 20, elevation: 3, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, marginTop: 8 }}>
+      <ScrollView style={{ flex: 1, width: '100%' }} contentContainerStyle={{ alignItems: 'center', paddingBottom: 28, paddingHorizontal: 16 }} bounces={true} alwaysBounceVertical={true} showsVerticalScrollIndicator={false}>
+        {isWeb ? (
+          <View style={{ width: '100%', maxWidth: 980, marginTop: 8, marginBottom: 12, backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#e5e7eb', padding: 18, shadowColor: '#0f172a', shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2 }}>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: '#0f172a' }}>Profile Settings</Text>
+            <Text style={{ marginTop: 6, color: '#64748b' }}>Manage privacy, notifications, arrival detection, and update status from one desktop-friendly view.</Text>
+            <View style={{ flexDirection: 'row', marginTop: 16 }}>
+              {[
+                { label: 'Arrival', value: arrivalEnabled ? 'On' : 'Off' },
+                { label: 'Push', value: pushEnabled ? 'On' : 'Off' },
+                { label: 'Email visible', value: showEmail ? 'Yes' : 'No' },
+                { label: 'Phone visible', value: showPhone ? 'Yes' : 'No' },
+              ].map((item, index) => (
+                <View key={item.label} style={{ flex: 1, padding: 14, borderRadius: 14, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', marginRight: index === 3 ? 0 : 12 }}>
+                  <Text style={{ color: '#64748b', fontSize: 12, fontWeight: '700', textTransform: 'uppercase' }}>{item.label}</Text>
+                  <Text style={{ marginTop: 8, fontSize: 22, fontWeight: '800', color: '#0f172a' }}>{item.value}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+        <View style={{ width: '100%', maxWidth: isWeb ? 980 : 720, borderRadius: 14, backgroundColor: '#fff', padding: 20, elevation: 3, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, marginTop: 8 }}>
         <TouchableOpacity
           onPress={() => navigation.navigate('EditProfile')}
           accessibilityLabel="Edit Profile"

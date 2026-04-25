@@ -22,6 +22,7 @@ function MessageRow({ item, user, navigation, archiveThread, deleteThread }) {
   const swipeableRef = useRef(null);
   const last = item.last || {};
   const isOutgoing = last.sender && user && last.sender.id === user.id;
+  const isUnread = !!item.isUnread;
 
   const showToast = (msg) => {
     if (Platform.OS === 'android') ToastAndroid.show(msg, ToastAndroid.SHORT);
@@ -67,18 +68,21 @@ function MessageRow({ item, user, navigation, archiveThread, deleteThread }) {
 
   return (
     <Swipeable ref={swipeableRef} renderLeftActions={renderLeftActions} renderRightActions={renderRightActions} onSwipeableOpen={handleOpen}>
-      <TouchableOpacity style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', alignItems: 'center' }} onPress={() => navigation.navigate('ChatThread', { threadId: item.id })}>
+      <TouchableOpacity style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', alignItems: 'center', backgroundColor: isUnread ? '#f8fbff' : '#fff' }} onPress={() => navigation.navigate('ChatThread', { threadId: item.id })}>
         <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
           <Text style={{ fontWeight: '700' }}>{(item.title || 'C').slice(0,1)}</Text>
         </View>
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ fontWeight: '700' }}>{item.title}</Text>
-            <Text style={{ color: '#6b7280', fontSize: 12 }}>{timeAgo(last.createdAt)}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 8 }}>
+              {isUnread ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#2563eb', marginRight: 8 }} /> : null}
+              <Text numberOfLines={1} style={{ fontWeight: isUnread ? '800' : '700', flexShrink: 1 }}>{item.title}</Text>
+            </View>
+            <Text style={{ color: isUnread ? '#2563eb' : '#6b7280', fontSize: 12, fontWeight: isUnread ? '700' : '500' }}>{timeAgo(last.createdAt)}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
             <Text style={{ marginRight: 8 }}>{isOutgoing ? '→' : '←'}</Text>
-            <Text numberOfLines={1} style={{ color: '#374151', flex: 1 }}>{last.body}</Text>
+            <Text numberOfLines={1} style={{ color: '#374151', flex: 1, fontWeight: isUnread ? '700' : '400' }}>{last.body}</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -86,13 +90,14 @@ function MessageRow({ item, user, navigation, archiveThread, deleteThread }) {
   );
 }
 
-import { ScreenWrapper, CenteredContainer } from '../components/ScreenWrapper';
+import { ScreenWrapper, CenteredContainer, WebColumns, WebStickySection, WebSurface } from '../components/ScreenWrapper';
 
 export default function ChatsScreen({ navigation }) {
-  const { messages, fetchAndSync, clearMessages, archiveThread, deleteThread, archivedThreads } = useData();
+  const { messages, fetchAndSync, clearMessages, archiveThread, deleteThread, archivedThreads, threadReads = {} } = useData();
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [dateFilterDays, setDateFilterDays] = useState(null); // null => no filter
+  const isWeb = Platform.OS === 'web';
 
   // Ensure the native stack header buttons are reset (Fast Refresh can preserve prior setOptions).
   useLayoutEffect(() => {
@@ -113,12 +118,24 @@ export default function ChatsScreen({ navigation }) {
     return acc;
   }, {});
 
-  const list = Object.values(threads).map((t) => ({
-    id: t.id,
-    last: t.last,
-    title: Array.from(t.participants).filter(Boolean).slice(0,2).join(', ') || (t.last.sender?.name || 'Conversation'),
-    participants: Array.from(t.participants).filter(Boolean),
-  }));
+  const list = Object.values(threads).map((t) => {
+    const latestIncomingAt = (messages || [])
+      .filter((m) => String(m.threadId || m.id) === String(t.id))
+      .filter((m) => String(m.sender?.id || '') !== String(user?.id || ''))
+      .reduce((latest, message) => {
+        const messageMs = Date.parse(String(message?.createdAt || ''));
+        return Number.isFinite(messageMs) && messageMs > latest ? messageMs : latest;
+      }, 0);
+    const readAtMs = Date.parse(String(threadReads?.[String(t.id)] || ''));
+    const isUnread = latestIncomingAt > 0 && (!Number.isFinite(readAtMs) || latestIncomingAt > readAtMs);
+    return {
+      id: t.id,
+      last: t.last,
+      title: Array.from(t.participants).filter(Boolean).slice(0,2).join(', ') || (t.last.sender?.name || 'Conversation'),
+      participants: Array.from(t.participants).filter(Boolean),
+      isUnread,
+    };
+  });
 
   // enforce access: non-admin users only see threads where they are a participant
   const visibleList = (user && (user.role === 'admin' || user.role === 'ADMIN')) ? list : list.filter(l => {
@@ -129,7 +146,7 @@ export default function ChatsScreen({ navigation }) {
 
   // remove archived threads from visible list
   const unarchivedList = (visibleList || []).filter(l => !(archivedThreads || []).includes(l.id));
-  const displayList = (dateFilterDays && Number(dateFilterDays) > 0)
+  const displayList = ((dateFilterDays && Number(dateFilterDays) > 0)
     ? (unarchivedList || []).filter((t) => {
         const iso = t?.last?.createdAt;
         if (!iso) return true;
@@ -138,7 +155,18 @@ export default function ChatsScreen({ navigation }) {
         const cutoff = Date.now() - (Number(dateFilterDays) * 24 * 60 * 60 * 1000);
         return ts >= cutoff;
       })
-    : unarchivedList;
+    : unarchivedList)
+    .slice()
+    .sort((a, b) => {
+      if (!!a?.isUnread !== !!b?.isUnread) return a?.isUnread ? -1 : 1;
+      const aTs = Date.parse(String(a?.last?.createdAt || ''));
+      const bTs = Date.parse(String(b?.last?.createdAt || ''));
+      if (!Number.isFinite(aTs) && !Number.isFinite(bTs)) return 0;
+      if (!Number.isFinite(aTs)) return 1;
+      if (!Number.isFinite(bTs)) return -1;
+      return bTs - aTs;
+    });
+  const unreadCount = displayList.filter((item) => item?.isUnread).length;
 
   async function onRefresh() {
     try { setRefreshing(true); await fetchAndSync({ force: true }); } catch (e) {} finally { setRefreshing(false); }
@@ -203,26 +231,88 @@ export default function ChatsScreen({ navigation }) {
         />
       )}
     >
-      <CenteredContainer>
-        <View style={{ width: '100%', backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' }}>
-          {/* Dev buttons moved to DevRoleSwitcher */}
-          <FlatList
-            style={{ width: '100%' }}
-            data={displayList}
-            keyExtractor={(i) => `${i.id}`}
-            renderItem={({ item }) => (
-              <MessageRow item={item} user={user} navigation={navigation} archiveThread={archiveThread} deleteThread={deleteThread} />
+      <CenteredContainer contentStyle={isWeb ? { maxWidth: 1120 } : null}>
+        {isWeb ? (
+          <WebColumns
+            left={(
+              <WebStickySection>
+                <WebSurface>
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: '#0f172a' }}>Inbox</Text>
+                  <Text style={{ marginTop: 6, color: '#64748b' }}>Unread messages stay pinned to the top so follow-up work is obvious.</Text>
+                  <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: '#eef2f7' }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10 }}>
+                      <Text style={{ color: '#475569', fontWeight: '600' }}>Unread</Text>
+                      <Text style={{ color: '#0f172a', fontWeight: '800' }}>{unreadCount}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#eef2f7' }}>
+                      <Text style={{ color: '#475569', fontWeight: '600' }}>Visible threads</Text>
+                      <Text style={{ color: '#0f172a', fontWeight: '800' }}>{displayList.length}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#eef2f7' }}>
+                      <Text style={{ color: '#475569', fontWeight: '600' }}>Archived</Text>
+                      <Text style={{ color: '#0f172a', fontWeight: '800' }}>{(archivedThreads || []).length}</Text>
+                    </View>
+                  </View>
+                </WebSurface>
+              </WebStickySection>
             )}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            main={(
+              <WebSurface style={{ padding: 0, overflow: 'hidden' }}>
+                <View style={{ paddingHorizontal: 18, paddingTop: 16, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#eef2f7' }}>
+                  <Text style={{ fontSize: 20, fontWeight: '800', color: '#0f172a' }}>Messages</Text>
+                  <Text style={{ marginTop: 4, color: '#64748b' }}>{dateFilterDays ? `Showing threads active in the last ${dateFilterDays} days.` : 'Recent conversations across your organization.'}</Text>
+                </View>
+                <FlatList
+                  style={{ width: '100%' }}
+                  data={displayList}
+                  keyExtractor={(i) => `${i.id}`}
+                  renderItem={({ item }) => (
+                    <MessageRow item={item} user={user} navigation={navigation} archiveThread={archiveThread} deleteThread={deleteThread} />
+                  )}
+                  refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                  ListEmptyComponent={(
+                    <View style={{ padding: 24, alignItems: 'center' }}>
+                      <Text style={{ color: '#6b7280' }}>
+                        {dateFilterDays ? `No conversations in last ${dateFilterDays} days.` : 'No conversations yet.'}
+                      </Text>
+                    </View>
+                  )}
+                />
+              </WebSurface>
+            )}
+            right={(
+              <WebStickySection>
+                <WebSurface compact>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a' }}>Workflow</Text>
+                  <Text style={{ marginTop: 10, color: '#475569', lineHeight: 20 }}>Use the filter button to narrow the inbox, and archive threads once the follow-up is complete.</Text>
+                  <TouchableOpacity onPress={startNewMessage} style={{ marginTop: 14, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#dbeafe' }}>
+                    <Text style={{ color: '#1d4ed8', fontWeight: '800' }}>Start a new message</Text>
+                  </TouchableOpacity>
+                </WebSurface>
+              </WebStickySection>
+            )}
           />
-          {(!displayList || displayList.length === 0) && (
-            <View style={{ padding: 20, alignItems: 'center' }}>
-              <Text style={{ color: '#6b7280' }}>
-                {dateFilterDays ? `No conversations in last ${dateFilterDays} days.` : 'No conversations yet.'}
-              </Text>
-            </View>
-          )}
-        </View>
+        ) : (
+          <View style={{ width: '100%', backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' }}>
+            {/* Dev buttons moved to DevRoleSwitcher */}
+            <FlatList
+              style={{ width: '100%' }}
+              data={displayList}
+              keyExtractor={(i) => `${i.id}`}
+              renderItem={({ item }) => (
+                <MessageRow item={item} user={user} navigation={navigation} archiveThread={archiveThread} deleteThread={deleteThread} />
+              )}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            />
+            {(!displayList || displayList.length === 0) && (
+              <View style={{ padding: 20, alignItems: 'center' }}>
+                <Text style={{ color: '#6b7280' }}>
+                  {dateFilterDays ? `No conversations in last ${dateFilterDays} days.` : 'No conversations yet.'}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
       </CenteredContainer>
     </ScreenWrapper>
   );
