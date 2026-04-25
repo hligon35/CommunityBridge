@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, Image } from 'react-native';
 export default function LogoTitle({ width = 120, height = 36, style }) {
   return (
     <View style={styles.wrap}>
-      <Image source={require('../../public/banner.png')} style={[{ width, height, resizeMode: 'contain' }, style]} />
+      <Image source={require('../../public/cblogo.png')} style={[{ width, height, resizeMode: 'contain' }, style]} />
     </View>
   );
 }
