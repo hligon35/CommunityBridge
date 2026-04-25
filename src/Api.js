@@ -316,11 +316,14 @@ export async function verify2fa(_) {
     }
   }
 
-  // Refresh the Firebase ID token (claims may change) and then reload user profile.
+  // Best-effort token refresh only. Firestore MFA rules key off users/{uid}.mfaVerifiedAt,
+  // so a transient securetoken failure should not block the user from completing verify.
   try {
     const a = getAuthInstance();
     await a?.currentUser?.getIdToken(true);
-  } catch (_) {}
+  } catch (e) {
+    try { console.warn('[Api.verify2fa] token refresh failed after verify; continuing with cached session', e?.message || e); } catch (_) {}
+  }
 
   const profile = await me().catch(() => null);
   return { ok: true, user: profile || null };

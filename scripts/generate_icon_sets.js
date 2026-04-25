@@ -89,13 +89,21 @@ async function generate() {
   const { Jimp } = await importJimp();
 
   const root = path.join(__dirname, '..');
-  const srcPath = path.join(root, 'assets', 'icon.png');
+  const srcPath = fs.existsSync(path.join(root, 'cbicon.png'))
+    ? path.join(root, 'cbicon.png')
+    : path.join(root, 'assets', 'icon.png');
   if (!fs.existsSync(srcPath)) {
     console.error('Source icon not found at', srcPath);
     process.exit(1);
   }
 
   const src = await Jimp.read(srcPath);
+
+  // Canonical web/native source assets consumed by Expo config and static pages.
+  await writeImage(Jimp, src, path.join(root, 'public', 'icon.png'));
+  console.log('Wrote', path.join(root, 'public', 'icon.png'));
+  await writeImage(Jimp, src, path.join(root, 'assets', 'icon.png'));
+  console.log('Wrote', path.join(root, 'assets', 'icon.png'));
 
   // Expo-managed assets referenced in app.json
   await writeContained(Jimp, src, path.join(root, 'assets', 'favicon.png'), 1024, 0xffffffff);

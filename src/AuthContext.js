@@ -69,12 +69,37 @@ export function AuthProvider({ children }) {
 
     setMfaLoading(true);
     try {
-      // Ensure token is current. Force-refresh so any new custom claims (e.g. bb_mfa)
-      // set right after a successful verify are picked up immediately.
-      const t = await fbUser.getIdToken(true);
-      setToken(String(t || ''));
+      // Prefer a forced refresh, but do not fail the MFA flow if securetoken is temporarily
+      // unreachable. Firestore rules key off mfaVerifiedAt on the user document.
+      try {
+        const t = await fbUser.getIdToken(true);
+        setToken(String(t || ''));
+      } catch (e) {
+        try { console.warn('[auth] refreshMfaState: forced token refresh failed; using cached token', e?.message || e); } catch (_) {}
+        try {
+          const fallbackToken = await fbUser.getIdToken(false);
+          setToken(String(fallbackToken || ''));
+        } catch (_) {}
+      }
 
-      const profile = await Api.me().catch((e) => { try { console.warn('[auth] refreshMfaState: me() failed', e?.code, e?.message); } catch (_) {} return null; });
+      const readProfileWithRetry = async () => {
+        let lastProfile = null;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          // Give the verify endpoint's Firestore write a brief moment to become visible.
+          if (attempt > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+          }
+          const profile = await Api.me().catch((e) => {
+            try { console.warn('[auth] refreshMfaState: me() failed', e?.code, e?.message); } catch (_) {}
+            return null;
+          });
+          lastProfile = profile;
+          if (!mfaRequiredRef.current || isMfaFresh(profile)) return profile;
+        }
+        return lastProfile;
+      };
+
+      const profile = await readProfileWithRetry();
       if (profile) setUser(profile);
 
       const org = await Api.getOrgSettings().catch((e) => { try { console.warn('[auth] refreshMfaState: getOrgSettings() failed', e?.code, e?.message); } catch (_) {} return null; });

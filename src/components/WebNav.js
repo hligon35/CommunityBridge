@@ -69,6 +69,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e6e6e6',
+    // Ensure header (and its absolutely-positioned dropdown) sit above page content like the Post button
+    zIndex: 1000,
+    ...(typeof window !== 'undefined' ? { position: 'relative' } : {}),
   },
   inner: {
     maxWidth: 1100,
@@ -79,6 +82,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     paddingHorizontal: 16,
+    zIndex: 1000,
   },
   logoWrap: {
     alignItems: 'center',
@@ -97,9 +101,16 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     minWidth: 180,
+    zIndex: 1001,
+    elevation: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
   },
   link: {
     paddingVertical: 10,
+    width: '100%',
   },
   linkText: {
     color: '#111827',
