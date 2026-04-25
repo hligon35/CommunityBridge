@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, Linking } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Api from '../src/Api';
+import { formatSupportDetails, reportErrorToSentry } from '../src/utils/reportError';
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -37,7 +38,13 @@ export default function ForgotPasswordScreen({ onDone, onCancel }) {
         { text: 'OK', onPress: () => { try { onDone && onDone(); } catch (_) {} } },
       ]);
     } catch (err) {
-      Alert.alert('Reset failed', err?.message || String(err));
+      const code = String(err?.code || '');
+      const eventId = reportErrorToSentry(err, {
+        area: 'auth',
+        action: 'password-reset',
+        errorCode: code,
+      });
+      Alert.alert('Reset failed', `${err?.message || String(err)}${formatSupportDetails({ code, eventId })}`);
     } finally {
       setBusy(false);
     }

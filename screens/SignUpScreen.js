@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   View,
   Text,
   TextInput,
@@ -20,6 +21,8 @@ import { logger } from '../src/utils/logger';
 import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportError';
 import { getAuthInitError, getFirebaseAppInitError } from '../src/firebase';
 import { MaterialIcons } from '@expo/vector-icons';
+
+const signupButtonImage = require('../assets/icons/buttons/signupButton.png');
 
 export default function SignUpScreen({ onDone, onCancel }) {
   const { height: windowHeight } = useWindowDimensions();
@@ -172,7 +175,11 @@ export default function SignUpScreen({ onDone, onCancel }) {
                   disabled={busy}
                   activeOpacity={0.9}
                 >
-                  <Text style={styles.primaryPushBtnText}>{busy ? 'Creating…' : 'Create account'}</Text>
+                  {busy ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Image source={signupButtonImage} style={styles.primaryButtonImage} resizeMode="contain" />
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -198,8 +205,9 @@ const styles = StyleSheet.create({
   passwordInput: { paddingRight: 42 },
   peekIconBtn: { position: 'absolute', right: 10, top: 10, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   actionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', maxWidth: 360 },
-  primaryPushBtn: { backgroundColor: '#2563eb', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, minWidth: 160, alignItems: 'center' },
+  primaryPushBtn: { backgroundColor: '#2563eb', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, minWidth: 170, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
   primaryPushBtnText: { color: '#fff', fontWeight: '800' },
   secondaryPushBtn: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, minWidth: 120, alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc', marginRight: 10 },
   secondaryPushBtnText: { color: '#111827', fontWeight: '800' },
+  primaryButtonImage: { width: 150, height: 36 },
 });

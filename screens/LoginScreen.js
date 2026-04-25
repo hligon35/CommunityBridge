@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Modal, Platform, Image, KeyboardAvoidingView, ScrollView, TouchableWithoutFeedback, Keyboard, useWindowDimensions } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
-import { MaterialIcons, AntDesign } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
@@ -38,6 +38,15 @@ function maskClientId(id) {
   return `${s.slice(0, 4)}…${s.slice(-6)}`;
 }
 
+const loginButtonImage = require('../assets/icons/buttons/loginButton.png');
+const googleWebButtonImage = require('../assets/icons/Google assets/wgbutton.png');
+const googleIconImage = require('../assets/icons/Google assets/bgIcon.png');
+const faceIdIconImage = require('../assets/icons/faceID.png');
+
+function AuthButtonImage({ source, style, imageStyle }) {
+  return <Image source={source} style={[styles.authButtonImage, style, imageStyle]} resizeMode="contain" />;
+}
+
 function GoogleSignInButtonDisabled({ busy, onPress, variant = 'full' }) {
   if (variant === 'icon') {
     return (
@@ -48,7 +57,7 @@ function GoogleSignInButtonDisabled({ busy, onPress, variant = 'full' }) {
         style={[styles.iconPushBtn, busy ? { opacity: 0.7 } : null]}
         disabled={busy}
       >
-        <AntDesign name="google" size={20} color="#4285F4" />
+        <AuthButtonImage source={googleIconImage} imageStyle={styles.authIconImage} />
       </TouchableOpacity>
     );
   }
@@ -58,11 +67,10 @@ function GoogleSignInButtonDisabled({ busy, onPress, variant = 'full' }) {
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Continue with Google (setup required)"
-      style={[styles.secondaryBtn, busy ? { opacity: 0.7 } : null]}
+      style={[styles.googleImageButtonWrap, busy ? { opacity: 0.7 } : null]}
       disabled={busy}
     >
-      <AntDesign name="google" size={18} color="#4285F4" />
-      <Text style={styles.secondaryBtnText}>Continue with Google (setup required)</Text>
+      <AuthButtonImage source={googleWebButtonImage} style={styles.googleButtonImage} />
     </TouchableOpacity>
   );
 }
@@ -170,21 +178,20 @@ function GoogleSignInButtonEnabled({
         accessibilityLabel="Continue with Google"
         disabled={busy}
       >
-        <AntDesign name="google" size={20} color="#4285F4" />
+        <AuthButtonImage source={googleIconImage} imageStyle={styles.authIconImage} />
       </TouchableOpacity>
     );
   }
 
   return (
     <TouchableOpacity
-      style={[styles.secondaryBtn, busy ? { opacity: 0.7 } : null]}
+      style={[styles.googleImageButtonWrap, busy ? { opacity: 0.7 } : null]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Continue with Google"
       disabled={busy}
     >
-      <AntDesign name="google" size={18} color="#4285F4" />
-      <Text style={styles.secondaryBtnText}>Continue with Google</Text>
+      <AuthButtonImage source={googleWebButtonImage} style={styles.googleButtonImage} />
     </TouchableOpacity>
   );
 }
@@ -503,8 +510,8 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
   // Keep the mobile sign-in stack closer to screen center while preserving web spacing.
   const brandSectionMinHeight = Platform.OS === 'web'
-    ? Math.max(140, Math.round(windowHeight * 0.22))
-    : Math.max(120, Math.round(windowHeight * 0.18));
+    ? Math.max(240, Math.round(windowHeight * 0.34))
+    : Math.max(220, Math.round(windowHeight * 0.28));
   const OuterWrapper = Platform.OS === 'web' ? View : TouchableWithoutFeedback;
   const outerWrapperProps = Platform.OS === 'web' ? {} : { onPress: Keyboard.dismiss, accessible: false };
 
@@ -534,7 +541,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
               <Image
                 source={require('../assets/logo.png')}
                 accessibilityLabel="CommunityBridge"
-                style={[styles.loginLogo, { height: Math.min(180, Math.round(brandSectionMinHeight * 0.65)) }]}
+                style={[styles.loginLogo, { height: Math.min(320, Math.round(brandSectionMinHeight * 0.95)) }]}
               />
             </View>
             <View style={styles.formCard}>
@@ -603,7 +610,11 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
               disabled={busy}
               activeOpacity={0.9}
             >
-              <Text style={styles.primaryPushBtnText}>{busy ? 'Signing in…' : 'Sign in'}</Text>
+              {busy ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <AuthButtonImage source={loginButtonImage} style={styles.primaryButtonImage} />
+              )}
             </TouchableOpacity>
 
             {/* Google sign-in as an icon button on mobile */}
@@ -633,11 +644,11 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
                 style={[styles.iconPushBtn, { marginLeft: 10 }, (biometricBusy || busy) ? { opacity: 0.7 } : null]}
                 disabled={biometricBusy || busy}
               >
-                <MaterialIcons
-                  name={String(biometricLabel).toLowerCase().includes('face') ? 'face' : 'fingerprint'}
-                  size={22}
-                  color="#2563eb"
-                />
+                {String(biometricLabel).toLowerCase().includes('face') ? (
+                  <AuthButtonImage source={faceIdIconImage} imageStyle={styles.authIconImage} />
+                ) : (
+                  <MaterialIcons name="fingerprint" size={22} color="#2563eb" />
+                )}
               </TouchableOpacity>
             ) : null}
           </View>
@@ -747,7 +758,7 @@ const styles = StyleSheet.create({
   scrollContainerWeb: { justifyContent: 'flex-start' },
   scrollContainerMobile: { justifyContent: 'center', paddingTop: 32, paddingBottom: 32 },
   brandSection: { width: '100%', maxWidth: 420, alignItems: 'center', justifyContent: 'center' },
-  loginLogo: { width: '100%', maxWidth: 320, resizeMode: 'contain' },
+  loginLogo: { width: '100%', maxWidth: 640, resizeMode: 'contain' },
   formCard: { width: '100%', maxWidth: 420, alignSelf: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 20 },
   input: { borderWidth: 1, borderColor: '#ccc', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12, borderRadius: 10, backgroundColor: '#fff' },
@@ -758,7 +769,7 @@ const styles = StyleSheet.create({
   showPasswordText: { marginLeft: 8, color: '#6b7280', fontWeight: '700' },
   blankRow: { height: 12 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  primaryPushBtn: { backgroundColor: '#2563eb', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 10, minWidth: 140, alignItems: 'center' },
+  primaryPushBtn: { backgroundColor: '#2563eb', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, minWidth: 180, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
   primaryPushBtnText: { color: '#fff', fontWeight: '800' },
   iconPushBtn: { width: 44, height: 44, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' },
   linksRow: { marginTop: 12, width: '100%', maxWidth: 360, flexDirection: 'row', justifyContent: 'center', alignSelf: 'center', alignItems: 'center' },
@@ -767,4 +778,9 @@ const styles = StyleSheet.create({
   secondaryActions: { marginTop: 10, alignItems: 'center' },
   secondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc', width: '100%', maxWidth: 360 },
   secondaryBtnText: { marginLeft: 8, color: '#111827', fontWeight: '700' },
+  authButtonImage: { width: '100%', height: '100%' },
+  primaryButtonImage: { width: 140, height: 36 },
+  authIconImage: { width: 24, height: 24 },
+  googleImageButtonWrap: { width: '100%', maxWidth: 360, alignItems: 'center', justifyContent: 'center' },
+  googleButtonImage: { width: '100%', maxWidth: 320, height: 52 },
 });

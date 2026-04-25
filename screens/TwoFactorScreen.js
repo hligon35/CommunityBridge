@@ -15,6 +15,16 @@ import {
 } from 'react-native';
 import { useAuth } from '../src/AuthContext';
 import * as Api from '../src/Api';
+import { formatSupportDetails, reportErrorToSentry } from '../src/utils/reportError';
+
+function getRetryAfterSeconds(error) {
+  const fromStatus = Number(error?.httpStatus || 0);
+  if (fromStatus === 429) {
+    const match = String(error?.message || '').match(/wait\s+(\d+)s/i);
+    if (match) return Number(match[1]) || 0;
+  }
+  return 0;
+}
 
 export default function TwoFactorScreen({ navigation }) {
   const auth = useAuth();
@@ -22,21 +32,63 @@ export default function TwoFactorScreen({ navigation }) {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
+  const [resendStatus, setResendStatus] = useState('');
+  const [resendStatusTone, setResendStatusTone] = useState('muted');
+  const [resendAvailableAt, setResendAvailableAt] = useState(0);
+  const [countdownNow, setCountdownNow] = useState(Date.now());
   const didAutoSendRef = useRef(false);
   const email = auth?.user?.email ? String(auth.user.email) : '';
 
   const fieldWidthStyle = useMemo(() => ({ width: '100%', maxWidth: 360 }), []);
+  const resendSecondsRemaining = resendAvailableAt > countdownNow
+    ? Math.max(0, Math.ceil((resendAvailableAt - countdownNow) / 1000))
+    : 0;
 
-  async function sendCode() {
+  async function sendCode({ manual = true } = {}) {
+    if (manual && resendSecondsRemaining > 0) {
+      setResendStatus(`A code was already sent. You can resend in ${resendSecondsRemaining}s.`);
+      setResendStatusTone('muted');
+      return;
+    }
+
     setSending(true);
     try {
-      await Api.resend2fa({ method: 'email' });
+      const result = await Api.resend2fa({ method: 'email' });
+      const sentAtMs = Number(result?.challenge?.sentAtMs || Date.now());
+      const destination = String(result?.challenge?.to || email || '').trim();
+      setResendAvailableAt(sentAtMs + 60 * 1000);
+      setCountdownNow(Date.now());
+      setResendStatus(destination ? `Code sent to ${destination}.` : 'Verification code sent.');
+      setResendStatusTone('success');
     } catch (e) {
+      const retryAfterSeconds = getRetryAfterSeconds(e);
+      if (retryAfterSeconds > 0) {
+        setResendAvailableAt(Date.now() + (retryAfterSeconds * 1000));
+        setCountdownNow(Date.now());
+        setResendStatus(`A code was already sent. You can resend in ${retryAfterSeconds}s.`);
+        setResendStatusTone('muted');
+        return;
+      }
+
       const msg = String(e?.message || '').trim();
+      const eventId = reportErrorToSentry(e, {
+        area: 'auth',
+        action: 'resend-2fa',
+        errorCode: String(e?.code || ''),
+        httpStatus: Number(e?.httpStatus || 0),
+      });
       if (String(e?.code || '').includes('BB_MFA_FUNCTION_FORBIDDEN')) {
-        Alert.alert('Two-step verification is blocked', msg || 'Cloud Function access is forbidden (403).');
+        Alert.alert(
+          'Two-step verification is blocked',
+          `${msg || 'Cloud Function access is forbidden (403).'}${formatSupportDetails({ code: e?.code, eventId })}`
+        );
       } else {
-        Alert.alert('Could not send code', msg || 'Please try again.');
+        setResendStatus(msg || 'Could not send code. Please try again.');
+        setResendStatusTone('error');
+        Alert.alert(
+          'Could not send code',
+          `${msg || 'Please try again.'}${formatSupportDetails({ code: e?.code, eventId })}`
+        );
       }
     } finally {
       setSending(false);
@@ -84,9 +136,19 @@ export default function TwoFactorScreen({ navigation }) {
     // Auto-send once on entry (best effort). Avoid spamming when tokens refresh.
     if (didAutoSendRef.current) return;
     didAutoSendRef.current = true;
-    sendCode().catch(() => {});
+    sendCode({ manual: false }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth?.token, auth?.needsMfa]);
+
+  useEffect(() => {
+    if (resendAvailableAt <= Date.now()) return undefined;
+
+    const interval = setInterval(() => {
+      setCountdownNow(Date.now());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [resendAvailableAt]);
 
   try { console.info('[TwoFactor] render', { loading: !!auth?.loading, needsMfa: !!auth?.needsMfa, hasToken: !!auth?.token, email }); } catch (_) {}
 
@@ -135,6 +197,19 @@ export default function TwoFactorScreen({ navigation }) {
             <Text style={styles.subtitle}>
               {email ? `Enter the code we sent to ${email}.` : 'Enter the verification code we sent to you.'}
             </Text>
+            {resendStatus ? (
+              <Text style={[
+                styles.statusText,
+                resendStatusTone === 'error'
+                  ? styles.statusTextError
+                  : resendStatusTone === 'success'
+                    ? styles.statusTextSuccess
+                    : styles.statusTextMuted,
+              ]}
+              >
+                {resendStatus}
+              </Text>
+            ) : null}
 
             <View style={fieldWidthStyle}>
               <TextInput
@@ -160,12 +235,14 @@ export default function TwoFactorScreen({ navigation }) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={sendCode}
+              onPress={() => sendCode({ manual: true })}
               accessibilityRole="button"
-              style={[styles.secondaryBtn, (busy || sending) ? { opacity: 0.7 } : null]}
-              disabled={busy || sending}
+              style={[styles.secondaryBtn, (busy || sending || resendSecondsRemaining > 0) ? { opacity: 0.7 } : null]}
+              disabled={busy || sending || resendSecondsRemaining > 0}
             >
-              <Text style={styles.secondaryBtnText}>{sending ? 'Sending…' : 'Resend code'}</Text>
+              <Text style={styles.secondaryBtnText}>
+                {sending ? 'Sending…' : resendSecondsRemaining > 0 ? `Resend in ${resendSecondsRemaining}s` : 'Resend code'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -235,4 +312,8 @@ const styles = StyleSheet.create({
   secondaryBtnText: { color: '#111827', fontWeight: '700' },
   linkBtn: { marginTop: 12, alignItems: 'center' },
   linkText: { color: '#2563eb', fontWeight: '700' },
+  statusText: { width: '100%', maxWidth: 360, textAlign: 'center', fontSize: 13, marginBottom: 12 },
+  statusTextMuted: { color: '#475569' },
+  statusTextSuccess: { color: '#15803d' },
+  statusTextError: { color: '#b91c1c' },
 });
