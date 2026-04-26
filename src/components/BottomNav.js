@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform, Image } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { logPress } from '../utils/logger';
@@ -8,9 +7,10 @@ import { logPress } from '../utils/logger';
 const homeIcon = require('../../assets/icons/home.png');
 const messagesIcon = require('../../assets/icons/messages.png');
 const messagesBadgeIcon = require('../../assets/icons/messages(badge).png');
-const calendarIcon = require('../../assets/icons/calendar.png');
+const myClassIcon = require('../../assets/icons/myclass.png');
 const controlsIcon = require('../../assets/icons/controls.png');
 const settingsIcon = require('../../assets/icons/Settings.png');
+const myChildIcon = require('../../assets/icons/mychild.png');
 
 function NavImageIcon({ source, active, size = 24 }) {
   return (
@@ -37,11 +37,11 @@ export default function BottomNav({ navigationRef, currentRoute }) {
     { key: 'Chats', label: 'Chats', icon: (active) => (<NavImageIcon source={unreadThreadCount > 0 ? messagesBadgeIcon : messagesIcon} active={active} />), count: unreadThreadCount },
   ];
   if (role === 'therapist') {
-    tabs.push({ key: 'MyClass', label: 'My Class', icon: (active) => (<NavImageIcon source={calendarIcon} active={active} />) });
+    tabs.push({ key: 'MyClass', label: 'My Class', icon: (active) => (<NavImageIcon source={myClassIcon} active={active} />) });
   } else if (role === 'admin' || role === 'administrator') {
   tabs.push({ key: 'Controls', label: 'Dashboard', icon: (active) => (<NavImageIcon source={controlsIcon} active={active} />), count: (urgentMemos || []).filter((m) => !m.status || m.status === 'pending').length });
   } else {
-    tabs.push({ key: 'MyChild', label: 'My Child', icon: (active) => (<MaterialCommunityIcons name={active ? 'account-child' : 'account-child-outline'} size={22} color={active ? '#0066FF' : '#444'} />), count: parentPendingCount });
+    tabs.push({ key: 'MyChild', label: 'My Child', icon: (active) => (<NavImageIcon source={myChildIcon} active={active} />), count: parentPendingCount });
   }
   tabs.push({ key: 'Settings', label: 'Settings', icon: (active) => (<NavImageIcon source={settingsIcon} active={active} />) });
   function go(name) {

@@ -2,7 +2,6 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Modal, Platform, Image, KeyboardAvoidingView, ScrollView, TouchableWithoutFeedback, Keyboard, useWindowDimensions } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
-import { AntDesign } from '@expo/vector-icons';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Updates from 'expo-updates';
@@ -41,8 +40,9 @@ function maskClientId(id) {
 
 const loginButtonImage = require('../assets/icons/buttons/loginButton.png');
 const googleWebButtonImage = require('../assets/icons/Google assets/wgbutton.png');
-const googleIconImage = require('../assets/icons/Google assets/bgIcon.png');
+const googleIconImage = require('../assets/icons/Google assets/ggIcon.png');
 const faceIdIconImage = require('../assets/icons/faceID.png');
+const loginLogoImage = require('../assets/logo.png');
 
 function AuthButtonImage({ source, style, imageStyle }) {
   return <Image source={source} style={[styles.authButtonImage, style, imageStyle]} resizeMode="contain" />;
@@ -60,7 +60,7 @@ function GoogleSignInButtonDisabled({ busy, onPress, variant = 'full' }) {
         style={[styles.iconPushBtn, isMobilePlatform ? styles.mobileIconPushBtn : null, busy ? { opacity: 0.7 } : null]}
         disabled={busy}
       >
-        <AntDesign name="google" size={24} color="#4285F4" />
+        <AuthButtonImage source={googleIconImage} imageStyle={styles.mobileAuthIconImage} />
       </TouchableOpacity>
     );
   }
@@ -181,7 +181,7 @@ function GoogleSignInButtonEnabled({
         accessibilityLabel="Continue with Google"
         disabled={busy}
       >
-        <AntDesign name="google" size={24} color="#4285F4" />
+        <AuthButtonImage source={googleIconImage} imageStyle={styles.mobileAuthIconImage} />
       </TouchableOpacity>
     );
   }
@@ -542,7 +542,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
           >
             <View style={[styles.brandSection, { minHeight: brandSectionMinHeight }]}>
               <Image
-                source={require('../assets/logo.png')}
+                source={loginLogoImage}
                 accessibilityLabel="CommunityBridge"
                 style={[styles.loginLogo, { height: Math.min(320, Math.round(brandSectionMinHeight * 0.95)) }]}
               />
@@ -598,7 +598,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
                 onPress={sendInternalSentryTestError}
                 accessibilityRole="button"
                 accessibilityLabel="Internal: send Sentry test error"
-                style={[styles.iconPushBtn, isMobilePlatform ? styles.mobileIconPushBtn : null, { marginRight: 10 }]}
+                style={[styles.iconPushBtn, isMobilePlatform ? styles.mobileIconPushBtn : null]}
                 disabled={busy}
               >
                 <MaterialIcons name="bug-report" size={20} color="#2563eb" />
@@ -616,7 +616,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
               {busy ? (
                 <ActivityIndicator color="#fff" />
               ) : isMobilePlatform ? (
-                <MaterialIcons name="login" size={34} color="#2563eb" />
+                <AuthButtonImage source={loginButtonImage} imageStyle={styles.mobileLoginButtonImage} />
               ) : (
                 <AuthButtonImage source={loginButtonImage} style={styles.primaryButtonImage} />
               )}
@@ -624,21 +624,19 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
             {/* Google sign-in as an icon button on mobile */}
             {Platform.OS !== 'web' ? (
-              <View style={{ marginLeft: 10 }}>
-                <GoogleSignInButton
-                  variant="icon"
-                  auth={auth}
-                  navigation={navigation}
-                  enabled={googleEnabled}
-                  busy={busy}
-                  setBusy={setBusy}
-                  iosClientId={iosGoogleClientId}
-                  androidClientId={androidGoogleClientId}
-                  webClientId={webGoogleClientId}
-                  redirectUri={googleRedirectUri}
-                  onMissingConfig={showGoogleConfigHelp}
-                />
-              </View>
+              <GoogleSignInButton
+                variant="icon"
+                auth={auth}
+                navigation={navigation}
+                enabled={googleEnabled}
+                busy={busy}
+                setBusy={setBusy}
+                iosClientId={iosGoogleClientId}
+                androidClientId={androidGoogleClientId}
+                webClientId={webGoogleClientId}
+                redirectUri={googleRedirectUri}
+                onMissingConfig={showGoogleConfigHelp}
+              />
             ) : null}
 
             {biometricAvailable ? (
@@ -646,11 +644,11 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
                 onPress={doBiometricUnlock}
                 accessibilityRole="button"
                 accessibilityLabel={biometricLabel}
-                style={[styles.iconPushBtn, isMobilePlatform ? styles.mobileIconPushBtn : null, { marginLeft: 10 }, (biometricBusy || busy) ? { opacity: 0.7 } : null]}
+                style={[styles.iconPushBtn, isMobilePlatform ? styles.mobileIconPushBtn : null, (biometricBusy || busy) ? { opacity: 0.7 } : null]}
                 disabled={biometricBusy || busy}
               >
                 {String(biometricLabel).toLowerCase().includes('face') ? (
-                  <AuthButtonImage source={faceIdIconImage} imageStyle={styles.authIconImage} />
+                  <AuthButtonImage source={faceIdIconImage} imageStyle={styles.mobileAuthIconImage} />
                 ) : (
                   <MaterialIcons name="fingerprint" size={22} color="#2563eb" />
                 )}
@@ -773,9 +771,9 @@ const styles = StyleSheet.create({
   showPasswordToggle: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 2 },
   showPasswordText: { marginLeft: 8, color: '#6b7280', fontWeight: '700' },
   blankRow: { height: 12 },
-  actionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  actionsRow: { width: '100%', maxWidth: 320, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', columnGap: 10 },
   primaryPushBtn: { backgroundColor: '#2563eb', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, minWidth: 180, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
-  mobilePrimaryPushBtn: { backgroundColor: 'transparent', paddingVertical: 0, paddingHorizontal: 0, minWidth: 140, minHeight: 36 },
+  mobilePrimaryPushBtn: { backgroundColor: 'transparent', paddingVertical: 0, paddingHorizontal: 0, minWidth: 168, minHeight: 56 },
   primaryPushBtnText: { color: '#fff', fontWeight: '800' },
   iconPushBtn: { width: 44, height: 44, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' },
   mobileIconPushBtn: { borderWidth: 0, borderColor: 'transparent', backgroundColor: 'transparent' },
@@ -788,6 +786,8 @@ const styles = StyleSheet.create({
   authButtonImage: { width: '100%', height: '100%' },
   primaryButtonImage: { width: 140, height: 36 },
   authIconImage: { width: 24, height: 24 },
+  mobileLoginButtonImage: { width: 168, height: 46 },
+  mobileAuthIconImage: { width: 42, height: 42 },
   googleImageButtonWrap: { width: '100%', maxWidth: 360, alignItems: 'center', justifyContent: 'center' },
   googleButtonImage: { width: '100%', maxWidth: 320, height: 52 },
 });
