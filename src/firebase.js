@@ -298,10 +298,10 @@ let authInstance = globalThis?.[AUTH_GLOBAL_KEY];
 let authInitError = globalThis?.[AUTH_ERROR_GLOBAL_KEY] || null;
 
 function ensureReactNativeAuthRegistered() {
-  // In Firebase 10.x, `firebase/auth/react-native` is not exported.
-  // The Auth component is registered by the RN build of `@firebase/auth`.
-  // Our metro.config.js aliases `@firebase/auth` -> the RN entry, so requiring it
-  // here guarantees registerAuth(...) runs before we call getAuth().
+  // Firebase 10.x in this app exposes `firebase/auth` and `firebase/auth/cordova`,
+  // not the older internal `@firebase/auth` RN path. On native, explicitly loading
+  // the Cordova/native-friendly auth entry ensures the auth component is registered
+  // before initializeAuth()/getAuth() run.
   if (Platform.OS === 'web') return true;
 
   try {
@@ -310,21 +310,30 @@ function ensureReactNativeAuthRegistered() {
 
   try {
     // eslint-disable-next-line global-require
-    require('@firebase/auth');
+    require('firebase/auth/cordova');
     try {
       if (globalThis) globalThis[AUTH_REGISTERED_GLOBAL_KEY] = true;
     } catch (_) {}
     return true;
   } catch (e) {
-    const err = e || new Error('Failed to load @firebase/auth RN entry');
     try {
-      console.warn('[firebase] Failed to register React Native Auth component', err);
-    } catch (_) {}
-    authInitError = err;
-    try {
-      if (globalThis) globalThis[AUTH_ERROR_GLOBAL_KEY] = err;
-    } catch (_) {}
-    return false;
+      // eslint-disable-next-line global-require
+      require('firebase/auth');
+      try {
+        if (globalThis) globalThis[AUTH_REGISTERED_GLOBAL_KEY] = true;
+      } catch (_) {}
+      return true;
+    } catch (fallbackError) {
+      const err = fallbackError || e || new Error('Failed to load a native Firebase Auth entry');
+      try {
+        console.warn('[firebase] Failed to register React Native Auth component', err);
+      } catch (_) {}
+      authInitError = err;
+      try {
+        if (globalThis) globalThis[AUTH_ERROR_GLOBAL_KEY] = err;
+      } catch (_) {}
+      return false;
+    }
   }
 }
 

@@ -12,7 +12,7 @@
 #   gcloud run services update communitybridge `
 #     --region us-central1 --project communitybridge-26apr `
 #     --env-vars-file tmp/cloudrun-nonsecrets.env.yaml `
-#     --update-secrets "CB_SMTP_URL=cb-smtp-url:latest,CB_TWILIO_AUTH_TOKEN=cb-twilio-token:latest,BB_SMTP_URL=bb-smtp-url:latest,BB_TWILIO_AUTH_TOKEN=bb-twilio-token:latest"
+#     --update-secrets "CB_DATABASE_URL=cb-database-url:latest,BB_DATABASE_URL=bb-database-url:latest,CB_JWT_SECRET=cb-jwt-secret:latest,BB_JWT_SECRET=bb-jwt-secret:latest,CB_SMTP_URL=cb-smtp-url:latest,BB_SMTP_URL=bb-smtp-url:latest,CB_TWILIO_AUTH_TOKEN=cb-twilio-token:latest,BB_TWILIO_AUTH_TOKEN=bb-twilio-token:latest,CB_ADMIN_PASSWORD=cb-admin-password:latest,BB_ADMIN_PASSWORD=bb-admin-password:latest"
 
 param(
   [string]$Project = "communitybridge-26apr",
@@ -25,10 +25,16 @@ $ErrorActionPreference = "Continue"
 
 # Map: secret name in Secret Manager -> env var key to read from FromFile
 $SecretMap = [ordered]@{
+  "cb-database-url"   = "CB_DATABASE_URL"
+  "bb-database-url"   = "BB_DATABASE_URL"
+  "cb-jwt-secret"     = "CB_JWT_SECRET"
+  "bb-jwt-secret"     = "BB_JWT_SECRET"
   "cb-smtp-url"     = "CB_SMTP_URL"
   "bb-smtp-url"     = "BB_SMTP_URL"
   "cb-twilio-token" = "CB_TWILIO_AUTH_TOKEN"
   "bb-twilio-token" = "BB_TWILIO_AUTH_TOKEN"
+  "cb-admin-password" = "CB_ADMIN_PASSWORD"
+  "bb-admin-password" = "BB_ADMIN_PASSWORD"
 }
 
 function Get-EnvValueFromFile {
@@ -118,4 +124,4 @@ Write-Host "==> Done. Next step:"
 Write-Host "gcloud run services update $Service ``"
 Write-Host "  --region $Region --project $Project ``"
 Write-Host "  --env-vars-file tmp/cloudrun-nonsecrets.env.yaml ``"
-Write-Host "  --update-secrets `"CB_SMTP_URL=cb-smtp-url:latest,CB_TWILIO_AUTH_TOKEN=cb-twilio-token:latest,BB_SMTP_URL=bb-smtp-url:latest,BB_TWILIO_AUTH_TOKEN=bb-twilio-token:latest`""
+Write-Host "  --update-secrets `"CB_DATABASE_URL=cb-database-url:latest,BB_DATABASE_URL=bb-database-url:latest,CB_JWT_SECRET=cb-jwt-secret:latest,BB_JWT_SECRET=bb-jwt-secret:latest,CB_SMTP_URL=cb-smtp-url:latest,BB_SMTP_URL=bb-smtp-url:latest,CB_TWILIO_AUTH_TOKEN=cb-twilio-token:latest,BB_TWILIO_AUTH_TOKEN=bb-twilio-token:latest,CB_ADMIN_PASSWORD=cb-admin-password:latest,BB_ADMIN_PASSWORD=bb-admin-password:latest`""

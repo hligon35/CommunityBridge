@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Modal, Platform, Image, KeyboardAvoidingView, ScrollView, TouchableWithoutFeedback, Keyboard, useWindowDimensions } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
+import { AntDesign } from '@expo/vector-icons';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Updates from 'expo-updates';
@@ -47,6 +48,8 @@ function AuthButtonImage({ source, style, imageStyle }) {
   return <Image source={source} style={[styles.authButtonImage, style, imageStyle]} resizeMode="contain" />;
 }
 
+const isMobilePlatform = Platform.OS !== 'web';
+
 function GoogleSignInButtonDisabled({ busy, onPress, variant = 'full' }) {
   if (variant === 'icon') {
     return (
@@ -54,10 +57,10 @@ function GoogleSignInButtonDisabled({ busy, onPress, variant = 'full' }) {
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel="Continue with Google (setup required)"
-        style={[styles.iconPushBtn, busy ? { opacity: 0.7 } : null]}
+        style={[styles.iconPushBtn, isMobilePlatform ? styles.mobileIconPushBtn : null, busy ? { opacity: 0.7 } : null]}
         disabled={busy}
       >
-        <AuthButtonImage source={googleIconImage} imageStyle={styles.authIconImage} />
+        <AntDesign name="google" size={24} color="#4285F4" />
       </TouchableOpacity>
     );
   }
@@ -172,13 +175,13 @@ function GoogleSignInButtonEnabled({
   if (variant === 'icon') {
     return (
       <TouchableOpacity
-        style={[styles.iconPushBtn, busy ? { opacity: 0.7 } : null]}
+        style={[styles.iconPushBtn, isMobilePlatform ? styles.mobileIconPushBtn : null, busy ? { opacity: 0.7 } : null]}
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel="Continue with Google"
         disabled={busy}
       >
-        <AuthButtonImage source={googleIconImage} imageStyle={styles.authIconImage} />
+        <AntDesign name="google" size={24} color="#4285F4" />
       </TouchableOpacity>
     );
   }
@@ -595,7 +598,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
                 onPress={sendInternalSentryTestError}
                 accessibilityRole="button"
                 accessibilityLabel="Internal: send Sentry test error"
-                style={[styles.iconPushBtn, { marginRight: 10 }]}
+                style={[styles.iconPushBtn, isMobilePlatform ? styles.mobileIconPushBtn : null, { marginRight: 10 }]}
                 disabled={busy}
               >
                 <MaterialIcons name="bug-report" size={20} color="#2563eb" />
@@ -606,12 +609,14 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
               onPress={doLogin}
               accessibilityRole="button"
               accessibilityLabel="Sign in"
-              style={[styles.primaryPushBtn, busy ? { opacity: 0.7 } : null]}
+              style={[styles.primaryPushBtn, isMobilePlatform ? styles.mobilePrimaryPushBtn : null, busy ? { opacity: 0.7 } : null]}
               disabled={busy}
               activeOpacity={0.9}
             >
               {busy ? (
                 <ActivityIndicator color="#fff" />
+              ) : isMobilePlatform ? (
+                <MaterialIcons name="login" size={34} color="#2563eb" />
               ) : (
                 <AuthButtonImage source={loginButtonImage} style={styles.primaryButtonImage} />
               )}
@@ -641,7 +646,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
                 onPress={doBiometricUnlock}
                 accessibilityRole="button"
                 accessibilityLabel={biometricLabel}
-                style={[styles.iconPushBtn, { marginLeft: 10 }, (biometricBusy || busy) ? { opacity: 0.7 } : null]}
+                style={[styles.iconPushBtn, isMobilePlatform ? styles.mobileIconPushBtn : null, { marginLeft: 10 }, (biometricBusy || busy) ? { opacity: 0.7 } : null]}
                 disabled={biometricBusy || busy}
               >
                 {String(biometricLabel).toLowerCase().includes('face') ? (
@@ -770,8 +775,10 @@ const styles = StyleSheet.create({
   blankRow: { height: 12 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   primaryPushBtn: { backgroundColor: '#2563eb', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, minWidth: 180, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
+  mobilePrimaryPushBtn: { backgroundColor: 'transparent', paddingVertical: 0, paddingHorizontal: 0, minWidth: 140, minHeight: 36 },
   primaryPushBtnText: { color: '#fff', fontWeight: '800' },
   iconPushBtn: { width: 44, height: 44, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' },
+  mobileIconPushBtn: { borderWidth: 0, borderColor: 'transparent', backgroundColor: 'transparent' },
   linksRow: { marginTop: 12, width: '100%', maxWidth: 360, flexDirection: 'row', justifyContent: 'center', alignSelf: 'center', alignItems: 'center' },
   linkText: { color: '#2563eb', fontWeight: '700' },
   linkSeparator: { marginHorizontal: 10, color: '#6b7280', fontWeight: '700' },
