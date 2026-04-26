@@ -162,8 +162,8 @@ service cloud.firestore {
 
     match /pushTokens/{tokenId} {
       allow read: if isAdmin();
-      allow create, update: if mfaVerified() && request.resource.data.userUid == request.auth.uid;
-      allow delete: if mfaVerified() && resource.data.userUid == request.auth.uid;
+      allow create, update: if signedIn() && request.resource.data.userUid == request.auth.uid;
+      allow delete: if signedIn() && resource.data.userUid == request.auth.uid;
     }
 
     match /orgSettings/{id} {

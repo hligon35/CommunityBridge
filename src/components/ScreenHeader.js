@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
   header: { position: 'relative', height: 56, justifyContent: 'center', paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
   back: { position: 'absolute', left: 12, top: 8 },
   left: { position: 'absolute', left: 12, top: 8 },
-  backInner: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: '#e6eef8', backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
+  backInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 6, paddingHorizontal: 6, backgroundColor: 'transparent' },
   backPlaceholder: { width: 84, position: 'absolute', left: 12, top: 8 },
   title: { fontSize: 18, fontWeight: '700', textAlign: 'center' },
   titlePlaceholder: { height: 0 },

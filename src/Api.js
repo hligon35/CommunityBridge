@@ -445,7 +445,13 @@ export async function updateMe(payload) {
   }
 
   const profile = await upsertUserProfile(u.uid, next);
-  return { ok: true, user: profile };
+  let token = '';
+  try {
+    token = await u.getIdToken(false);
+  } catch (_) {
+    // keep update successful even if token refresh is temporarily unavailable
+  }
+  return { ok: true, token, user: profile };
 }
 
 async function getPostComments(postId, max = 50) {
@@ -648,7 +654,8 @@ export async function uploadMedia(formData) {
   try {
     // eslint-disable-next-line global-require
     const FileSystem = require('expo-file-system');
-    base64 = await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.Base64 });
+    const base64Encoding = FileSystem?.EncodingType?.Base64 || FileSystem?.EncodingType?.BASE64 || 'base64';
+    base64 = await FileSystem.readAsStringAsync(file.uri, { encoding: base64Encoding });
   } catch (e) {
     throw new Error(`Unable to read file: ${e?.message || e}`);
   }
@@ -1130,6 +1137,47 @@ export async function registerPushToken(payload) {
   const u = requireUser();
   const token = String(payload?.token || '').trim();
   if (!token) return { ok: false };
+
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  const requestBody = {
+    token,
+    userId: u.uid,
+    platform: payload?.platform || Platform.OS,
+    enabled: payload?.enabled !== false,
+    preferences: payload?.preferences || {},
+  };
+
+  if (apiBase) {
+    const tryApi = async ({ forceRefresh } = {}) => {
+      const idToken = await u.getIdToken(!!forceRefresh);
+      const resp = await fetch(`${apiBase}/api/push/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
+      const json = await resp.json().catch(() => null);
+      return { resp, json };
+    };
+
+    try {
+      let { resp, json } = await tryApi({ forceRefresh: false });
+      if (resp.status === 401) {
+        ({ resp, json } = await tryApi({ forceRefresh: true }));
+      }
+      if (resp.ok && json?.ok !== false) return { ok: true, via: 'api' };
+      if (resp.status !== 404 && !isLikelyNetworkError({ message: resp.statusText })) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not register push token.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+    } catch (e) {
+      if (!isLikelyNetworkError(e) && Number(e?.httpStatus || 0) !== 404) throw e;
+    }
+  }
+
   await setDoc(
     doc(db, 'pushTokens', token),
     {
@@ -1143,13 +1191,46 @@ export async function registerPushToken(payload) {
     },
     { merge: true }
   );
-  return { ok: true };
+  return { ok: true, via: 'firestore' };
 }
 
 export async function unregisterPushToken(payload) {
   const u = requireUser();
   const token = String(payload?.token || '').trim();
   if (!token) return { ok: false };
+
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (apiBase) {
+    const tryApi = async ({ forceRefresh } = {}) => {
+      const idToken = await u.getIdToken(!!forceRefresh);
+      const resp = await fetch(`${apiBase}/api/push/unregister`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ token }),
+      });
+      const json = await resp.json().catch(() => null);
+      return { resp, json };
+    };
+
+    try {
+      let { resp, json } = await tryApi({ forceRefresh: false });
+      if (resp.status === 401) {
+        ({ resp, json } = await tryApi({ forceRefresh: true }));
+      }
+      if (resp.ok && json?.ok !== false) return { ok: true, via: 'api' };
+      if (resp.status !== 404 && !isLikelyNetworkError({ message: resp.statusText })) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not unregister push token.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+    } catch (e) {
+      if (!isLikelyNetworkError(e) && Number(e?.httpStatus || 0) !== 404) throw e;
+    }
+  }
+
   await setDoc(
     doc(db, 'pushTokens', token),
     {
@@ -1160,7 +1241,7 @@ export async function unregisterPushToken(payload) {
     },
     { merge: true }
   );
-  return { ok: true };
+  return { ok: true, via: 'firestore' };
 }
 
 // Backwards-compatible wrappers used by some components

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Image, StyleSheet, ScrollView, Linking, TouchableOpacity, Modal, TouchableWithoutFeedback, TextInput, Alert } from 'react-native';
+import { View, Text, Image, StyleSheet, ScrollView, Linking, TouchableOpacity, Modal, TouchableWithoutFeedback, TextInput, Alert, Platform } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
@@ -47,6 +47,7 @@ export default function FacultyDetailScreen() {
   const [showMemoModal, setShowMemoModal] = useState(false);
   const [memoSubject, setMemoSubject] = useState('');
   const [memoBody, setMemoBody] = useState('');
+  const isWeb = Platform.OS === 'web';
 
   const all = [...(therapists || [])];
   const faculty = all.find((f) => f.id === facultyId) || null;
@@ -123,28 +124,28 @@ export default function FacultyDetailScreen() {
               }
             } catch (e) { console.warn('open chat failed', e); }
           }}>
-            <MaterialIcons name="chat" size={20} color="#fff" />
+            <MaterialIcons name="chat" size={20} color={isWeb ? '#fff' : '#2563eb'} />
           </TouchableOpacity>
           <Text style={styles.iconLabelFaculty}>Chat</Text>
         </View>
 
         <View style={styles.iconColFaculty}>
           <TouchableOpacity style={styles.iconButtonFaculty} onPress={() => setShowMemoModal(true)}>
-            <MaterialIcons name="notification-important" size={20} color="#fff" />
+            <MaterialIcons name="notification-important" size={20} color={isWeb ? '#fff' : '#2563eb'} />
           </TouchableOpacity>
           <Text style={styles.iconLabelFaculty}>Urgent Memo</Text>
         </View>
 
         <View style={styles.iconColFaculty}>
           <TouchableOpacity style={styles.iconButtonFaculty} onPress={() => navigation.navigate('UserMonitor', { initialUserId: faculty.id })}>
-            <MaterialIcons name="manage-account" size={20} color="#fff" />
+            <MaterialIcons name="manage-account" size={20} color={isWeb ? '#fff' : '#2563eb'} />
           </TouchableOpacity>
           <Text style={styles.iconLabelFaculty}>Manage</Text>
         </View>
 
         <View style={styles.iconColFaculty}>
           <TouchableOpacity style={styles.iconButtonFaculty} onPress={() => { try { navigation.push('Chats'); } catch (e) { navigation.navigate('Chats'); } }}>
-            <MaterialIcons name="event" size={20} color="#fff" />
+            <MaterialIcons name="event" size={20} color={isWeb ? '#fff' : '#2563eb'} />
           </TouchableOpacity>
           <Text style={styles.iconLabelFaculty}>Meeting</Text>
         </View>
@@ -203,18 +204,24 @@ const styles = StyleSheet.create({
   profileIconBtn: {
     width: 36,
     height: 36,
-    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#e6e7ea',
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 1.5,
-    elevation: 2,
     marginVertical: 6,
+    backgroundColor: 'transparent',
+    ...Platform.select({
+      web: {
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e6e7ea',
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 1.5,
+        elevation: 2,
+      },
+      default: null,
+    }),
   },
   section: { marginTop: 12 },
   sectionTitle: { fontWeight: '700', marginBottom: 6 },
@@ -225,6 +232,16 @@ const styles = StyleSheet.create({
   childTileName: { marginTop: 6, fontSize: 12, fontWeight: '700' },
   iconActionsRowFaculty: { flexDirection: 'row', marginTop: 12, justifyContent: 'space-between', alignItems: 'center' },
   iconColFaculty: { alignItems: 'center', flex: 1 },
-  iconButtonFaculty: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#2563eb', alignItems: 'center', justifyContent: 'center' },
+  iconButtonFaculty: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    ...Platform.select({
+      web: { borderRadius: 22, backgroundColor: '#2563eb' },
+      default: null,
+    }),
+  },
   iconLabelFaculty: { marginTop: 6, fontWeight: '700', fontSize: 12 },
 });

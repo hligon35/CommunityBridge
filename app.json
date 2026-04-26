@@ -57,9 +57,9 @@
         }
       ]
     ],
-    "icon": "./public/icon.png",
+    "icon": "./assets/icon.png",
     "splash": {
-      "image": "./public/icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
@@ -74,7 +74,7 @@
       }
     },
     "web": {
-      "favicon": "./assets/logo.png"
+      "favicon": "./assets/icon.png"
     },
     "extra": {
       "eas": {

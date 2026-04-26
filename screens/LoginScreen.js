@@ -42,7 +42,7 @@ const loginButtonImage = require('../assets/icons/buttons/loginButton.png');
 const googleWebButtonImage = require('../assets/icons/Google assets/wgbutton.png');
 const googleIconImage = require('../assets/icons/Google assets/ggIcon.png');
 const faceIdIconImage = require('../assets/icons/faceID.png');
-const loginLogoImage = require('../assets/logo.png');
+const loginLogoImage = require('../assets/icon.png');
 
 function AuthButtonImage({ source, style, imageStyle }) {
   return <Image source={source} style={[styles.authButtonImage, style, imageStyle]} resizeMode="contain" />;

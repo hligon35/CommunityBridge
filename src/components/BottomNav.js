@@ -8,11 +8,11 @@ const homeIcon = require('../../assets/icons/home.png');
 const chatsIcon = require('../../assets/icons/chats.png');
 const chatsUnreadIcon = require('../../assets/icons/chats(unread).png');
 const myClassIcon = require('../../assets/icons/myclass.png');
-const controlsIcon = require('../../assets/icons/home_dashboard.png');
+const controlsIcon = require('../../assets/icons/dashboard.png');
 const settingsIcon = require('../../assets/icons/settings.png');
 const myChildIcon = require('../../assets/icons/mychild.png');
 
-function NavImageIcon({ source, active, size = 48 }) {
+function NavImageIcon({ source, active, size = 24 }) {
   return (
     <Image
       source={source}
@@ -108,18 +108,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   inner: {
-    height: 104,
+    height: 72,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
+    justifyContent: 'space-evenly',
     backgroundColor: '#ffffff',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#e2e8f0',
-    paddingBottom: 8,
-    paddingTop: 8,
+    paddingBottom: 2,
+    paddingTop: 2,
   },
   button: {
-    flex: 1,
+    minWidth: 56,
+    paddingHorizontal: 2,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
@@ -127,12 +128,12 @@ const styles = StyleSheet.create({
   label: {
     color: '#444',
     fontSize: 12,
-    marginTop: 6,
+    marginTop: 2,
   },
   active: {
     color: '#0066FF',
     fontWeight: '700',
   },
-  badge: { position: 'absolute', top: 8, right: 18, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  badge: { position: 'absolute', top: 0, right: 2, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   badgeText: { color: '#fff', fontWeight: '700', fontSize: 11 },
 });

@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
   btn: { paddingHorizontal: 12 },
   help: { color: '#2563eb', fontWeight: '600' },
   logout: { color: '#ef4444', fontWeight: '600' },
-  backBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#e6eef8', backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
+  backBtn: { paddingHorizontal: 6, paddingVertical: 8, backgroundColor: 'transparent' },
   backText: { color: '#111827', fontWeight: '700', fontSize: 14 },
 });
 

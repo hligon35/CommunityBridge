@@ -396,10 +396,26 @@ export function AuthProvider({ children }) {
   }
 
   async function setAuth(_) {
-    // Legacy compatibility: REST token injection is not supported with Firebase Auth.
-    const err = new Error('Biometric token sign-in is not supported with Firebase Auth. Please sign in normally.');
-    err.code = 'BB_SET_AUTH_UNSUPPORTED';
-    throw err;
+    const a = getAuthInstance();
+    const fbUser = a?.currentUser || null;
+    if (!fbUser) {
+      const err = new Error('No active Firebase session. Please sign in normally.');
+      err.code = 'BB_SET_AUTH_UNSUPPORTED';
+      throw err;
+    }
+
+    const nextToken = String(_?.token || '') || await fbUser.getIdToken(false).catch(() => '');
+    const nextUser = _?.user || await Api.me().catch(() => null) || {
+      id: fbUser.uid,
+      name: fbUser.displayName || '',
+      email: fbUser.email || '',
+      role: isDevSwitcherUser(fbUser.email) ? 'admin' : 'parent',
+    };
+    const override = isDevSwitcherUser(nextUser?.email) ? await readDevRoleOverride() : '';
+    setDevRoleOverride(override);
+    setToken(nextToken);
+    setUser(applyDevRoleOverride(nextUser, override));
+    return { token: nextToken, user: nextUser };
   }
 
   async function setRole(nextRole) {

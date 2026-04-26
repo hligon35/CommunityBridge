@@ -106,7 +106,7 @@ export default function SignUpScreen({ onDone, onCancel }) {
           >
             <View style={[styles.brandSection, { minHeight: brandSectionMinHeight }]}>
               <Image
-                source={require('../assets/logo.png')}
+                source={require('../assets/icon.png')}
                 accessibilityLabel="CommunityBridge"
                 style={[styles.logo, { height: Math.min(180, Math.round(brandSectionMinHeight * 0.65)) }]}
               />

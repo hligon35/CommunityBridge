@@ -162,7 +162,7 @@ export default function TwoFactorScreen({ navigation }) {
   }
 
   let logoSource = null;
-  try { logoSource = require('../assets/logo.png'); } catch (_) { logoSource = null; }
+  try { logoSource = require('../assets/icon.png'); } catch (_) { logoSource = null; }
 
   // On web, use real viewport height so the centered card can't render at 0 height.
   const webViewportStyle = Platform.OS === 'web'

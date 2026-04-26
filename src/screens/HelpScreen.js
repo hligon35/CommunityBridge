@@ -46,7 +46,7 @@ export default function HelpScreen() {
 
         <Text style={styles.sectionTitle}>Account & Support</Text>
         <Text style={styles.paragraph}>
-          To sign out, use the Logout button in the top-right. For account issues or to request help, tap the button below to email support.
+          To sign out, open Profile Settings and use the Logout action there. For account issues or to request help, tap the button below to email support.
         </Text>
 
         <TouchableOpacity style={styles.contact} onPress={() => Linking.openURL(`mailto:${encodeURIComponent(SUPPORT_EMAIL)}?subject=${encodeURIComponent('CommunityBridge Support')}`) }>

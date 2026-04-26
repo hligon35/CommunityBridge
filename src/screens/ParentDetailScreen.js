@@ -28,6 +28,7 @@ export default function ParentDetailScreen() {
 
   const [showMeetingModal, setShowMeetingModal] = useState(false);
   const [meetingDate, setMeetingDate] = useState(new Date());
+  const isWeb = Platform.OS === 'web';
 
   function openPhone(phone) { try { if (phone) Linking.openURL(`tel:${phone}`); } catch (e) {} }
   function openEmail(email) { try { if (email) Linking.openURL(`mailto:${email}`); } catch (e) {} }
@@ -139,19 +140,19 @@ export default function ParentDetailScreen() {
                 }
               } catch (e) { console.warn('open chat failed', e); }
             }}>
-              <MaterialIcons name="chat" size={22} color="#fff" />
+              <MaterialIcons name="chat" size={22} color={isWeb ? '#fff' : '#2563eb'} />
             </TouchableOpacity>
             <Text style={styles.iconLabel}>Chat</Text>
           </View>
           <View style={styles.iconCol}>
             <TouchableOpacity style={styles.iconButton} onPress={() => setShowTimeModal(true)}>
-              <MaterialIcons name="notification-important" size={22} color="#fff" />
+              <MaterialIcons name="notification-important" size={22} color={isWeb ? '#fff' : '#2563eb'} />
             </TouchableOpacity>
             <Text style={styles.iconLabel}>Urgent Memo</Text>
           </View>
           <View style={styles.iconCol}>
             <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('UserMonitor', { initialUserId: parent.id })}>
-              <MaterialIcons name="manage-account" size={22} color="#fff" />
+              <MaterialIcons name="manage-account" size={22} color={isWeb ? '#fff' : '#2563eb'} />
             </TouchableOpacity>
             <Text style={styles.iconLabel}>Manage</Text>
           </View>
@@ -351,7 +352,17 @@ const styles = StyleSheet.create({
   personRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   iconActionsRow: { flexDirection: 'row', marginTop: 12, justifyContent: 'space-between', alignItems: 'center' },
   iconCol: { alignItems: 'center', flex: 1 },
-  iconButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#2563eb', alignItems: 'center', justifyContent: 'center' },
+  iconButton: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    ...Platform.select({
+      web: { borderRadius: 24, backgroundColor: '#2563eb' },
+      default: null,
+    }),
+  },
   iconLabel: { marginTop: 6, fontWeight: '700', fontSize: 12 },
   therapistRow: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#eef2f7', marginTop: 8 },
   therapistGridItem: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#eef2f7' },
@@ -363,34 +374,46 @@ const styles = StyleSheet.create({
   contactIconsCentered: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 6 },
   contactIconTouch: {
     padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#f1f5f9',
     marginHorizontal: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#e6eef8',
+    backgroundColor: 'transparent',
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 2 },
-      android: { elevation: 2 },
+      web: {
+        borderRadius: 8,
+        backgroundColor: '#f1f5f9',
+        borderWidth: 1,
+        borderColor: '#e6eef8',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 2,
+        elevation: 2,
+      },
+      default: null,
     }),
   },
   headerActionsRight: { alignItems: 'center', justifyContent: 'center', marginLeft: 12 },
   profileIconBtn: {
     width: 36,
     height: 36,
-    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#e6e7ea',
-    backgroundColor: '#fff',
-    // subtle push look
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 1.5,
-    elevation: 2,
     marginVertical: 6,
+    backgroundColor: 'transparent',
+    ...Platform.select({
+      web: {
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e6e7ea',
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 1.5,
+        elevation: 2,
+      },
+      default: null,
+    }),
   },
 });

@@ -46,7 +46,7 @@
       "backgroundColor": "#ffffff"
     }
   },
-  "web": { "favicon": "./assets/logo.png" },
+  "web": { "favicon": "./assets/icon.png" },
   "extra": { "eas": { "projectId": "38ed77a1-3892-42c8-b7cf-9cebe6d98545" } },
   "owner": "hligon"
 }

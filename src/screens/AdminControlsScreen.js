@@ -23,6 +23,14 @@ const APP_BUNDLE_ID = (() => {
 
 const BUSINESS_ADDR_KEY = SETTINGS_KEYS.businessAddress;
 const ORG_ARRIVAL_KEY = SETTINGS_KEYS.orgArrivalEnabled;
+const alertsIcon = require('../../assets/icons/alerts.png');
+const alertsUnreadIcon = require('../../assets/icons/alerts(unread).png');
+const importDirectoryIcon = require('../../assets/icons/importDirectory.png');
+const exportDirectoryIcon = require('../../assets/icons/exportDirectory.png');
+const studentsIcon = require('../../assets/icons/students.png');
+const facultyIcon = require('../../assets/icons/faculty.png');
+const parentsIcon = require('../../assets/icons/parents.png');
+const currentLocationIcon = require('../../assets/icons/currentLocation.png');
 
 export default function AdminControlsScreen() {
   const navigation = useNavigation();
@@ -74,7 +82,7 @@ export default function AdminControlsScreen() {
         accessibilityLabel="Open Alerts"
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
-        <MaterialIcons name="report" size={22} color="#111827" />
+        <Image source={pendingAlertCount > 0 ? alertsUnreadIcon : alertsIcon} style={styles.headerImageIcon} />
         {pendingAlertCount > 0 ? (
           <View style={styles.headerBadge}>
             <Text style={styles.headerBadgeText}>{pendingAlertCount}</Text>
@@ -94,7 +102,7 @@ export default function AdminControlsScreen() {
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           {/* Import is “bring data into the app” (down arrow) */}
-          <MaterialIcons name="file-download" size={22} color="#111827" />
+          <Image source={importDirectoryIcon} style={styles.headerImageIcon} />
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => setExportModalVisible(true)}
@@ -103,7 +111,7 @@ export default function AdminControlsScreen() {
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           {/* Export is “send data out of the app” (up arrow) */}
-          <MaterialIcons name="file-upload" size={22} color="#111827" />
+          <Image source={exportDirectoryIcon} style={styles.headerImageIcon} />
         </TouchableOpacity>
       </View>
     );
@@ -718,7 +726,7 @@ export default function AdminControlsScreen() {
                 accessibilityLabel="Toggle Students preview"
               >
                 <View style={styles.dirTileTop}>
-                  <MaterialIcons name="groups" size={18} color="#111827" />
+                  <Image source={studentsIcon} style={styles.dirTileIconImage} />
                   <View style={styles.dirTileCount}><Text style={styles.dirTileCountText}>{(children || []).length}</Text></View>
                 </View>
                 <Text style={styles.dirTileLabel}>Students</Text>
@@ -733,7 +741,7 @@ export default function AdminControlsScreen() {
                 accessibilityLabel="Toggle Faculty preview"
               >
                 <View style={styles.dirTileTop}>
-                  <MaterialIcons name="school" size={18} color="#111827" />
+                  <Image source={facultyIcon} style={styles.dirTileIconImage} />
                   <View style={styles.dirTileCount}><Text style={styles.dirTileCountText}>{facultyCount}</Text></View>
                 </View>
                 <Text style={styles.dirTileLabel}>Faculty</Text>
@@ -748,7 +756,7 @@ export default function AdminControlsScreen() {
                 accessibilityLabel="Toggle Parents preview"
               >
                 <View style={styles.dirTileTop}>
-                  <MaterialIcons name="person" size={18} color="#111827" />
+                  <Image source={parentsIcon} style={styles.dirTileIconImage} />
                   <View style={styles.dirTileCount}><Text style={styles.dirTileCountText}>{(parents || []).length}</Text></View>
                 </View>
                 <Text style={styles.dirTileLabel}>Parents</Text>
@@ -896,8 +904,8 @@ export default function AdminControlsScreen() {
             ) : null}
 
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 10 }}>
-              <TouchableOpacity onPress={useCurrentLocationForOrg} style={[styles.secondaryBtn, styles.locationActionBtn, { flex: 1, marginTop: 0, marginRight: 10 }]}>
-                <Text style={[styles.secondaryBtnText, styles.locationActionText]}>Use my current location</Text>
+              <TouchableOpacity onPress={useCurrentLocationForOrg} style={[styles.locationActionBtn, { marginTop: 0, marginRight: 10 }]} accessibilityLabel="Use my current location">
+                <Image source={currentLocationIcon} style={styles.locationActionIconImage} />
               </TouchableOpacity>
 
               <View style={{ width: 140 }}>
@@ -929,7 +937,22 @@ export default function AdminControlsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  headerIconBtn: { width: 40, height: 40, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  headerIconBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    ...Platform.select({
+      web: {
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        backgroundColor: '#fff',
+      },
+      default: null,
+    }),
+  },
   headerBadge: { position: 'absolute', top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   headerBadgeText: { color: '#fff', fontWeight: '800', fontSize: 10 },
 
@@ -955,26 +978,57 @@ const styles = StyleSheet.create({
   previewMeta: { color: '#6b7280', fontSize: 12 },
   previewIconRow: { flexDirection: 'row', marginTop: 8, justifyContent: 'center', alignItems: 'center' },
   previewIconTouch: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#fff',
-    marginHorizontal: 6,
+    width: 32,
+    height: 32,
+    marginHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#e6eef8',
-    // subtle shadow / elevation to feel like a push button
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
-    backgroundColor: '#f1f5f9'
+    backgroundColor: 'transparent',
+    ...Platform.select({
+      web: {
+        width: 40,
+        height: 40,
+        borderRadius: 10,
+        backgroundColor: '#f1f5f9',
+        marginHorizontal: 6,
+        borderWidth: 1,
+        borderColor: '#e6eef8',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 2,
+        elevation: 2,
+      },
+      default: null,
+    }),
   },
   iconTile: { flex: 1, alignItems: 'center', minWidth: 72, paddingHorizontal: 6 },
-  iconTileBtn: { width: 52, height: 52, borderRadius: 12, backgroundColor: '#2563eb', alignItems: 'center', justifyContent: 'center', marginBottom: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4, elevation: 3, position: 'relative' },
+  iconTileBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+    position: 'relative',
+    backgroundColor: 'transparent',
+    ...Platform.select({
+      web: {
+        width: 52,
+        height: 52,
+        borderRadius: 12,
+        backgroundColor: '#2563eb',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.12,
+        shadowRadius: 4,
+        elevation: 3,
+      },
+      default: null,
+    }),
+  },
   iconTileLabel: { fontSize: 13, fontWeight: '700', color: '#111827' },
+  headerImageIcon: { width: 22, height: 22, resizeMode: 'contain' },
+  dirTileIconImage: { width: 18, height: 18, resizeMode: 'contain' },
   countBadge: { position: 'absolute', top: -8, right: -8, backgroundColor: '#ef4444', width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', zIndex: 20 },
   banner: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#eef2f7' },
   bannerContent: { flex: 1, flexDirection: 'row', alignItems: 'center' },
@@ -997,8 +1051,8 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#fff' },
   secondaryBtn: { marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#e6eef8', backgroundColor: '#f1f5f9' },
   secondaryBtnText: { marginLeft: 8, color: '#2563eb', fontWeight: '700' },
-  locationActionBtn: { position: 'relative' },
-  locationActionText: { flex: 1, marginLeft: 0, textAlign: 'center', fontSize: 13 },
+  locationActionBtn: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
+  locationActionIconImage: { width: 36, height: 36, resizeMode: 'contain' },
   primaryBtn: { marginTop: 12, backgroundColor: '#2563eb', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   primaryBtnText: { color: '#fff', fontWeight: '700' },
   overlayBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', padding: 18 },

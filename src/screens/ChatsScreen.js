@@ -5,7 +5,7 @@ import { useAuth } from '../AuthContext';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { MaterialIcons } from '@expo/vector-icons';
 import { logPress } from '../utils/logger';
-import { HelpButton, LogoutButton } from '../components/TopButtons';
+import { HelpButton } from '../components/TopButtons';
 
 function timeAgo(iso) {
   if (!iso) return '';
@@ -103,7 +103,7 @@ export default function ChatsScreen({ navigation }) {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerLeft: Platform.OS === 'web' ? undefined : () => <HelpButton />,
-      headerRight: Platform.OS === 'web' ? undefined : () => <LogoutButton />,
+      headerRight: () => null,
     });
   }, [navigation]);
 
@@ -179,12 +179,11 @@ export default function ChatsScreen({ navigation }) {
         accessibilityLabel={accessibilityLabel}
         hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
         style={{
-          paddingVertical: 6,
-          paddingHorizontal: 10,
-          borderRadius: 8,
-          borderWidth: 1,
-          borderColor: '#e6eef8',
-          backgroundColor: '#fff',
+          width: 36,
+          height: 36,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'transparent',
         }}
       >
         <MaterialIcons name={name} size={20} color={active ? '#2563eb' : '#111827'} />

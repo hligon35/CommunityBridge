@@ -43,40 +43,49 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     marginRight: 6,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
     backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    // subtle shadow / push look
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 1.5,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        borderWidth: 1,
+        borderColor: '#d1d5db',
+        borderRadius: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 1.5,
+        elevation: 2,
+      },
+      default: null,
+    }),
   },
   postButtonCompact: {
     width: 40,
     height: 40,
-    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0066FF',
-    // subtle shadow / push look
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 2,
-    elevation: 3,
+    backgroundColor: 'transparent',
+    ...Platform.select({
+      web: {
+        borderRadius: 8,
+        backgroundColor: '#0066FF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.12,
+        shadowRadius: 2,
+        elevation: 3,
+      },
+      default: null,
+    }),
   },
   postButtonLabelCompact: { color: '#fff', fontWeight: '700' },
   previewImageCompact: { height: 80, width: 120, marginLeft: 6, borderRadius: 6 },
   leftColumn: { width: 72, alignItems: 'center', marginRight: 10, justifyContent: 'center' },
   buttonsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   buttonsRowCentered: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  iconBox: { width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderColor: '#e6e7ea', alignItems: 'center', justifyContent: 'center', marginHorizontal: 4, backgroundColor: '#fff' },
-  iconBoxPrimary: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginHorizontal: 4, backgroundColor: '#0066FF' },
+  iconBox: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginHorizontal: 4, backgroundColor: 'transparent', ...Platform.select({ web: { borderRadius: 8, borderWidth: 1, borderColor: '#e6e7ea', backgroundColor: '#fff' }, default: null }) },
+  iconBoxPrimary: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginHorizontal: 4, backgroundColor: 'transparent', ...Platform.select({ web: { borderRadius: 8, backgroundColor: '#0066FF' }, default: null }) },
   iconButton: { padding: 8, alignItems: 'center', justifyContent: 'center' },
   inputFlex: { flex: 1, marginHorizontal: 6 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' },
@@ -261,7 +270,7 @@ export default function HomeScreen() {
               <MaterialIcons name="attach-file" size={20} color="#444" />
             </TouchableOpacity>
             <TouchableOpacity style={[styles.postButtonCompact, { width: 44, height: 44 }]} onPress={handlePost} accessibilityLabel="Post">
-              <Ionicons name="send" size={18} color="#fff" />
+              <Ionicons name="send" size={18} color={isWeb ? '#fff' : '#0066FF'} />
             </TouchableOpacity>
           </View>
         </WebSurface>
@@ -283,7 +292,7 @@ export default function HomeScreen() {
               <MaterialIcons name="attach-file" size={20} color="#444" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.postButtonCompact} onPress={handlePost} accessibilityLabel="Post">
-              <Ionicons name="send" size={18} color="#fff" />
+              <Ionicons name="send" size={18} color={isWeb ? '#fff' : '#0066FF'} />
             </TouchableOpacity>
           </View>
         </View>

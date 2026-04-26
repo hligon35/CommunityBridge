@@ -13,6 +13,9 @@ import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
 import { SETTINGS_KEYS, readBooleanSetting, writeBooleanSetting, writeJsonSetting } from '../utils/appSettings';
 
+const editIconImage = require('../../assets/icons/edit.png');
+const currentLocationIcon = require('../../assets/icons/currentLocation.png');
+
 const ARRIVAL_KEY = SETTINGS_KEYS.arrivalEnabled;
 const PUSH_KEY = 'settings_push_enabled_v1';
 const PUSH_CHATS_KEY = 'settings_push_chats_v1';
@@ -474,22 +477,22 @@ export default function SettingsScreen({ navigation }) {
             position: 'absolute',
             right: 12,
             top: 12,
-            width: 40,
-            height: 40,
-            borderRadius: 10,
+            width: isWeb ? 40 : 32,
+            height: isWeb ? 40 : 32,
             alignItems: 'center',
             justifyContent: 'center',
-            borderWidth: 1,
+            borderRadius: isWeb ? 10 : 0,
+            borderWidth: isWeb ? 1 : 0,
             borderColor: '#e6eef8',
-            backgroundColor: '#f1f5f9',
+            backgroundColor: isWeb ? '#f1f5f9' : 'transparent',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.08,
-            shadowRadius: 2,
-            elevation: 2,
+            shadowOpacity: isWeb ? 0.08 : 0,
+            shadowRadius: isWeb ? 2 : 0,
+            elevation: isWeb ? 2 : 0,
           }}
         >
-          <MaterialIcons name="edit" size={20} color="#2563eb" />
+          <Image source={editIconImage} style={{ width: 20, height: 20, resizeMode: 'contain' }} />
         </TouchableOpacity>
 
         {!isWeb ? (
@@ -640,8 +643,8 @@ export default function SettingsScreen({ navigation }) {
             <Text style={{ fontSize: 14, color: '#6b7280', marginBottom: 8 }}>Set the center's address used to detect nearby arrivals (lat,lng).</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Text style={{ flex: 1 }}>{businessAddress || 'Not set'}</Text>
-              <TouchableOpacity onPress={pickBusinessLocation} style={{ marginLeft: 8, padding: 8, backgroundColor: '#2563eb', borderRadius: 8 }}>
-                <Text style={{ color: '#fff' }}>Use current location</Text>
+              <TouchableOpacity onPress={pickBusinessLocation} accessibilityLabel="Use current location" style={{ marginLeft: 8, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+                <Image source={currentLocationIcon} style={{ width: 30, height: 30, resizeMode: 'contain' }} />
               </TouchableOpacity>
             </View>
           </View>

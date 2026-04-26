@@ -39,7 +39,7 @@ import ModeratePostsScreen from './src/screens/ModeratePostsScreen';
 import AdminAlertsScreen from './src/screens/AdminAlertsScreen';
 import AdminMemosScreen from './src/screens/AdminMemosScreen';
 import ExportDataScreen from './src/screens/ExportDataScreen';
-import { HelpButton, LogoutButton, BackButton } from './src/components/TopButtons';
+import { HelpButton, BackButton } from './src/components/TopButtons';
 import { View, Text } from 'react-native';
 import LogoTitle from './src/components/LogoTitle';
 import LoginScreen from './screens/LoginScreen';
@@ -67,7 +67,6 @@ function MyClassStack() {
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
         headerLeft: () => (back ? <BackButton onPress={() => navigation.goBack()} /> : <HelpButton />),
-        headerRight: () => <LogoutButton />,
       })}
     >
       <MyClassStackNav.Screen name="MyClassMain" component={MyClassScreen} options={{ title: 'My Class' }} />
@@ -85,7 +84,6 @@ function ControlsStack() {
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
         headerLeft: () => (back ? <BackButton onPress={() => navigation.goBack()} /> : <HelpButton />),
-        headerRight: () => <LogoutButton />,
       })}
     >
       <ControlsStackNav.Screen name="ControlsMain" component={AdminControlsScreen} options={{ title: 'Dashboard' }} />
@@ -119,7 +117,6 @@ function CommunityStack() {
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
         headerLeft: () => (back ? <BackButton onPress={() => navigation.goBack()} /> : <HelpButton />),
-        headerRight: () => <LogoutButton />,
       })}
     >
       <CommunityStackNav.Screen name="CommunityMain" component={HomeScreen} options={{ title: 'Home' }} />
@@ -138,7 +135,6 @@ function MyChildStack() {
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
         headerLeft: () => (back ? <BackButton onPress={() => navigation.goBack()} /> : <HelpButton />),
-        headerRight: () => <LogoutButton />,
       })}
     >
       <MyChildStackNav.Screen name="MyChildMain" component={require('./src/screens/MyChildScreen').default} options={{ title: 'My Child' }} />
@@ -156,7 +152,6 @@ function ChatsStack() {
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
         headerLeft: () => (back ? <BackButton onPress={() => navigation.goBack()} /> : <HelpButton />),
-        headerRight: () => <LogoutButton />,
       })}
     >
       <ChatsStackNav.Screen name="ChatsList" component={ChatsScreen} options={{ title: 'Chats' }} />
@@ -176,7 +171,6 @@ function SettingsStack() {
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
         headerLeft: () => (back ? <BackButton onPress={() => navigation.goBack()} /> : <HelpButton />),
-        headerRight: () => <LogoutButton />,
       })}
     >
       <SettingsStackNav.Screen name="SettingsMain" component={SettingsScreen} options={{ title: 'Profile Settings', headerRight: () => null }} />
