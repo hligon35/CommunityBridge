@@ -130,11 +130,11 @@ Optional:
 - `EXPO_PUBLIC_GOOGLE_PLACES_API_KEY` — enables address autocomplete.
 
 API server DB settings:
-- `CB_DATA_DIR` — preferred host directory where CommunityBridge stores runtime data (defaults to `./.data`).
+- `CB_DATA_DIR` — preferred host directory where CommunityBridge stores runtime data (defaults to `./.communitybridge`).
 - Uploads are stored under `${CB_DATA_DIR}/uploads` (or `${BB_DATA_DIR}/uploads`) and served at `/uploads/*` from the API.
 	- In production, `/uploads/*` is protected by default (`CB_REQUIRE_UPLOAD_AUTH=1`) and requires a short-lived signed URL token (`?t=...`) or an API bearer token.
 	- `POST /api/media/upload` returns tokenized URLs automatically when upload auth is required.
-- By default, the API uses SQLite at `${CB_DATA_DIR}/buddyboard.sqlite` (legacy filename preserved).
+- By default, the API uses SQLite at `${CB_DATA_DIR}/communitybridge.sqlite`.
 - To use Postgres instead, set `CB_DATABASE_URL` (preferred).
 
 Legacy compatibility:

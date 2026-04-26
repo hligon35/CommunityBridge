@@ -227,7 +227,7 @@ function getNodemailerLib() {
 }
 
 const PORT = Number(process.env.PORT || 3005);
-const DB_PATH = process.env.CB_DB_PATH || process.env.BB_DB_PATH || path.join(process.cwd(), '.data', 'buddyboard.sqlite');
+const DB_PATH = process.env.CB_DB_PATH || process.env.BB_DB_PATH || path.join(process.cwd(), '.communitybridge', 'communitybridge.sqlite');
 const JWT_SECRET = process.env.CB_JWT_SECRET || process.env.BB_JWT_SECRET || '';
 const NODE_ENV = String(process.env.NODE_ENV || '').trim().toLowerCase();
 const PUBLIC_BASE_URL = (process.env.CB_PUBLIC_BASE_URL || process.env.BB_PUBLIC_BASE_URL || '').trim();

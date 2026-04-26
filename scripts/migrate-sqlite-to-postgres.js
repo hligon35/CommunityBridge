@@ -161,7 +161,7 @@ async function initDb(pool) {
 async function main() {
   const sqlitePath = (process.env.CB_DB_PATH || process.env.BB_DB_PATH)
     ? String(process.env.CB_DB_PATH || process.env.BB_DB_PATH)
-    : path.join(process.cwd(), '.data', 'buddyboard.sqlite');
+    : path.join(process.cwd(), '.communitybridge', 'communitybridge.sqlite');
   const pgUrl = (process.env.CB_DATABASE_URL || process.env.BB_DATABASE_URL || process.env.DATABASE_URL || '').trim();
 
   if (!pgUrl) {

@@ -119,7 +119,7 @@ function getNodemailerLib() {
 const PORT = Number(process.env.PORT || 3005);
 const DATA_DIR = process.env.CB_DATA_DIR || process.env.BB_DATA_DIR
   ? String(process.env.CB_DATA_DIR || process.env.BB_DATA_DIR)
-  : path.join(process.cwd(), '.data');
+  : path.join(process.cwd(), '.communitybridge');
 const DATABASE_URL = (process.env.CB_DATABASE_URL || process.env.BB_DATABASE_URL || process.env.DATABASE_URL || '').trim();
 
 if (!DATABASE_URL) {

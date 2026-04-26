@@ -5,14 +5,14 @@
 
   Usage:
     node ./scripts/find-duplicate-users.js
-    node ./scripts/find-duplicate-users.js --db /path/to/buddyboard.sqlite
-    CB_DB_PATH=/path/to/buddyboard.sqlite node ./scripts/find-duplicate-users.js
-    BB_DB_PATH=/path/to/buddyboard.sqlite node ./scripts/find-duplicate-users.js
+    node ./scripts/find-duplicate-users.js --db /path/to/communitybridge.sqlite
+    CB_DB_PATH=/path/to/communitybridge.sqlite node ./scripts/find-duplicate-users.js
+    BB_DB_PATH=/path/to/communitybridge.sqlite node ./scripts/find-duplicate-users.js
     node ./scripts/find-duplicate-users.js --json
 
   Notes:
   - Read-only: this script does NOT delete or modify data.
-  - The API server uses the same default DB path: ./.data/buddyboard.sqlite
+  - The API server uses the same default DB path: ./.communitybridge/communitybridge.sqlite
 */
 
 const path = require('path');
@@ -30,7 +30,7 @@ function hasFlag(flag) {
 }
 
 function defaultDbPath() {
-  return process.env.CB_DB_PATH || process.env.BB_DB_PATH || path.join(process.cwd(), '.data', 'buddyboard.sqlite');
+  return process.env.CB_DB_PATH || process.env.BB_DB_PATH || path.join(process.cwd(), '.communitybridge', 'communitybridge.sqlite');
 }
 
 function safeString(v) {
