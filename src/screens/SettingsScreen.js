@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, Image, Alert, Switch, ScrollView, Platform } from 'react-native';
 import { useAuth } from '../AuthContext';
 import { BASE_URL } from '../config';
@@ -444,7 +444,12 @@ export default function SettingsScreen({ navigation }) {
       <ScrollView style={{ flex: 1, width: '100%' }} contentContainerStyle={{ alignItems: 'center', paddingBottom: 28, paddingHorizontal: 16 }} bounces={true} alwaysBounceVertical={true} showsVerticalScrollIndicator={false}>
         {isWeb ? (
           <View style={{ width: '100%', maxWidth: 980, marginTop: 8, marginBottom: 12, backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#e5e7eb', padding: 18, shadowColor: '#0f172a', shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2 }}>
-            <Text style={{ fontSize: 22, fontWeight: '800', color: '#0f172a' }}>Profile Settings</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <Text style={{ fontSize: 22, fontWeight: '800', color: '#0f172a' }}>Profile Settings</Text>
+              <TouchableOpacity onPress={() => logout()} accessibilityLabel="Log out" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#dc2626', fontWeight: '700', fontSize: 14 }}>Logout</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={{ marginTop: 6, color: '#64748b' }}>Manage privacy, notifications, arrival detection, and update status from one desktop-friendly view.</Text>
             <View style={{ flexDirection: 'row', marginTop: 16 }}>
               {[
@@ -486,6 +491,15 @@ export default function SettingsScreen({ navigation }) {
         >
           <MaterialIcons name="edit" size={20} color="#2563eb" />
         </TouchableOpacity>
+
+        {!isWeb ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingRight: 56 }}>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: '#0f172a' }}>Profile Settings</Text>
+            <TouchableOpacity onPress={() => logout()} accessibilityLabel="Log out" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={{ color: '#dc2626', fontWeight: '700', fontSize: 14 }}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Image

@@ -52,8 +52,8 @@ initSentry();
 const RootStack = createNativeStackNavigator();
 const AppStack = createNativeStackNavigator();
 
-const HEADER_LOGO_WIDTH = 240;
-const HEADER_LOGO_HEIGHT = 72;
+const HEADER_LOGO_WIDTH = 168;
+const HEADER_LOGO_HEIGHT = 80;
 const HEADER_HEIGHT = 96;
 const SHOW_STACK_HEADERS = Platform.OS !== 'web';
 
@@ -179,7 +179,7 @@ function SettingsStack() {
         headerRight: () => <LogoutButton />,
       })}
     >
-      <SettingsStackNav.Screen name="SettingsMain" component={SettingsScreen} options={{ title: 'Profile Settings' }} />
+      <SettingsStackNav.Screen name="SettingsMain" component={SettingsScreen} options={{ title: 'Profile Settings', headerRight: () => null }} />
       <SettingsStackNav.Screen name="EditProfile" component={EditProfileScreen} options={{ title: 'Edit Profile' }} />
       <SettingsStackNav.Screen name="Help" component={HelpScreen} options={{ title: 'Help' }} />
     </SettingsStackNav.Navigator>

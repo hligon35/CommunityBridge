@@ -5,18 +5,18 @@ import { useData } from '../DataContext';
 import { logPress } from '../utils/logger';
 
 const homeIcon = require('../../assets/icons/home.png');
-const messagesIcon = require('../../assets/icons/messages.png');
-const messagesBadgeIcon = require('../../assets/icons/messages(badge).png');
+const chatsIcon = require('../../assets/icons/chats.png');
+const chatsUnreadIcon = require('../../assets/icons/chats(unread).png');
 const myClassIcon = require('../../assets/icons/myclass.png');
-const controlsIcon = require('../../assets/icons/controls.png');
-const settingsIcon = require('../../assets/icons/Settings.png');
+const controlsIcon = require('../../assets/icons/home_dashboard.png');
+const settingsIcon = require('../../assets/icons/settings.png');
 const myChildIcon = require('../../assets/icons/mychild.png');
 
-function NavImageIcon({ source, active, size = 24 }) {
+function NavImageIcon({ source, active, size = 48 }) {
   return (
     <Image
       source={source}
-      style={{ width: size, height: size, resizeMode: 'contain', opacity: active ? 1 : 0.68 }}
+      style={{ width: size, height: size, resizeMode: 'contain', opacity: active ? 1 : 0.68, backgroundColor: 'transparent' }}
     />
   );
 }
@@ -34,7 +34,7 @@ export default function BottomNav({ navigationRef, currentRoute }) {
   // define tabs depending on role
   let tabs = [
     { key: 'Home', label: 'Home', icon: (active) => (<NavImageIcon source={homeIcon} active={active} />) },
-    { key: 'Chats', label: 'Chats', icon: (active) => (<NavImageIcon source={unreadThreadCount > 0 ? messagesBadgeIcon : messagesIcon} active={active} />), count: unreadThreadCount },
+    { key: 'Chats', label: 'Chats', icon: (active) => (<NavImageIcon source={unreadThreadCount > 0 ? chatsUnreadIcon : chatsIcon} active={active} />), count: unreadThreadCount },
   ];
   if (role === 'therapist') {
     tabs.push({ key: 'MyClass', label: 'My Class', icon: (active) => (<NavImageIcon source={myClassIcon} active={active} />) });
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   inner: {
-    height: 72,
+    height: 104,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
@@ -122,16 +122,17 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
   label: {
     color: '#444',
     fontSize: 12,
-    marginTop: 2,
+    marginTop: 6,
   },
   active: {
     color: '#0066FF',
     fontWeight: '700',
   },
-  badge: { position: 'absolute', top: 6, right: 22, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  badge: { position: 'absolute', top: 8, right: 18, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   badgeText: { color: '#fff', fontWeight: '700', fontSize: 11 },
 });

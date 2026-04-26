@@ -13,12 +13,18 @@ service cloud.firestore {
       return orgSettingsDoc().exists() && orgSettingsDoc().data.mfaEnabled == true;
     }
 
+    function mfaWindowFresh(userData) {
+      return (userData.devUser == true)
+        ? userData.mfaVerifiedAt > request.time - duration.value(4, 'h')
+        : userData.mfaVerifiedAt > request.time - duration.value(30, 'd');
+    }
+
     function mfaVerified() {
       return !mfaRequired() || (
         signedIn() &&
         userDoc().exists() &&
         (userDoc().data.mfaVerifiedAt is timestamp) &&
-        userDoc().data.mfaVerifiedAt > request.time - duration.value(30, 'd')
+        mfaWindowFresh(userDoc().data)
       );
     }
 

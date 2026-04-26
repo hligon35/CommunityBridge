@@ -12,6 +12,8 @@ const AuthContext = createContext(null);
 const MFA_VERIFIED_CACHE_KEY = 'bb_mfa_verified_at_cache_v1';
 const DEV_ROLE_OVERRIDE_KEY = 'bb_dev_role_override_v1';
 const DEV_SWITCH_EMAIL = 'dev@communitybridge.app';
+const DEFAULT_MFA_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const DEV_MFA_WINDOW_MS = 4 * 60 * 60 * 1000;
 
 function normalizeRoleOverride(role) {
   const value = String(role || '').trim().toLowerCase();
@@ -23,6 +25,12 @@ function normalizeRoleOverride(role) {
 
 function isDevSwitcherUser(email) {
   return __DEV__ && String(email || '').trim().toLowerCase() === DEV_SWITCH_EMAIL;
+}
+
+function getMfaFreshnessWindowMs(profile) {
+  const email = String(profile?.email || '').trim().toLowerCase();
+  const isDevUser = profile?.devUser === true || email === DEV_SWITCH_EMAIL;
+  return isDevUser ? DEV_MFA_WINDOW_MS : DEFAULT_MFA_WINDOW_MS;
 }
 
 export function useAuth() {
@@ -68,8 +76,7 @@ export function AuthProvider({ children }) {
       if (!iso) return false;
       const ts = Date.parse(String(iso));
       if (!Number.isFinite(ts)) return false;
-      const days30 = 30 * 24 * 60 * 60 * 1000;
-      return Date.now() - ts < days30;
+      return Date.now() - ts < getMfaFreshnessWindowMs(profile);
     } catch (_) {
       return false;
     }

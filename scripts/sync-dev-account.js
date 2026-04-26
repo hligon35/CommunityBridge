@@ -159,6 +159,7 @@ async function upsertFirestoreProfile(firestore, uid, user) {
     email: user.email,
     role: user.role,
     devUser: true,
+    mfaVerifiedAt: now,
     updatedAt: now,
     createdAt: now,
   }, { merge: true });

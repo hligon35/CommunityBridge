@@ -608,26 +608,26 @@ export default function AdminControlsScreen() {
     return (
       <View style={{ marginTop: 12 }}>
         <TouchableOpacity style={styles.banner} activeOpacity={0.85} onPress={onToggle}>
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ fontWeight: '700' }}>{label}</Text>
+          <View style={styles.bannerContent}>
+            <View style={styles.bannerTextWrap}>
+              <View style={styles.bannerLabelRow}>
+                <Text style={styles.bannerLabel} numberOfLines={1}>{label}</Text>
                 {typeof count === 'number' ? (
                   <View style={styles.dirCount}><Text style={{ color: '#111827', fontWeight: '700', fontSize: 12 }}>{count}</Text></View>
                 ) : null}
               </View>
-              <Text style={{ color: '#6b7280', marginTop: 4 }}>Tap to view</Text>
+              <Text style={styles.bannerHint}>Tap to view</Text>
             </View>
-            <TouchableOpacity onPress={onOpen} style={styles.openIcon} accessibilityLabel={`Open ${label} list`}>
-              <MaterialIcons name="open-in-new" size={18} color="#2563eb" />
-            </TouchableOpacity>
-            <View style={{ marginLeft: 8 }}>
+            <View style={styles.bannerActions}>
+              <TouchableOpacity onPress={onOpen} style={styles.openIcon} accessibilityLabel={`Open ${label} list`}>
+                <MaterialIcons name="open-in-new" size={18} color="#2563eb" />
+              </TouchableOpacity>
               <TouchableOpacity onPress={onToggle} style={styles.previewIcon} accessibilityLabel={`Preview ${label}`}>
                 <MaterialIcons name={open ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={20} color={open ? '#2563eb' : '#6b7280'} />
               </TouchableOpacity>
             </View>
             {rightAction ? (
-              <View style={{ marginLeft: 8 }}>{rightAction}</View>
+              <View style={styles.bannerRightAction}>{rightAction}</View>
             ) : null}
           </View>
         </TouchableOpacity>
@@ -896,9 +896,8 @@ export default function AdminControlsScreen() {
             ) : null}
 
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 10 }}>
-              <TouchableOpacity onPress={useCurrentLocationForOrg} style={[styles.secondaryBtn, { flex: 1, marginTop: 0, marginRight: 10 }]}>
-                <MaterialIcons name="my-location" size={18} color="#2563eb" />
-                <Text style={styles.secondaryBtnText}>Use my current location</Text>
+              <TouchableOpacity onPress={useCurrentLocationForOrg} style={[styles.secondaryBtn, styles.locationActionBtn, { flex: 1, marginTop: 0, marginRight: 10 }]}>
+                <Text style={[styles.secondaryBtnText, styles.locationActionText]}>Use my current location</Text>
               </TouchableOpacity>
 
               <View style={{ width: 140 }}>
@@ -978,6 +977,13 @@ const styles = StyleSheet.create({
   iconTileLabel: { fontSize: 13, fontWeight: '700', color: '#111827' },
   countBadge: { position: 'absolute', top: -8, right: -8, backgroundColor: '#ef4444', width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', zIndex: 20 },
   banner: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#eef2f7' },
+  bannerContent: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  bannerTextWrap: { flex: 1, minWidth: 0, paddingRight: 8 },
+  bannerLabelRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' },
+  bannerLabel: { flexShrink: 1, fontWeight: '700', color: '#111827' },
+  bannerHint: { color: '#6b7280', marginTop: 4 },
+  bannerActions: { flexDirection: 'row', alignItems: 'center', marginLeft: 4, flexShrink: 0 },
+  bannerRightAction: { marginLeft: 8, flexShrink: 0 },
   bannerBtn: { backgroundColor: '#2563eb', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, marginLeft: 12 },
   openIcon: { paddingHorizontal: 8, paddingVertical: 6 },
   previewIcon: { paddingHorizontal: 8, paddingVertical: 6 },
@@ -991,6 +997,8 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#fff' },
   secondaryBtn: { marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#e6eef8', backgroundColor: '#f1f5f9' },
   secondaryBtnText: { marginLeft: 8, color: '#2563eb', fontWeight: '700' },
+  locationActionBtn: { position: 'relative' },
+  locationActionText: { flex: 1, marginLeft: 0, textAlign: 'center', fontSize: 13 },
   primaryBtn: { marginTop: 12, backgroundColor: '#2563eb', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   primaryBtnText: { color: '#fff', fontWeight: '700' },
   overlayBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', padding: 18 },
