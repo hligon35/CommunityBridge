@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, Animated, Linking, Alert, Switch, TextInput, KeyboardAvoidingView, Platform, Keyboard, Modal, Pressable, Share } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, Animated, Linking, Alert, TextInput, KeyboardAvoidingView, Platform, Keyboard, Modal, Pressable, Share } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { avatarSourceFor, setIdVisibilityEnabled, initIdVisibilityFromStorage } from '../utils/idVisibility';
@@ -10,6 +10,7 @@ import { GOOGLE_PLACES_API_KEY } from '../config';
 import * as FileSystem from 'expo-file-system';
 import * as Api from '../Api';
 import { SETTINGS_KEYS, readJsonSetting, writeBooleanSetting, writeJsonSetting } from '../utils/appSettings';
+import ImageToggle from '../components/ImageToggle';
 
 const APP_BUNDLE_ID = (() => {
   try {
@@ -34,7 +35,7 @@ const currentLocationIcon = require('../../assets/icons/currentLocation.png');
 
 export default function AdminControlsScreen() {
   const navigation = useNavigation();
-  const { posts, messages, children, parents = [], therapists = [], urgentMemos = [] } = useData();
+  const { messages, children, parents = [], therapists = [], urgentMemos = [] } = useData();
   const isWeb = Platform.OS === 'web';
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [importModalVisible, setImportModalVisible] = useState(false);
@@ -62,8 +63,6 @@ export default function AdminControlsScreen() {
   // Navigation helpers
   const openMemos = () => navigation.navigate('AdminMemos');
   const openAlerts = () => navigation.navigate('AdminAlerts');
-  // open community moderation screen
-  const openCommunity = () => navigation.navigate('ModeratePosts');
   // open admin chat monitor (admin-only chat oversight)
   const openChats = () => navigation.navigate('AdminChatMonitor');
   const openImport = () => {
@@ -83,6 +82,7 @@ export default function AdminControlsScreen() {
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
         <Image source={pendingAlertCount > 0 ? alertsUnreadIcon : alertsIcon} style={styles.headerImageIcon} />
+        <Text style={styles.headerIconLabel}>Alerts</Text>
         {pendingAlertCount > 0 ? (
           <View style={styles.headerBadge}>
             <Text style={styles.headerBadgeText}>{pendingAlertCount}</Text>
@@ -103,6 +103,7 @@ export default function AdminControlsScreen() {
         >
           {/* Import is “bring data into the app” (down arrow) */}
           <Image source={importDirectoryIcon} style={styles.headerImageIcon} />
+          <Text style={styles.headerIconLabel}>Import</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => setExportModalVisible(true)}
@@ -112,6 +113,7 @@ export default function AdminControlsScreen() {
         >
           {/* Export is “send data out of the app” (up arrow) */}
           <Image source={exportDirectoryIcon} style={styles.headerImageIcon} />
+          <Text style={styles.headerIconLabel}>Export</Text>
         </TouchableOpacity>
       </View>
     );
@@ -127,10 +129,9 @@ export default function AdminControlsScreen() {
 
   function buildExportPayload() {
     // Do not include internal ID fields in exports for privacy.
-    const postsCsv = toCSV((posts || []).map(p => ({ title: p.title, body: p.body, author: p.author?.name, createdAt: p.createdAt })));
     const messagesCsv = toCSV((messages || []).map(m => ({ threadId: m.threadId || '', body: m.body, sender: m.sender?.name, createdAt: m.createdAt })));
     const childrenCsv = toCSV((children || []).map(c => ({ name: c.name, age: c.age, room: c.room, notes: c.notes })));
-    return `--- Posts ---\n${postsCsv}\n\n--- Messages ---\n${messagesCsv}\n\n--- Children ---\n${childrenCsv}`;
+    return `--- Messages ---\n${messagesCsv}\n\n--- Children ---\n${childrenCsv}`;
   }
 
   async function doExportShare() {
@@ -726,8 +727,10 @@ export default function AdminControlsScreen() {
                 accessibilityLabel="Toggle Students preview"
               >
                 <View style={styles.dirTileTop}>
-                  <Image source={studentsIcon} style={styles.dirTileIconImage} />
-                  <View style={styles.dirTileCount}><Text style={styles.dirTileCountText}>{(children || []).length}</Text></View>
+                  <View style={styles.dirTileIconWrap}>
+                    <Image source={studentsIcon} style={styles.dirTileIconImage} />
+                    <Text style={styles.dirTileIconBadgeText}>{(children || []).length}</Text>
+                  </View>
                 </View>
                 <Text style={styles.dirTileLabel}>Students</Text>
                 <TouchableOpacity onPress={openStudentDirectory} style={styles.dirTileOpen} accessibilityLabel="Open Students list">
@@ -741,8 +744,10 @@ export default function AdminControlsScreen() {
                 accessibilityLabel="Toggle Faculty preview"
               >
                 <View style={styles.dirTileTop}>
-                  <Image source={facultyIcon} style={styles.dirTileIconImage} />
-                  <View style={styles.dirTileCount}><Text style={styles.dirTileCountText}>{facultyCount}</Text></View>
+                  <View style={styles.dirTileIconWrap}>
+                    <Image source={facultyIcon} style={styles.dirTileIconImage} />
+                    <Text style={styles.dirTileIconBadgeText}>{facultyCount}</Text>
+                  </View>
                 </View>
                 <Text style={styles.dirTileLabel}>Faculty</Text>
                 <TouchableOpacity onPress={openFacultyDirectory} style={styles.dirTileOpen} accessibilityLabel="Open Faculty list">
@@ -756,8 +761,10 @@ export default function AdminControlsScreen() {
                 accessibilityLabel="Toggle Parents preview"
               >
                 <View style={styles.dirTileTop}>
-                  <Image source={parentsIcon} style={styles.dirTileIconImage} />
-                  <View style={styles.dirTileCount}><Text style={styles.dirTileCountText}>{(parents || []).length}</Text></View>
+                  <View style={styles.dirTileIconWrap}>
+                    <Image source={parentsIcon} style={styles.dirTileIconImage} />
+                    <Text style={styles.dirTileIconBadgeText}>{(parents || []).length}</Text>
+                  </View>
                 </View>
                 <Text style={styles.dirTileLabel}>Parents</Text>
                 <TouchableOpacity onPress={openParentDirectory} style={styles.dirTileOpen} accessibilityLabel="Open Parents list">
@@ -850,7 +857,7 @@ export default function AdminControlsScreen() {
               <Text style={{ fontSize: 14 }}>Show internal account ID numbers</Text>
               <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Toggle to show internal account ID numbers in profiles.</Text>
             </View>
-            <Switch value={showIds} onValueChange={toggleShowIds} />
+            <ImageToggle value={showIds} onValueChange={toggleShowIds} accessibilityLabel="Show internal account IDs" />
           </View>
         </View>
 
@@ -867,7 +874,7 @@ export default function AdminControlsScreen() {
                 <Text style={styles.toggleTitle}>Arrival detection enabled</Text>
                 <Text style={styles.toggleHint}>If turned off, arrival detection does not run for anyone (even if enabled in their settings).</Text>
               </View>
-              <Switch value={orgArrivalEnabled} onValueChange={toggleOrgArrival} />
+              <ImageToggle value={orgArrivalEnabled} onValueChange={toggleOrgArrival} accessibilityLabel="Arrival detection enabled" />
             </View>
 
             <Text style={styles.fieldLabel}>Organization Address</Text>
@@ -906,6 +913,7 @@ export default function AdminControlsScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 10 }}>
               <TouchableOpacity onPress={useCurrentLocationForOrg} style={[styles.locationActionBtn, { marginTop: 0, marginRight: 10 }]} accessibilityLabel="Use my current location">
                 <Image source={currentLocationIcon} style={styles.locationActionIconImage} />
+                <Text style={styles.locationActionText}>Current Location</Text>
               </TouchableOpacity>
 
               <View style={{ width: 140 }}>
@@ -938,10 +946,11 @@ export default function AdminControlsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   headerIconBtn: {
-    width: 40,
-    height: 40,
+    minWidth: 52,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 4,
     backgroundColor: 'transparent',
     ...Platform.select({
       web: {
@@ -955,15 +964,16 @@ const styles = StyleSheet.create({
   },
   headerBadge: { position: 'absolute', top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   headerBadgeText: { color: '#fff', fontWeight: '800', fontSize: 10 },
+  headerIconLabel: { marginTop: 2, fontSize: 9, fontWeight: '700', color: '#475569', textAlign: 'center' },
 
   dirGridRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
-  dirTile: { flex: 1, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff', borderRadius: 12, padding: 12, marginRight: 10 },
+  dirTile: { flex: 1, borderWidth: 1.5, borderColor: 'transparent', backgroundColor: '#fff', borderRadius: 12, padding: 12, marginRight: 10, alignItems: 'center' },
   dirTileActive: { borderColor: '#2563eb' },
-  dirTileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  dirTileCount: { minWidth: 22, height: 22, borderRadius: 11, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  dirTileCountText: { color: '#111827', fontWeight: '800', fontSize: 12 },
-  dirTileLabel: { marginTop: 8, fontWeight: '800', color: '#111827' },
-  dirTileOpen: { position: 'absolute', right: 10, bottom: 10, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  dirTileTop: { alignItems: 'center', justifyContent: 'center', width: '100%' },
+  dirTileIconWrap: { width: 74, height: 50, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  dirTileIconBadgeText: { position: 'absolute', top: -6, right: 4, minWidth: 16, textAlign: 'center', color: '#2563eb', fontWeight: '800', fontSize: 11 },
+  dirTileLabel: { marginTop: 10, fontWeight: '800', color: '#111827', textAlign: 'center' },
+  dirTileOpen: { position: 'absolute', right: -4, bottom: 6, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   content: { padding: 16 },
   title: { fontSize: 20, fontWeight: '700' },
   paragraph: { marginTop: 8, color: '#374151' },
@@ -1027,8 +1037,8 @@ const styles = StyleSheet.create({
     }),
   },
   iconTileLabel: { fontSize: 13, fontWeight: '700', color: '#111827' },
-  headerImageIcon: { width: 22, height: 22, resizeMode: 'contain' },
-  dirTileIconImage: { width: 18, height: 18, resizeMode: 'contain' },
+  headerImageIcon: { width: 25, height: 25, resizeMode: 'contain' },
+  dirTileIconImage: { width: 75, height: 75, resizeMode: 'contain' },
   countBadge: { position: 'absolute', top: -8, right: -8, backgroundColor: '#ef4444', width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', zIndex: 20 },
   banner: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#eef2f7' },
   bannerContent: { flex: 1, flexDirection: 'row', alignItems: 'center' },
@@ -1051,8 +1061,9 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#fff' },
   secondaryBtn: { marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#e6eef8', backgroundColor: '#f1f5f9' },
   secondaryBtnText: { marginLeft: 8, color: '#2563eb', fontWeight: '700' },
-  locationActionBtn: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
-  locationActionIconImage: { width: 36, height: 36, resizeMode: 'contain' },
+  locationActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, minHeight: 44 },
+  locationActionIconImage: { width: 30, height: 30, resizeMode: 'contain' },
+  locationActionText: { marginLeft: 8, color: '#2563eb', fontWeight: '700', fontSize: 13 },
   primaryBtn: { marginTop: 12, backgroundColor: '#2563eb', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   primaryBtnText: { color: '#fff', fontWeight: '700' },
   overlayBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', padding: 18 },

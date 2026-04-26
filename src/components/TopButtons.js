@@ -1,16 +1,24 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, Image } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
 import { logger } from '../utils/logger';
 import { logPress } from '../utils/logger';
 
+const helpIcon = require('../../assets/icons/help.png');
+
 export function HelpButton() {
   const navigation = useNavigation();
   return (
-    <TouchableOpacity style={styles.btn} onPress={() => { logPress('TopButtons:Help'); navigation.navigate('Settings', { screen: 'Help' }); }}>
-      <Text style={styles.help}>Help</Text>
+    <TouchableOpacity
+      style={[styles.btn, styles.helpBtn]}
+      onPress={() => { logPress('TopButtons:Help'); navigation.navigate('Settings', { screen: 'Help' }); }}
+      accessibilityRole="button"
+      accessibilityLabel="Help"
+      activeOpacity={0.85}
+    >
+      <Image source={helpIcon} style={styles.helpIcon} resizeMode="contain" />
     </TouchableOpacity>
   );
 }
@@ -44,7 +52,9 @@ export function BackButton({ onPress }) {
 }
 
 const styles = StyleSheet.create({
-  btn: { paddingHorizontal: 12 },
+  btn: { paddingHorizontal: 6 },
+  helpBtn: { paddingVertical: 2 },
+  helpIcon: { width: 32, height: 32 },
   help: { color: '#2563eb', fontWeight: '600' },
   logout: { color: '#ef4444', fontWeight: '600' },
   backBtn: { paddingHorizontal: 6, paddingVertical: 8, backgroundColor: 'transparent' },

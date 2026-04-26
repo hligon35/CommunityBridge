@@ -28,8 +28,8 @@ export default function HelpScreen() {
 
         <Text style={styles.sectionTitle}>Push Notifications</Text>
         <Text style={styles.paragraph}>
-          Use the Push Notifications settings to control which notifications you receive (chats, timeline posts,
-          mentions, comments, and reminders). If notifications are disabled in your device, enable them from Settings → Apps → CommunityBridge → Notifications.
+          Use the Push Notifications settings to control which notifications you receive for chats, comments,
+          and reminders. If notifications are disabled in your device, enable them from Settings → Apps → CommunityBridge → Notifications.
         </Text>
 
         <Text style={styles.sectionTitle}>Chats</Text>

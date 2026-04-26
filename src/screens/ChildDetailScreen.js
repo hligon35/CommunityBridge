@@ -42,8 +42,7 @@ export default function ChildDetailScreen() {
         </View>
       ) : null}
 
-      <View style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'space-between' }}>
-        <TouchableOpacity style={{ padding: 8, backgroundColor: '#2563eb', borderRadius: 8 }} onPress={() => navigation.navigate('ModeratePosts', { childId: child.id })}><Text style={{ color: '#fff', fontWeight: '700' }}>Posts</Text></TouchableOpacity>
+      <View style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'flex-end' }}>
         <TouchableOpacity style={{ padding: 8, backgroundColor: '#2563eb', borderRadius: 8 }} onPress={() => {
           const firstParent = (child.parents || [])[0];
           const firstTherapist = child.amTherapist || child.pmTherapist || child.bcaTherapist;

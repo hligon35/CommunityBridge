@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, TextInput, Image } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useData } from '../DataContext';
 import { MaterialIcons } from '@expo/vector-icons';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
+
+const moderateIcon = require('../../assets/icons/moderate.png');
 
 function PostRow({ item, onRemove, onBlock }) {
   return (
@@ -86,6 +88,15 @@ export default function ModeratePostsScreen(){
     <ScreenWrapper style={styles.container}>
       <View style={{ flex: 1 }}>
         <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
+          <View style={styles.headerRow}>
+            <View style={styles.headerIconWrap}>
+              <Image source={moderateIcon} style={styles.headerIconImage} resizeMode="contain" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headerTitle}>Moderate Posts</Text>
+              <Text style={styles.headerSubtitle}>Review posts, comments, and flagged activity.</Text>
+            </View>
+          </View>
           <TextInput placeholder="Search posts or author" value={query} onChangeText={setQuery} style={{ borderWidth: 1, borderColor: '#e5e7eb', padding: 8, borderRadius: 8 }} />
         </View>
         {authorId && commentsByUser && commentsByUser.length ? (
@@ -131,6 +142,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   body: { padding: 16 },
   p: { color: '#374151' },
+  headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  headerIconWrap: { width: 54, height: 54, borderRadius: 14, backgroundColor: '#eff6ff', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  headerIconImage: { width: 36, height: 36 },
+  headerTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
+  headerSubtitle: { marginTop: 2, color: '#64748b', fontSize: 12 },
   postRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   title: { fontWeight: '700' },
   meta: { color: '#6b7280', marginTop: 4 },

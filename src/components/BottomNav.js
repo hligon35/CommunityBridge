@@ -4,7 +4,6 @@ import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { logPress } from '../utils/logger';
 
-const homeIcon = require('../../assets/icons/home.png');
 const chatsIcon = require('../../assets/icons/chats.png');
 const chatsUnreadIcon = require('../../assets/icons/chats(unread).png');
 const myClassIcon = require('../../assets/icons/myclass.png');
@@ -33,14 +32,15 @@ export default function BottomNav({ navigationRef, currentRoute }) {
 
   // define tabs depending on role
   let tabs = [
-    { key: 'Home', label: 'Home', icon: (active) => (<NavImageIcon source={homeIcon} active={active} />) },
     { key: 'Chats', label: 'Chats', icon: (active) => (<NavImageIcon source={unreadThreadCount > 0 ? chatsUnreadIcon : chatsIcon} active={active} />), count: unreadThreadCount },
   ];
   if (role === 'therapist') {
+    tabs.unshift({ key: 'Home', label: 'Dashboard', icon: (active) => (<NavImageIcon source={controlsIcon} active={active} />) });
     tabs.push({ key: 'MyClass', label: 'My Class', icon: (active) => (<NavImageIcon source={myClassIcon} active={active} />) });
   } else if (role === 'admin' || role === 'administrator') {
   tabs.push({ key: 'Controls', label: 'Dashboard', icon: (active) => (<NavImageIcon source={controlsIcon} active={active} />), count: (urgentMemos || []).filter((m) => !m.status || m.status === 'pending').length });
   } else {
+    tabs.unshift({ key: 'Home', label: 'Dashboard', icon: (active) => (<NavImageIcon source={controlsIcon} active={active} />) });
     tabs.push({ key: 'MyChild', label: 'My Child', icon: (active) => (<NavImageIcon source={myChildIcon} active={active} />), count: parentPendingCount });
   }
   tabs.push({ key: 'Settings', label: 'Settings', icon: (active) => (<NavImageIcon source={settingsIcon} active={active} />) });

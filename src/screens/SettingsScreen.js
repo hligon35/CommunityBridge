@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Image, Alert, Switch, ScrollView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Alert, ScrollView, Platform } from 'react-native';
 import { useAuth } from '../AuthContext';
 import { BASE_URL } from '../config';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import devToolsFlag from '../utils/devToolsFlag';
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import ImageToggle from '../components/ImageToggle';
 import { avatarSourceFor, setIdVisibilityEnabled, initIdVisibilityFromStorage } from '../utils/idVisibility';
 import { registerForExpoPushTokenAsync } from '../utils/pushNotifications';
 import * as Api from '../Api';
@@ -15,6 +16,8 @@ import { SETTINGS_KEYS, readBooleanSetting, writeBooleanSetting, writeJsonSettin
 
 const editIconImage = require('../../assets/icons/edit.png');
 const currentLocationIcon = require('../../assets/icons/currentLocation.png');
+const checkUpdatesIcon = require('../../assets/icons/checkUpdates.png');
+const deleteAccountIcon = require('../../assets/icons/deleteAccount.png');
 
 const ARRIVAL_KEY = SETTINGS_KEYS.arrivalEnabled;
 const PUSH_KEY = 'settings_push_enabled_v1';
@@ -525,7 +528,7 @@ export default function SettingsScreen({ navigation }) {
               <Text style={{ fontSize: 14, fontWeight: '600' }}>Use location for arrival detection</Text>
               <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Automatically detect within close range to help with smoother pick-ups.</Text>
             </View>
-            <Switch value={arrivalEnabled} onValueChange={toggleArrival} />
+            <ImageToggle value={arrivalEnabled} onValueChange={toggleArrival} accessibilityLabel="Arrival detection" />
           </View>
         </View>
 
@@ -537,14 +540,14 @@ export default function SettingsScreen({ navigation }) {
               <Text style={{ fontSize: 14 }}>Show Email in profile</Text>
               <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Allow others to see your email in the user info modal.</Text>
             </View>
-            <Switch value={showEmail} onValueChange={setShowEmail} />
+            <ImageToggle value={showEmail} onValueChange={setShowEmail} accessibilityLabel="Show email in profile" />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flex: 1, paddingRight: 8 }}>
               <Text style={{ fontSize: 14 }}>Show Phone in profile</Text>
               <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Allow others to see your phone number in the user info modal.</Text>
             </View>
-            <Switch value={showPhone} onValueChange={setShowPhone} />
+            <ImageToggle value={showPhone} onValueChange={setShowPhone} accessibilityLabel="Show phone in profile" />
           </View>
         </View>
 
@@ -556,7 +559,7 @@ export default function SettingsScreen({ navigation }) {
               <Text style={{ fontSize: 16, fontWeight: '700' }}>Push Notifications</Text>
               <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Enable or disable all push notifications.</Text>
             </View>
-            <Switch value={pushEnabled} onValueChange={togglePush} />
+            <ImageToggle value={pushEnabled} onValueChange={togglePush} accessibilityLabel="Push notifications" />
           </View>
 
           {/* Chats */}
@@ -567,7 +570,7 @@ export default function SettingsScreen({ navigation }) {
                 <Text style={{ fontSize: 14 }}>Receive chat messages</Text>
                 <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Get notified when someone sends you a chat message.</Text>
               </View>
-              <Switch value={pushChats} onValueChange={setPushChats} disabled={!pushEnabled} />
+              <ImageToggle value={pushChats} onValueChange={setPushChats} disabled={!pushEnabled} accessibilityLabel="Receive chat messages" />
             </View>
           </View>
 
@@ -579,40 +582,14 @@ export default function SettingsScreen({ navigation }) {
                 <Text style={{ fontSize: 14 }}>Mentions in comments</Text>
                 <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Notify when you're mentioned in a comment.</Text>
               </View>
-              <Switch value={pushMentionsComments} onValueChange={setPushMentionsComments} disabled={!pushEnabled} />
+              <ImageToggle value={pushMentionsComments} onValueChange={setPushMentionsComments} disabled={!pushEnabled} accessibilityLabel="Mentions in comments" />
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <View style={{ flex: 1, paddingRight: 8 }}>
                 <Text style={{ fontSize: 14 }}>Replies to my comments</Text>
                 <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Notify when someone replies to your comment.</Text>
               </View>
-              <Switch value={pushRepliesComments} onValueChange={setPushRepliesComments} disabled={!pushEnabled} />
-            </View>
-          </View>
-
-          {/* Timeline / Posts */}
-          <View style={{ marginTop: 8, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>
-            <Text style={{ fontSize: 14, fontWeight: '700', marginBottom: 6 }}>Timeline & Posts</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <View style={{ flex: 1, paddingRight: 8 }}>
-                <Text style={{ fontSize: 14 }}>Mentions in posts</Text>
-                <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Notify when you're mentioned in a post.</Text>
-              </View>
-              <Switch value={pushMentionsPosts} onValueChange={setPushMentionsPosts} disabled={!pushEnabled} />
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <View style={{ flex: 1, paddingRight: 8 }}>
-                <Text style={{ fontSize: 14 }}>New posts on timeline</Text>
-                <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Notify for new posts added to the timeline.</Text>
-              </View>
-              <Switch value={pushTimelinePosts} onValueChange={setPushTimelinePosts} disabled={!pushEnabled} />
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View style={{ flex: 1, paddingRight: 8 }}>
-                <Text style={{ fontSize: 14 }}>Tags in posts</Text>
-                <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Notify when a post is tagged for you or your child.</Text>
-              </View>
-              <Switch value={pushTagsPosts} onValueChange={setPushTagsPosts} disabled={!pushEnabled} />
+              <ImageToggle value={pushRepliesComments} onValueChange={setPushRepliesComments} disabled={!pushEnabled} accessibilityLabel="Replies to my comments" />
             </View>
           </View>
 
@@ -624,14 +601,14 @@ export default function SettingsScreen({ navigation }) {
                 <Text style={{ fontSize: 14 }}>Updates & reminders</Text>
                 <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Reminders for events, schedule changes, and urgent updates.</Text>
               </View>
-              <Switch value={pushUpdates} onValueChange={setPushUpdates} disabled={!pushEnabled} />
+              <ImageToggle value={pushUpdates} onValueChange={setPushUpdates} disabled={!pushEnabled} accessibilityLabel="Updates and reminders" />
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <View style={{ flex: 1, paddingRight: 8 }}>
                 <Text style={{ fontSize: 14 }}>Other activity</Text>
                 <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Low-priority notices that do not fit the categories above.</Text>
               </View>
-              <Switch value={pushOther} onValueChange={setPushOther} disabled={!pushEnabled} />
+              <ImageToggle value={pushOther} onValueChange={setPushOther} disabled={!pushEnabled} accessibilityLabel="Other activity" />
             </View>
           </View>
         </View>
@@ -643,8 +620,9 @@ export default function SettingsScreen({ navigation }) {
             <Text style={{ fontSize: 14, color: '#6b7280', marginBottom: 8 }}>Set the center's address used to detect nearby arrivals (lat,lng).</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Text style={{ flex: 1 }}>{businessAddress || 'Not set'}</Text>
-              <TouchableOpacity onPress={pickBusinessLocation} accessibilityLabel="Use current location" style={{ marginLeft: 8, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+              <TouchableOpacity onPress={pickBusinessLocation} accessibilityLabel="Use current location" style={{ marginLeft: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: 44 }}>
                 <Image source={currentLocationIcon} style={{ width: 30, height: 30, resizeMode: 'contain' }} />
+                <Text style={{ marginLeft: 8, color: '#2563eb', fontWeight: '700', fontSize: 13 }}>Current Location</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -662,7 +640,7 @@ export default function SettingsScreen({ navigation }) {
                   <Text style={{ fontSize: 14 }}>Show internal IDs</Text>
                   <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Toggle to show internal ID strings in profiles (debug only).</Text>
                 </View>
-                <Switch value={showIds} onValueChange={setShowIds} />
+                <ImageToggle value={showIds} onValueChange={setShowIds} accessibilityLabel="Show internal IDs" />
               </View>
             </View>
           ) : null}
@@ -709,8 +687,10 @@ export default function SettingsScreen({ navigation }) {
               <TouchableOpacity
                 onPress={checkForOtaUpdate}
                 disabled={updateBusy}
-                style={{ padding: 10, backgroundColor: updateBusy ? '#9ca3af' : '#111827', borderRadius: 8, alignSelf: 'flex-start' }}
+                style={{ paddingVertical: 8, paddingHorizontal: 10, backgroundColor: updateBusy ? '#9ca3af' : '#111827', borderRadius: 10, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center' }}
+                activeOpacity={0.85}
               >
+                <Image source={checkUpdatesIcon} style={{ width: 24, height: 24, resizeMode: 'contain', marginRight: 10, opacity: updateBusy ? 0.85 : 1 }} />
                 <Text style={{ color: '#fff', fontWeight: '700' }}>{updateBusy ? 'Checking…' : 'Check for update now'}</Text>
               </TouchableOpacity>
             </View>
@@ -727,9 +707,11 @@ export default function SettingsScreen({ navigation }) {
           <TouchableOpacity
             onPress={confirmAndDeleteAccount}
             disabled={deleteBusy}
-            style={{ padding: 10, backgroundColor: deleteBusy ? '#9ca3af' : '#b91c1c', borderRadius: 8, alignSelf: 'flex-start' }}
+            style={{ paddingVertical: 10, paddingHorizontal: 14, backgroundColor: deleteBusy ? '#9ca3af' : '#b91c1c', borderRadius: 10, alignSelf: 'flex-start', alignItems: 'center', justifyContent: 'center', minWidth: 112 }}
+            activeOpacity={0.85}
           >
-            <Text style={{ color: '#fff', fontWeight: '700' }}>{deleteBusy ? 'Deleting…' : 'Delete my account'}</Text>
+            <Image source={deleteAccountIcon} style={{ width: 28, height: 28, resizeMode: 'contain', marginBottom: 6, opacity: deleteBusy ? 0.85 : 1 }} />
+            <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>{deleteBusy ? 'Deleting…' : 'Delete Account'}</Text>
           </TouchableOpacity>
         </View>
         {/* Dev role switcher moved to DevRoleSwitcher (floating) */}

@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { logger } from './utils/logger';
 import { getAuthInstance, getAuthInitError, db, storage, functions } from './firebase';
 import { BASE_URL } from './config';
+import { DEFAULT_AVATAR_TOKEN } from './utils/idVisibility';
 
 import {
   GoogleAuthProvider,
@@ -208,6 +209,7 @@ export async function signup(payload) {
     name,
     email,
     role,
+    avatar: DEFAULT_AVATAR_TOKEN,
   });
   const token = await getIdToken(cred.user, true);
 
@@ -438,7 +440,7 @@ export async function updateMe(payload) {
   try {
     const update = {};
     if (next.name != null) update.displayName = String(next.name);
-    if (next.avatar != null) update.photoURL = String(next.avatar);
+    if (next.avatar != null && String(next.avatar) !== DEFAULT_AVATAR_TOKEN) update.photoURL = String(next.avatar);
     if (Object.keys(update).length) await updateProfile(u, update);
   } catch (_) {
     // ignore
@@ -653,7 +655,7 @@ export async function uploadMedia(formData) {
   let base64;
   try {
     // eslint-disable-next-line global-require
-    const FileSystem = require('expo-file-system');
+    const FileSystem = require('expo-file-system/legacy');
     const base64Encoding = FileSystem?.EncodingType?.Base64 || FileSystem?.EncodingType?.BASE64 || 'base64';
     base64 = await FileSystem.readAsStringAsync(file.uri, { encoding: base64Encoding });
   } catch (e) {
@@ -1162,19 +1164,28 @@ export async function registerPushToken(payload) {
       return { resp, json };
     };
 
+    const shouldFallbackFromPushApi = ({ resp, json, error }) => {
+      const status = Number(resp?.status || error?.httpStatus || 0);
+      const message = String(json?.error || json?.message || error?.message || '').toLowerCase();
+      if (status === 404) return true;
+      if (status === 401 || status === 403) return true;
+      if (message.includes('invalid token') || message.includes('missing auth token') || message.includes('user not found')) return true;
+      return false;
+    };
+
     try {
       let { resp, json } = await tryApi({ forceRefresh: false });
       if (resp.status === 401) {
         ({ resp, json } = await tryApi({ forceRefresh: true }));
       }
       if (resp.ok && json?.ok !== false) return { ok: true, via: 'api' };
-      if (resp.status !== 404 && !isLikelyNetworkError({ message: resp.statusText })) {
+      if (!shouldFallbackFromPushApi({ resp, json }) && !isLikelyNetworkError({ message: resp.statusText })) {
         const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not register push token.'));
         err.httpStatus = resp.status;
         throw err;
       }
     } catch (e) {
-      if (!isLikelyNetworkError(e) && Number(e?.httpStatus || 0) !== 404) throw e;
+      if (!isLikelyNetworkError(e) && !shouldFallbackFromPushApi({ error: e })) throw e;
     }
   }
 
@@ -1215,19 +1226,28 @@ export async function unregisterPushToken(payload) {
       return { resp, json };
     };
 
+    const shouldFallbackFromPushApi = ({ resp, json, error }) => {
+      const status = Number(resp?.status || error?.httpStatus || 0);
+      const message = String(json?.error || json?.message || error?.message || '').toLowerCase();
+      if (status === 404) return true;
+      if (status === 401 || status === 403) return true;
+      if (message.includes('invalid token') || message.includes('missing auth token') || message.includes('user not found')) return true;
+      return false;
+    };
+
     try {
       let { resp, json } = await tryApi({ forceRefresh: false });
       if (resp.status === 401) {
         ({ resp, json } = await tryApi({ forceRefresh: true }));
       }
       if (resp.ok && json?.ok !== false) return { ok: true, via: 'api' };
-      if (resp.status !== 404 && !isLikelyNetworkError({ message: resp.statusText })) {
+      if (!shouldFallbackFromPushApi({ resp, json }) && !isLikelyNetworkError({ message: resp.statusText })) {
         const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not unregister push token.'));
         err.httpStatus = resp.status;
         throw err;
       }
     } catch (e) {
-      if (!isLikelyNetworkError(e) && Number(e?.httpStatus || 0) !== 404) throw e;
+      if (!isLikelyNetworkError(e) && !shouldFallbackFromPushApi({ error: e })) throw e;
     }
   }
 

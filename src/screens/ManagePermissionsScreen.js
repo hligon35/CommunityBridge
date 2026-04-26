@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import ImageToggle from '../components/ImageToggle';
 
 const KEY = 'bbs_permissions_v1';
 
 const DEFAULT_ROLES = ['Admin', 'Teacher', 'Therapist', 'Parent', 'Staff'];
 const DEFAULT_CAPS = [
-  { id: 'posts:moderate', label: 'Moderate posts' },
   { id: 'users:manage', label: 'Manage users' },
   { id: 'children:edit', label: 'Edit children' },
   { id: 'messages:send', label: 'Send messages' },
@@ -52,7 +52,7 @@ export default function ManagePermissionsScreen(){
         {DEFAULT_CAPS.map((c) => (
           <View key={c.id} style={styles.capRow}>
             <Text style={styles.capLabel}>{c.label}</Text>
-            <Switch value={!!caps[c.id]} onValueChange={(v) => toggle(role, c.id, v)} />
+            <ImageToggle value={!!caps[c.id]} onValueChange={(v) => toggle(role, c.id, v)} accessibilityLabel={`${role} ${c.label}`} />
           </View>
         ))}
       </View>

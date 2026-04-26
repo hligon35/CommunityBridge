@@ -4,6 +4,7 @@ import { SETTINGS_KEYS, readBooleanSetting, writeBooleanSetting } from './appSet
 const SHOW_IDS_KEY = SETTINGS_KEYS.showIds;
 
 export const DEFAULT_AVATAR_SOURCE = require('../../assets/avatar.png');
+export const DEFAULT_AVATAR_TOKEN = '__BB_DEFAULT_AVATAR__';
 
 let idVisibilityEnabled = false; // module-level cache
 
@@ -52,6 +53,7 @@ export function avatarSourceFor(user) {
     const raw = user?.avatar || user?.photoURL || null;
     if (raw && typeof raw === 'string') {
       const uri = raw.trim();
+      if (uri === DEFAULT_AVATAR_TOKEN) return DEFAULT_AVATAR_SOURCE;
       if (uri && !uri.includes('pravatar.cc')) return { uri };
     }
   } catch (_) {
@@ -66,6 +68,7 @@ export default {
   pravatarUriFor,
   avatarSourceFor,
   DEFAULT_AVATAR_SOURCE,
+  DEFAULT_AVATAR_TOKEN,
   setIdVisibilityEnabled,
   initIdVisibilityFromStorage,
 };

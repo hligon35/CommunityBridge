@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, TouchableOpacity, Text, Alert, StyleSheet, Switch, Modal, ActivityIndicator } from 'react-native';
+import { View, TouchableOpacity, Text, Alert, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import devToolsFlag from '../utils/devToolsFlag';
 import devDirectoryFlag from '../utils/devDirectoryFlag';
 import devWallFlag from '../utils/devWallFlag';
@@ -7,6 +7,7 @@ import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { MaterialIcons } from '@expo/vector-icons';
 import { logPress, logger } from '../utils/logger';
+import ImageToggle from './ImageToggle';
 
 export default function DevRoleSwitcher() {
   if (!__DEV__) return null;
@@ -151,16 +152,16 @@ export default function DevRoleSwitcher() {
           <View style={{ height: 1, backgroundColor: '#f3f4f6', marginVertical: 6 }} />
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 6 }}>
             <Text style={{ marginRight: 8 }}>Show Dev Tools</Text>
-            <Switch value={devTools} onValueChange={setDevToolsPersisted} />
+            <ImageToggle value={devTools} onValueChange={setDevToolsPersisted} accessibilityLabel="Show Dev Tools" />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 6, marginTop:6 }}>
             <Text style={{ marginRight: 8 }}>Show Directory (seed)</Text>
-            <Switch value={showDirectory} onValueChange={setShowDirectoryPersisted} />
+            <ImageToggle value={showDirectory} onValueChange={setShowDirectoryPersisted} accessibilityLabel="Show Directory" />
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 6, marginTop:6 }}>
             <Text style={{ marginRight: 8 }}>Show Wall Posts</Text>
-            <Switch value={showWall} onValueChange={setShowWallPersisted} />
+            <ImageToggle value={showWall} onValueChange={setShowWallPersisted} accessibilityLabel="Show Wall Posts" />
           </View>
 
           <TouchableOpacity onPress={() => setShowLoginModal(true)} style={styles.menuBtn}>

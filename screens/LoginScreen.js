@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, Modal, Platform, Image, KeyboardAvoidingView, ScrollView, TouchableWithoutFeedback, Keyboard, useWindowDimensions } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
@@ -48,6 +48,32 @@ function AuthButtonImage({ source, style, imageStyle }) {
   return <Image source={source} style={[styles.authButtonImage, style, imageStyle]} resizeMode="contain" />;
 }
 
+function LoginToast({ toast, onClose }) {
+  if (!toast?.visible) return null;
+
+  const tone = toast.tone || 'error';
+  const config = tone === 'success'
+    ? { card: styles.toastSuccess, icon: 'check-circle-outline', iconColor: '#166534' }
+    : tone === 'info'
+      ? { card: styles.toastInfo, icon: 'info-outline', iconColor: '#1d4ed8' }
+      : { card: styles.toastError, icon: 'error-outline', iconColor: '#b91c1c' };
+
+  return (
+    <View pointerEvents="box-none" style={styles.toastHost}>
+      <View style={[styles.toastCard, config.card]}>
+        <MaterialIcons name={config.icon} size={20} color={config.iconColor} style={styles.toastIcon} />
+        <View style={styles.toastCopy}>
+          {toast.title ? <Text style={styles.toastTitle}>{toast.title}</Text> : null}
+          {toast.message ? <Text style={styles.toastMessage}>{toast.message}</Text> : null}
+        </View>
+        <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel="Dismiss login message" style={styles.toastDismiss}>
+          <MaterialIcons name="close" size={18} color="#475569" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 const isMobilePlatform = Platform.OS !== 'web';
 
 function GoogleSignInButtonDisabled({ busy, onPress, variant = 'full' }) {
@@ -83,6 +109,7 @@ function GoogleSignInButtonEnabled({
   navigation,
   busy,
   setBusy,
+  showToast,
   iosClientId,
   androidClientId,
   webClientId,
@@ -126,7 +153,7 @@ function GoogleSignInButtonEnabled({
       '';
 
     if (!idToken) {
-      Alert.alert('Google sign-in failed', 'Missing Google ID token.');
+      showToast({ title: 'Google sign-in failed', message: 'Missing Google ID token.' });
       return;
     }
 
@@ -134,10 +161,10 @@ function GoogleSignInButtonEnabled({
       setBusy(true);
       try {
         await auth.loginWithGoogle(idToken);
-        const gate = await auth.refreshMfaState();
-        navigation.replace(gate?.needsMfa ? 'TwoFactor' : 'Main');
+        showToast({ title: 'Google sign-in successful', message: 'Finishing sign-in…', tone: 'success', durationMs: 1400 });
+        await finishLoginNavigation();
       } catch (e) {
-        Alert.alert('Google sign-in failed', e?.message || 'Please try again.');
+        showToast({ title: 'Google sign-in failed', message: e?.message || 'Please try again.' });
       } finally {
         setBusy(false);
       }
@@ -153,22 +180,20 @@ function GoogleSignInButtonEnabled({
     const desc = String(googleResponse?.params?.error_description || '').trim();
     const code = String(googleResponse?.params?.error || '').trim();
     if (googleResponse.type === 'error') {
-      Alert.alert(
-        'Google sign-in failed',
-        `${desc || err || 'Google OAuth error.'}` +
-          `${code ? `\n\nCode: ${code}` : ''}` +
-          `${googleRequest?.redirectUri ? `\n\nRedirect URI: ${googleRequest.redirectUri}` : ''}`
-      );
+      showToast({
+        title: 'Google sign-in failed',
+        message: desc || err || (code ? `Google OAuth error: ${code}` : 'Google OAuth error.'),
+      });
     }
-  }, [googleResponse, googleRequest]);
+  }, [googleResponse, googleRequest, showToast]);
 
   const onPress = () => {
     if (!googleRequest) {
-      Alert.alert('Google sign-in', 'Google sign-in is still initializing. Please try again.');
+      showToast({ title: 'Google sign-in', message: 'Google sign-in is still initializing. Please try again.', tone: 'info' });
       return;
     }
     googlePromptAsync({ showInRecents: true }).catch(() => {
-      Alert.alert('Google sign-in failed', 'Could not start sign-in.');
+      showToast({ title: 'Google sign-in failed', message: 'Could not start sign-in.' });
     });
   };
 
@@ -209,6 +234,7 @@ function GoogleSignInButton(props) {
       navigation={props.navigation}
       busy={props.busy}
       setBusy={props.setBusy}
+      showToast={props.showToast}
       iosClientId={props.iosClientId}
       androidClientId={props.androidClientId}
       webClientId={props.webClientId}
@@ -231,7 +257,9 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   const [hasBiometricAuthStored, setHasBiometricAuthStored] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [toast, setToast] = useState({ visible: false, title: '', message: '', tone: 'error' });
   const auth = useAuth();
+  const toastTimerRef = useRef(null);
 
   const iosGoogleClientId = String(
     process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
@@ -322,15 +350,66 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
   const fieldWidthStyle = useMemo(() => ({ width: '100%', maxWidth: 360 }), []);
 
+  function dismissToast() {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    setToast((current) => ({ ...current, visible: false }));
+  }
+
+  function showToast(payload) {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+
+    const next = typeof payload === 'string' ? { message: payload } : (payload || {});
+    setToast({
+      visible: true,
+      title: String(next.title || '').trim(),
+      message: String(next.message || '').trim(),
+      tone: next.tone || 'error',
+    });
+
+    toastTimerRef.current = setTimeout(() => {
+      setToast((current) => ({ ...current, visible: false }));
+      toastTimerRef.current = null;
+    }, next.durationMs || 4200);
+  }
+
+  async function finishLoginNavigation() {
+    try {
+      const gate = await auth.refreshMfaState();
+      navigation.replace(gate?.needsMfa ? 'TwoFactor' : 'Main');
+    } catch (e) {
+      logger.warn('auth', 'Post-login navigation failed', { code: e?.code, message: e?.message || String(e) });
+      reportErrorToSentry(e, { area: 'auth', action: 'post_login_navigation', platform: Platform.OS });
+      showToast({
+        title: 'Signed in, but setup failed',
+        message: e?.message || 'Please close and reopen the app, then try again.',
+      });
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+    };
+  }, []);
+
   async function doLogin(){
     const cleanedEmail = String(email || '').trim();
     const cleanedPassword = String(password || '');
     if (!cleanedEmail) {
-      Alert.alert('Missing email', 'Please enter your email.');
+      showToast({ title: 'Missing email', message: 'Please enter your email.', tone: 'info' });
       return;
     }
     if (!cleanedPassword) {
-      Alert.alert('Missing password', 'Please enter your password.');
+      showToast({ title: 'Missing password', message: 'Please enter your password.', tone: 'info' });
       return;
     }
 
@@ -343,8 +422,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
         await SecureStore.setItemAsync('bb_bio_user', JSON.stringify(res?.user || auth?.user || {}));
         setHasBiometricAuthStored(true);
       } catch (_) {}
-      const gate = await auth.refreshMfaState();
-      navigation.replace(gate?.needsMfa ? 'TwoFactor' : 'Main');
+      await finishLoginNavigation();
     } catch (e) {
       const code = e?.code ? String(e.code) : '';
       const msg = e?.message || String(e) || 'Please check your credentials and try again.';
@@ -361,10 +439,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
         firebaseAuthInitError: fbAuthErr ? String(fbAuthErr?.message || fbAuthErr) : '',
       });
 
-      Alert.alert(
-        'Login failed',
-        `${msg}${formatSupportDetails({ code, eventId })}`
-      );
+      showToast({ title: 'Login failed', message: `${msg}${formatSupportDetails({ code, eventId })}` });
     } finally {
       setBusy(false);
     }
@@ -425,7 +500,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       const storedEnabled = await SecureStore.getItemAsync('bb_bio_enabled');
       const storedUser = await SecureStore.getItemAsync('bb_bio_user');
       if (!storedEnabled || !storedUser) {
-        Alert.alert('Biometric sign-in', 'No saved sign-in found. Please sign in with email and password first.');
+        showToast({ title: 'Biometric sign-in', message: 'No saved sign-in found. Please sign in with email and password first.', tone: 'info' });
         return;
       }
 
@@ -437,21 +512,20 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
       if (result?.success) {
         if (!auth?.token) {
-          Alert.alert('Biometric unlock', 'Please sign in with email and password.');
+          showToast({ title: 'Biometric unlock', message: 'Please sign in with email and password.' });
           return;
         }
-        const gate = await auth.refreshMfaState();
-        navigation.replace(gate?.needsMfa ? 'TwoFactor' : 'Main');
+        await finishLoginNavigation();
         return;
       }
 
       // user_cancel / system_cancel are expected; don't throw noisy alerts
       const err = result?.error ? String(result.error) : '';
       if (err && err !== 'user_cancel' && err !== 'system_cancel' && err !== 'app_cancel') {
-        Alert.alert('Biometric unlock failed', 'Please sign in with email and password.');
+        showToast({ title: 'Biometric unlock failed', message: 'Please sign in with email and password.' });
       }
     } catch (e) {
-      Alert.alert('Biometric unlock failed', e?.message || 'Please sign in with email and password.');
+      showToast({ title: 'Biometric unlock failed', message: e?.message || 'Please sign in with email and password.' });
     } finally {
       setBiometricBusy(false);
     }
@@ -526,6 +600,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
   return (
     <View style={styles.screen}>
+      <LoginToast toast={toast} onClose={dismissToast} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -631,6 +706,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
                 enabled={googleEnabled}
                 busy={busy}
                 setBusy={setBusy}
+                showToast={showToast}
                 iosClientId={iosGoogleClientId}
                 androidClientId={androidGoogleClientId}
                 webClientId={webGoogleClientId}
@@ -712,6 +788,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
                   enabled={googleEnabled}
                   busy={busy}
                   setBusy={setBusy}
+                  showToast={showToast}
                   iosClientId={iosGoogleClientId}
                   androidClientId={androidGoogleClientId}
                   webClientId={webGoogleClientId}
@@ -757,6 +834,37 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#fff' },
+  toastHost: {
+    position: 'absolute',
+    top: Platform.OS === 'web' ? 20 : 18,
+    left: 12,
+    right: 12,
+    zIndex: 1000,
+    alignItems: 'center',
+  },
+  toastCard: {
+    width: '100%',
+    maxWidth: 460,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  toastError: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
+  toastInfo: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' },
+  toastSuccess: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  toastIcon: { marginTop: 1, marginRight: 10 },
+  toastCopy: { flex: 1 },
+  toastTitle: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
+  toastMessage: { marginTop: 2, fontSize: 13, lineHeight: 18, color: '#334155' },
+  toastDismiss: { marginLeft: 10, padding: 2 },
   scrollContainer: { flexGrow: 1, padding: 20, alignItems: 'center' },
   scrollContainerWeb: { justifyContent: 'flex-start' },
   scrollContainerMobile: { justifyContent: 'center', paddingTop: 32, paddingBottom: 32 },

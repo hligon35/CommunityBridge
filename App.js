@@ -18,7 +18,7 @@ import { registerGlobalDebugHandlers } from './src/utils/registerDebugHandlers';
 import { configureNotificationHandling } from './src/utils/pushNotifications';
 import { navigationRef } from './src/navigationRef';
 
-import HomeScreen from './src/screens/HomeScreen';
+import RoleDashboardScreen from './src/screens/RoleDashboardScreen';
 import ChatsScreen from './src/screens/ChatsScreen';
 import ChatThreadScreen from './src/screens/ChatThreadScreen';
 import NewThreadScreen from './src/screens/NewThreadScreen';
@@ -26,7 +26,10 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import HelpScreen from './src/screens/HelpScreen';
 import MyClassScreen from './src/screens/MyClassScreen';
+import MyChildScreen from './src/screens/MyChildScreen';
 import AdminControlsScreen from './src/screens/AdminControlsScreen';
+import AdminChatMonitorScreen from './src/screens/AdminChatMonitorScreen';
+import UserMonitorScreen from './src/screens/UserMonitorScreen';
 import StudentDirectoryScreen from './src/screens/StudentDirectoryScreen';
 import FacultyDirectoryScreen from './src/screens/FacultyDirectoryScreen';
 import ParentDirectoryScreen from './src/screens/ParentDirectoryScreen';
@@ -35,7 +38,6 @@ import ChildDetailScreen from './src/screens/ChildDetailScreen';
 import FacultyDetailScreen from './src/screens/FacultyDetailScreen';
 import ManagePermissionsScreen from './src/screens/ManagePermissionsScreen';
 import PrivacyDefaultsScreen from './src/screens/PrivacyDefaultsScreen';
-import ModeratePostsScreen from './src/screens/ModeratePostsScreen';
 import AdminAlertsScreen from './src/screens/AdminAlertsScreen';
 import AdminMemosScreen from './src/screens/AdminMemosScreen';
 import ExportDataScreen from './src/screens/ExportDataScreen';
@@ -94,12 +96,11 @@ function ControlsStack() {
       <ControlsStackNav.Screen name="ChildDetail" component={ChildDetailScreen} options={{ title: 'Student' }} />
       <ControlsStackNav.Screen name="FacultyDetail" component={FacultyDetailScreen} options={{ title: 'Faculty' }} />
       <ControlsStackNav.Screen name="AdminMemos" component={AdminMemosScreen} options={{ title: 'Compose Memo' }} />
-      <ControlsStackNav.Screen name="AdminChatMonitor" component={require('./src/screens/AdminChatMonitorScreen').default} options={{ title: 'Chat Monitor' }} />
-      <ControlsStackNav.Screen name="UserMonitor" component={require('./src/screens/UserMonitorScreen').default} options={{ title: 'User Monitor' }} />
+      <ControlsStackNav.Screen name="AdminChatMonitor" component={AdminChatMonitorScreen} options={{ title: 'Chat Monitor' }} />
+      <ControlsStackNav.Screen name="UserMonitor" component={UserMonitorScreen} options={{ title: 'User Monitor' }} />
       <ControlsStackNav.Screen name="ChatThread" component={ChatThreadScreen} options={{ title: 'Thread' }} />
       <ControlsStackNav.Screen name="ManagePermissions" component={ManagePermissionsScreen} options={{ title: 'Manage Permissions' }} />
       <ControlsStackNav.Screen name="PrivacyDefaults" component={PrivacyDefaultsScreen} options={{ title: 'Profile Settings' }} />
-      <ControlsStackNav.Screen name="ModeratePosts" component={ModeratePostsScreen} options={{ title: 'Moderate Posts' }} />
       <ControlsStackNav.Screen name="AdminAlerts" component={AdminAlertsScreen} options={{ title: 'Alerts' }} />
       
       <ControlsStackNav.Screen name="ExportData" component={ExportDataScreen} options={{ title: 'Export Data' }} />
@@ -119,8 +120,7 @@ function CommunityStack() {
         headerLeft: () => (back ? <BackButton onPress={() => navigation.goBack()} /> : <HelpButton />),
       })}
     >
-      <CommunityStackNav.Screen name="CommunityMain" component={HomeScreen} options={{ title: 'Home' }} />
-      <CommunityStackNav.Screen name="PostThread" component={require('./src/screens/PostThreadScreen').default} options={{ title: 'Post' }} />
+      <CommunityStackNav.Screen name="CommunityMain" component={RoleDashboardScreen} options={{ title: 'Dashboard' }} />
     </CommunityStackNav.Navigator>
   );
 }
@@ -137,7 +137,7 @@ function MyChildStack() {
         headerLeft: () => (back ? <BackButton onPress={() => navigation.goBack()} /> : <HelpButton />),
       })}
     >
-      <MyChildStackNav.Screen name="MyChildMain" component={require('./src/screens/MyChildScreen').default} options={{ title: 'My Child' }} />
+      <MyChildStackNav.Screen name="MyChildMain" component={MyChildScreen} options={{ title: 'My Child' }} />
     </MyChildStackNav.Navigator>
   );
 }
@@ -198,7 +198,9 @@ function MainRoutes() {
   const role = (user && user.role) ? (user.role || '').toString().toLowerCase() : 'parent';
 
   const screens = [];
-  screens.push({ name: 'Home', component: CommunityStack });
+  if (!(role === 'admin' || role === 'administrator')) {
+    screens.push({ name: 'Home', component: CommunityStack });
+  }
   screens.push({ name: 'Chats', component: ChatsStack });
 
   if (role === 'therapist') {
@@ -212,7 +214,7 @@ function MainRoutes() {
   screens.push({ name: 'Settings', component: SettingsStack });
 
   return (
-    <RootStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Home">
+    <RootStack.Navigator screenOptions={{ headerShown: false }} initialRouteName={(role === 'admin' || role === 'administrator') ? 'Controls' : 'Home'}>
       {screens.map(s => (
         <RootStack.Screen key={s.name} name={s.name} component={s.component} />
       ))}
@@ -365,7 +367,7 @@ function App() {
     }
 
     const missing = [];
-    if (!HomeScreen) missing.push('HomeScreen');
+    if (!RoleDashboardScreen) missing.push('RoleDashboardScreen');
     if (!ChatsScreen) missing.push('ChatsScreen');
     if (!ChatThreadScreen) missing.push('ChatThreadScreen');
     if (!SettingsScreen) missing.push('SettingsScreen');
@@ -376,7 +378,7 @@ function App() {
     else setProblem(null);
     // log for Metro/console
     logger.info('app', 'App imports', {
-      HomeScreen: !!HomeScreen,
+      RoleDashboardScreen: !!RoleDashboardScreen,
       ChatsScreen: !!ChatsScreen,
       ChatThreadScreen: !!ChatThreadScreen,
       SettingsScreen: !!SettingsScreen,

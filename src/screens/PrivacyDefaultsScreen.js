@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import ImageToggle from '../components/ImageToggle';
 
 const KEY = 'bbs_privacy_defaults_v1';
 
@@ -35,9 +36,9 @@ export default function PrivacyDefaultsScreen(){
   return (
     <ScreenWrapper style={styles.container}>
       <View style={styles.body}>
-        <View style={styles.row}><Text style={styles.label}>Public profile by default</Text><Switch value={profilePublic} onValueChange={setProfilePublic} /></View>
-        <View style={styles.row}><Text style={styles.label}>Share contact info</Text><Switch value={shareContact} onValueChange={setShareContact} /></View>
-        <View style={styles.row}><Text style={styles.label}>Enable push notifications</Text><Switch value={pushNotifications} onValueChange={setPushNotifications} /></View>
+        <View style={styles.row}><Text style={styles.label}>Public profile by default</Text><ImageToggle value={profilePublic} onValueChange={setProfilePublic} accessibilityLabel="Public profile by default" /></View>
+        <View style={styles.row}><Text style={styles.label}>Share contact info</Text><ImageToggle value={shareContact} onValueChange={setShareContact} accessibilityLabel="Share contact info" /></View>
+        <View style={styles.row}><Text style={styles.label}>Enable push notifications</Text><ImageToggle value={pushNotifications} onValueChange={setPushNotifications} accessibilityLabel="Enable push notifications" /></View>
         <Text style={styles.note}>Changes are saved automatically.</Text>
       </View>
     </ScreenWrapper>
