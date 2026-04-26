@@ -112,6 +112,13 @@ export function setUnauthorizedHandler(fn) {
   unauthorizedHandler = typeof fn === 'function' ? fn : null;
 }
 
+const DEV_SWITCH_EMAIL = 'dev@communitybridge.app';
+
+function defaultProfileRoleForEmail(email) {
+  const normalizedEmail = normalizeEmailInput(email);
+  return normalizedEmail === DEV_SWITCH_EMAIL ? 'admin' : 'parent';
+}
+
 export function setAuthToken(_) {
   // Compatibility no-op: Firebase Auth manages tokens internally.
 }
@@ -164,7 +171,7 @@ export async function login(email, password) {
   const profile = (await getUserProfile(cred.user.uid)) || (await upsertUserProfile(cred.user.uid, {
     name: cred.user.displayName || '',
     email: e,
-    role: 'parent',
+    role: defaultProfileRoleForEmail(e),
   }));
   return { token, user: profile };
 }
@@ -178,7 +185,7 @@ export async function loginWithGoogle(idToken) {
   const profile = (await getUserProfile(cred.user.uid)) || (await upsertUserProfile(cred.user.uid, {
     name: cred.user.displayName || '',
     email,
-    role: 'parent',
+    role: defaultProfileRoleForEmail(email),
   }));
   return { token, user: profile };
 }

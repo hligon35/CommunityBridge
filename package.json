@@ -47,6 +47,8 @@
     "db:migrate:pg": "node ./scripts/migrate-sqlite-to-postgres.js",
     "seed:test-users": "node ./scripts/seed-test-users.js",
     "seed:test-users:dry": "node ./scripts/seed-test-users.js --dry",
+    "dev:user:sync": "node ./scripts/sync-dev-account.js",
+    "dev:user:sync:dry": "node ./scripts/sync-dev-account.js --dry",
     "cloudrun:secrets": "powershell -ExecutionPolicy Bypass -File ./scripts/create-cloudrun-secrets.ps1 -FromFile ./env/cloudrun.env",
     "cloudrun:update": "gcloud run services update communitybridge --region us-central1 --project communitybridge-26apr --env-vars-file tmp/cloudrun-nonsecrets.env.yaml --update-secrets \"CB_DATABASE_URL=cb-database-url:latest,BB_DATABASE_URL=bb-database-url:latest,CB_JWT_SECRET=cb-jwt-secret:latest,BB_JWT_SECRET=bb-jwt-secret:latest,CB_SMTP_URL=cb-smtp-url:latest,BB_SMTP_URL=bb-smtp-url:latest,CB_TWILIO_AUTH_TOKEN=cb-twilio-token:latest,BB_TWILIO_AUTH_TOKEN=bb-twilio-token:latest,CB_ADMIN_PASSWORD=cb-admin-password:latest,BB_ADMIN_PASSWORD=bb-admin-password:latest\"",
     "cloudrun:sync": "npm run cloudrun:secrets ; npm run cloudrun:update"

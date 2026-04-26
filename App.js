@@ -12,6 +12,7 @@ import UrgentMemoOverlay from './src/components/UrgentMemoOverlay';
 import BottomNav from './src/components/BottomNav';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import ArrivalDetector from './src/components/ArrivalDetector';
+import DevRoleSwitcher from './src/components/DevRoleSwitcher';
 import { logger, setDebugContext } from './src/utils/logger';
 import { registerGlobalDebugHandlers } from './src/utils/registerDebugHandlers';
 import { configureNotificationHandling } from './src/utils/pushNotifications';
@@ -192,6 +193,7 @@ function MainShell({ currentRoute }) {
       <BottomNav navigationRef={navigationRef} currentRoute={currentRoute} />
       <UrgentMemoOverlay />
       <ArrivalDetector />
+      <DevRoleSwitcher />
     </DataProvider>
   );
 }

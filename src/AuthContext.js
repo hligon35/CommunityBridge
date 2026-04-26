@@ -10,6 +10,20 @@ import { reportErrorToSentry } from './utils/reportError';
 
 const AuthContext = createContext(null);
 const MFA_VERIFIED_CACHE_KEY = 'bb_mfa_verified_at_cache_v1';
+const DEV_ROLE_OVERRIDE_KEY = 'bb_dev_role_override_v1';
+const DEV_SWITCH_EMAIL = 'dev@communitybridge.app';
+
+function normalizeRoleOverride(role) {
+  const value = String(role || '').trim().toLowerCase();
+  if (value === 'admin' || value === 'administrator') return 'admin';
+  if (value === 'therapist') return 'therapist';
+  if (value === 'parent') return 'parent';
+  return '';
+}
+
+function isDevSwitcherUser(email) {
+  return __DEV__ && String(email || '').trim().toLowerCase() === DEV_SWITCH_EMAIL;
+}
 
 export function useAuth() {
   return useContext(AuthContext);
@@ -20,6 +34,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
+  const [devRoleOverride, setDevRoleOverride] = useState('');
 
   const [mfaRequired, setMfaRequired] = useState(false);
   const [mfaVerified, setMfaVerified] = useState(false);
@@ -87,6 +102,40 @@ export function AuthProvider({ children }) {
     } catch (_) {
       // ignore cache failures
     }
+  }
+
+  async function readDevRoleOverride() {
+    try {
+      return normalizeRoleOverride(await AsyncStorage.getItem(DEV_ROLE_OVERRIDE_KEY));
+    } catch (_) {
+      return '';
+    }
+  }
+
+  async function writeDevRoleOverride(role) {
+    try {
+      const normalized = normalizeRoleOverride(role);
+      if (!normalized) {
+        await AsyncStorage.removeItem(DEV_ROLE_OVERRIDE_KEY);
+        return '';
+      }
+      await AsyncStorage.setItem(DEV_ROLE_OVERRIDE_KEY, normalized);
+      return normalized;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function applyDevRoleOverride(nextUser, overrideRole) {
+    if (!nextUser) return nextUser;
+    if (!isDevSwitcherUser(nextUser.email)) return nextUser;
+    const normalized = normalizeRoleOverride(overrideRole);
+    if (!normalized) return nextUser;
+    return {
+      ...nextUser,
+      devBaseRole: nextUser.role,
+      role: normalized,
+    };
   }
 
   async function refreshMfaState() {
@@ -206,6 +255,7 @@ export function AuthProvider({ children }) {
         if (!fbUser) {
           setToken(null);
           setUser(null);
+          setDevRoleOverride('');
           setMfaRequired(false);
           setMfaVerified(false);
           return;
@@ -228,14 +278,15 @@ export function AuthProvider({ children }) {
           profile = null;
         }
 
-        setUser(
-          profile || {
-            id: fbUser.uid,
-            name: fbUser.displayName || '',
-            email: fbUser.email || '',
-            role: 'parent',
-          }
-        );
+        const profileForState = profile || {
+          id: fbUser.uid,
+          name: fbUser.displayName || '',
+          email: fbUser.email || '',
+          role: isDevSwitcherUser(fbUser.email) ? 'admin' : 'parent',
+        };
+        const storedOverride = isDevSwitcherUser(fbUser.email) ? await readDevRoleOverride() : '';
+        setDevRoleOverride(storedOverride);
+        setUser(applyDevRoleOverride(profileForState, storedOverride));
 
         // If the profile read was blocked by security rules, this is almost certainly
         // the MFA gate. Mark required immediately so the UI never briefly flashes Main.
@@ -344,6 +395,24 @@ export function AuthProvider({ children }) {
     throw err;
   }
 
+  async function setRole(nextRole) {
+    if (!__DEV__) return;
+    const normalized = normalizeRoleOverride(nextRole);
+    if (!normalized) return;
+    if (!isDevSwitcherUser(user?.email)) return;
+
+    setDevRoleOverride(normalized);
+    await writeDevRoleOverride(normalized);
+    setUser((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        devBaseRole: current.devBaseRole || current.role,
+        role: normalized,
+      };
+    });
+  }
+
   const valueWithMfa = useMemo(
     () => ({
       token,
@@ -353,6 +422,7 @@ export function AuthProvider({ children }) {
       loginWithGoogle,
       logout,
       setAuth,
+      setRole,
       authError,
       mfaRequired,
       mfaVerified,
