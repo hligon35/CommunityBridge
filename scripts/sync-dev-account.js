@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const admin = require('firebase-admin');
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
@@ -9,7 +11,7 @@ const DRY = process.argv.includes('--dry') || process.argv.includes('-n');
 
 const DEV_USER = {
   email: 'dev@communitybridge.app',
-  password: process.env.DEV_USER_PASSWORD || 'Dev123!',
+  password: process.env.DEV_USER_PASSWORD || 'Zing@r088',
   name: 'Developer',
   role: 'admin',
 };
@@ -20,6 +22,20 @@ const DELETE_EMAILS = [
   'therapist@communitybridge.app',
   'hligon+tester@getsparqd.com',
 ];
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  for (const line of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (!match) continue;
+    const key = match[1];
+    if (process.env[key]) continue;
+    process.env[key] = match[2];
+  }
+}
+
+loadEnvFile(path.join(process.cwd(), '.env'));
+loadEnvFile(path.join(process.cwd(), 'env', 'cloudrun.env'));
 
 const DATABASE_URL = (
   process.env.CB_DATABASE_URL ||
@@ -48,7 +64,7 @@ function buildPgPoolConfig(connectionString) {
 }
 
 function getProjectId() {
-  return (
+  const fromEnv = (
     process.env.CB_FIREBASE_PROJECT_ID ||
     process.env.BB_FIREBASE_PROJECT_ID ||
     process.env.FIREBASE_PROJECT_ID ||
@@ -57,6 +73,8 @@ function getProjectId() {
     process.env.GCP_PROJECT ||
     ''
   ).trim();
+  if (fromEnv) return fromEnv;
+  return 'communitybridge-26apr';
 }
 
 function initFirebaseAdmin() {
@@ -206,12 +224,22 @@ async function main() {
     throw new Error('Missing CB_DATABASE_URL/BB_DATABASE_URL/DATABASE_URL.');
   }
 
-  initFirebaseAdmin();
-  const auth = admin.auth();
-  const firestore = admin.firestore();
+  let auth = null;
+  let firestore = null;
+  if (!DRY) {
+    initFirebaseAdmin();
+    auth = admin.auth();
+    firestore = admin.firestore();
+  }
 
-  for (const email of DELETE_EMAILS) {
-    await deleteFirebaseUserByEmail(auth, firestore, email);
+  if (auth && firestore) {
+    for (const email of DELETE_EMAILS) {
+      await deleteFirebaseUserByEmail(auth, firestore, email);
+    }
+  } else if (DRY) {
+    for (const email of DELETE_EMAILS) {
+      console.log(`[dev-sync][dry] would delete Firebase user ${email}`);
+    }
   }
 
   let pool = null;
@@ -226,8 +254,12 @@ async function main() {
   }
 
   try {
-    const uid = await upsertFirebaseUser(auth, DEV_USER);
-    await upsertFirestoreProfile(firestore, uid, DEV_USER);
+    const uid = auth ? await upsertFirebaseUser(auth, DEV_USER) : 'dry-run-dev-uid';
+    if (firestore) {
+      await upsertFirestoreProfile(firestore, uid, DEV_USER);
+    } else if (DRY) {
+      console.log(`[dev-sync][dry] would upsert Firestore profile for ${DEV_USER.email}`);
+    }
     if (pool) await upsertPostgresUser(pool, columns, uid, DEV_USER);
   } finally {
     if (pool) await pool.end().catch(() => {});
