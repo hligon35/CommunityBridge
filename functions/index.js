@@ -255,6 +255,28 @@ function sanitizeChallengeForClient(ch) {
   };
 }
 
+function sanitizeLookupDoc(id, data, extras) {
+  const payload = data && typeof data === 'object' ? data : {};
+  return {
+    id: safeString(id).trim(),
+    name: safeString(payload.name || payload.displayName || payload.title).trim(),
+    active: payload.active !== false,
+    ...extras,
+  };
+}
+
+function normalizedEnrollmentCodes(data) {
+  const base = [];
+  const single = safeString(data?.enrollmentCode).trim();
+  if (single) base.push(single);
+  const list = Array.isArray(data?.enrollmentCodes) ? data.enrollmentCodes : [];
+  list.forEach((code) => {
+    const value = safeString(code).trim();
+    if (value) base.push(value);
+  });
+  return Array.from(new Set(base.map((value) => value.toUpperCase())));
+}
+
 // Optional callable used by the mobile app. Safe no-op stub.
 exports.linkPreview = regional.https.onCall(async (data, context) => {
   // Signed-in only (mirrors old authMiddleware behavior).
@@ -443,6 +465,104 @@ exports.mfaVerifyCode = regional.https.onCall(async (data, context) => {
 
   try { await ref.delete(); } catch (_) {}
   return { ok: true };
+});
+
+exports.listOrganizationsPublic = regional.https.onCall(async () => {
+  const snap = await admin.firestore().collection('organizations').where('active', '==', true).limit(100).get();
+  const items = snap.docs
+    .map((docSnap) => sanitizeLookupDoc(docSnap.id, docSnap.data(), {
+      shortCode: safeString(docSnap.data()?.shortCode || docSnap.data()?.code).trim(),
+    }))
+    .filter((item) => item.id && item.name);
+  return { items };
+});
+
+exports.listBranchesPublic = regional.https.onCall(async (data) => {
+  const organizationId = safeString(data?.organizationId).trim();
+  if (!organizationId) {
+    throw new functions.https.HttpsError('invalid-argument', 'organizationId is required.');
+  }
+  const snap = await admin.firestore().collection('organizations').doc(organizationId).collection('branches').where('active', '==', true).limit(100).get();
+  const items = snap.docs
+    .map((docSnap) => sanitizeLookupDoc(docSnap.id, docSnap.data(), {
+      organizationId,
+      campusCount: Number(docSnap.data()?.campusCount || 0),
+    }))
+    .filter((item) => item.id && item.name);
+  return { items };
+});
+
+exports.listCampusesPublic = regional.https.onCall(async (data) => {
+  const organizationId = safeString(data?.organizationId).trim();
+  const branchId = safeString(data?.branchId).trim();
+  if (!organizationId) {
+    throw new functions.https.HttpsError('invalid-argument', 'organizationId is required.');
+  }
+  let queryRef = admin.firestore().collection('organizations').doc(organizationId).collection('campuses').where('active', '==', true);
+  if (branchId) queryRef = queryRef.where('branchId', '==', branchId);
+  const snap = await queryRef.limit(100).get();
+  const items = snap.docs
+    .map((docSnap) => sanitizeLookupDoc(docSnap.id, docSnap.data(), {
+      organizationId,
+      branchId: safeString(docSnap.data()?.branchId).trim(),
+    }))
+    .filter((item) => item.id && item.name);
+  return { items };
+});
+
+exports.resolveEnrollmentContextPublic = regional.https.onCall(async (data) => {
+  const organizationId = safeString(data?.organizationId).trim();
+  const branchId = safeString(data?.branchId).trim();
+  const campusId = safeString(data?.campusId).trim();
+  const enrollmentCode = safeString(data?.enrollmentCode).trim().toUpperCase();
+
+  if (!organizationId || !branchId || !enrollmentCode) {
+    throw new functions.https.HttpsError('invalid-argument', 'organizationId, branchId, and enrollmentCode are required.');
+  }
+
+  const orgRef = admin.firestore().collection('organizations').doc(organizationId);
+  const branchRef = orgRef.collection('branches').doc(branchId);
+  const [orgSnap, branchSnap] = await Promise.all([orgRef.get(), branchRef.get()]);
+  if (!orgSnap.exists || orgSnap.data()?.active === false) {
+    throw new functions.https.HttpsError('not-found', 'Organization not found.');
+  }
+  if (!branchSnap.exists || branchSnap.data()?.active === false) {
+    throw new functions.https.HttpsError('not-found', 'Branch not found.');
+  }
+
+  let campusQuery = orgRef.collection('campuses').where('active', '==', true).where('branchId', '==', branchId).limit(100);
+  if (campusId) {
+    const scopedSnap = await orgRef.collection('campuses').doc(campusId).get();
+    const scopedData = scopedSnap.exists ? (scopedSnap.data() || {}) : null;
+    if (!scopedSnap.exists || scopedData.active === false || safeString(scopedData.branchId).trim() !== branchId) {
+      throw new functions.https.HttpsError('not-found', 'Campus not found for this branch.');
+    }
+    const codes = normalizedEnrollmentCodes(scopedData);
+    if (!codes.includes(enrollmentCode)) {
+      throw new functions.https.HttpsError('permission-denied', 'Enrollment code did not match the selected campus.');
+    }
+    return {
+      organization: sanitizeLookupDoc(orgSnap.id, orgSnap.data(), {
+        shortCode: safeString(orgSnap.data()?.shortCode || orgSnap.data()?.code).trim(),
+      }),
+      branch: sanitizeLookupDoc(branchSnap.id, branchSnap.data(), { organizationId }),
+      campus: sanitizeLookupDoc(scopedSnap.id, scopedData, { organizationId, branchId }),
+    };
+  }
+
+  const campusSnap = await campusQuery.get();
+  const matchedCampus = campusSnap.docs.find((docSnap) => normalizedEnrollmentCodes(docSnap.data()).includes(enrollmentCode));
+  if (!matchedCampus) {
+    throw new functions.https.HttpsError('permission-denied', 'Enrollment code did not match an active campus.');
+  }
+
+  return {
+    organization: sanitizeLookupDoc(orgSnap.id, orgSnap.data(), {
+      shortCode: safeString(orgSnap.data()?.shortCode || orgSnap.data()?.code).trim(),
+    }),
+    branch: sanitizeLookupDoc(branchSnap.id, branchSnap.data(), { organizationId }),
+    campus: sanitizeLookupDoc(matchedCampus.id, matchedCampus.data(), { organizationId, branchId }),
+  };
 });
 
 exports.onArrivalPingCreate = regional.firestore

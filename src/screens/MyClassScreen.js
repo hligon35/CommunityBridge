@@ -30,7 +30,7 @@ export default function MyClassScreen() {
 
   const role = (user?.role || '').toString().toLowerCase();
   const isBCBA = role.includes('bcba');
-  const isTherapist = role.includes('therapist') || isBCBA;
+  const isTherapist = role.includes('therapist') || role.includes('faculty') || isBCBA;
 
   const amStudents = useMemo(
     () => (children || []).filter((c) => c?.amTherapist && c.amTherapist.id === linkedTherapistId),

@@ -35,7 +35,7 @@ import {
 
 import { httpsCallable } from 'firebase/functions';
 
-import { getDownloadURL, ref, uploadString } from 'firebase/storage';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 
 function normalizeEmailInput(email) {
   try {
@@ -86,6 +86,17 @@ function requireAuth() {
 
 export const API_BASE_URL = '';
 
+async function callFirebaseFunction(name, payload) {
+  if (!functions) {
+    const err = new Error('Firebase Functions is not initialized.');
+    err.code = 'BB_FUNCTIONS_INIT_FAILED';
+    throw err;
+  }
+  const fn = httpsCallable(functions, name);
+  const result = await fn(payload || {});
+  return result?.data || null;
+}
+
 function isLikelyNetworkError(e) {
   try {
     const msg = String(e?.message || e || '').toLowerCase();
@@ -122,6 +133,22 @@ function defaultProfileRoleForEmail(email) {
 
 export function setAuthToken(_) {
   // Compatibility no-op: Firebase Auth manages tokens internally.
+}
+
+export async function listOrganizations() {
+  return callFirebaseFunction('listOrganizationsPublic');
+}
+
+export async function listBranches(organizationId) {
+  return callFirebaseFunction('listBranchesPublic', { organizationId });
+}
+
+export async function listCampuses({ organizationId, branchId }) {
+  return callFirebaseFunction('listCampusesPublic', { organizationId, branchId });
+}
+
+export async function resolveEnrollmentContext(payload) {
+  return callFirebaseFunction('resolveEnrollmentContextPublic', payload);
 }
 
 async function getUserProfile(uid) {
@@ -194,9 +221,33 @@ export async function loginWithGoogle(idToken) {
 export async function signup(payload) {
   const a = requireAuth();
   const name = String(payload?.name || '').trim();
+  const firstName = String(payload?.firstName || '').trim();
+  const lastName = String(payload?.lastName || '').trim();
   const email = normalizeEmailInput(payload?.email);
   const password = String(payload?.password || '');
   const role = String(payload?.role || 'parent');
+  const organizationId = String(payload?.organizationId || '').trim();
+  const branchId = String(payload?.branchId || '').trim();
+  const enrollmentCode = String(payload?.enrollmentCode || '').trim();
+
+  if (!organizationId || !branchId || !enrollmentCode) {
+    const err = new Error('Organization, branch, and enrollment code are required.');
+    err.code = 'BB_TENANT_CONTEXT_REQUIRED';
+    throw err;
+  }
+
+  const tenantResolution = await resolveEnrollmentContext({
+    organizationId,
+    branchId,
+    campusId: payload?.campusId,
+    enrollmentCode,
+  });
+  const resolvedCampusId = String(tenantResolution?.campus?.id || '').trim();
+  if (!resolvedCampusId) {
+    const err = new Error('Unable to resolve an active campus for the provided enrollment code.');
+    err.code = 'BB_ENROLLMENT_INVALID';
+    throw err;
+  }
 
   const cred = await createUserWithEmailAndPassword(a, email, password);
   try {
@@ -207,11 +258,62 @@ export async function signup(payload) {
 
   const profile = await upsertUserProfile(cred.user.uid, {
     name,
+    firstName,
+    lastName,
     email,
     role,
     avatar: DEFAULT_AVATAR_TOKEN,
+    organizationId,
+    branchId,
+    branchIds: [branchId],
+    campusId: resolvedCampusId,
+    campusIds: [resolvedCampusId],
+    organizationName: tenantResolution?.organization?.name || '',
+    branchName: tenantResolution?.branch?.name || '',
+    campusName: tenantResolution?.campus?.name || '',
+    memberships: [{
+      organizationId,
+      branchId,
+      campusId: resolvedCampusId,
+      role,
+    }],
+    tenant: {
+      organizationId,
+      branchId,
+      campusId: resolvedCampusId,
+    },
+    active: true,
   });
   const token = await getIdToken(cred.user, true);
+
+  try {
+    await setDoc(
+      doc(db, 'organizations', organizationId, 'users', cred.user.uid),
+      {
+        id: cred.user.uid,
+        uid: cred.user.uid,
+        name,
+        firstName,
+        lastName,
+        email,
+        role,
+        organizationId,
+        branchId,
+        branchIds: [branchId],
+        campusId: resolvedCampusId,
+        campusIds: [resolvedCampusId],
+        organizationName: tenantResolution?.organization?.name || '',
+        branchName: tenantResolution?.branch?.name || '',
+        campusName: tenantResolution?.campus?.name || '',
+        active: true,
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (_) {
+    // Keep primary signup resilient even if the org-scoped record cannot be written yet.
+  }
 
   // Secure-by-default directory access: create a self-owned parent directory record + link on signup.
   // Admins can later re-link accounts to seeded directory records if desired.
@@ -227,6 +329,9 @@ export async function signup(payload) {
           name: name || profile?.name || '',
           email: email || profile?.email || '',
           familyId: cred.user.uid,
+          organizationId,
+          branchId,
+          campusId: resolvedCampusId,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         }),
@@ -651,15 +756,12 @@ export async function uploadMedia(formData) {
   const file = extractFirstFileFromFormData(formData);
   if (!file?.uri) throw new Error('Missing file');
 
-  // Read file as base64 to avoid blob issues on native.
-  let base64;
+  let blob;
   try {
-    // eslint-disable-next-line global-require
-    const FileSystem = require('expo-file-system/legacy');
-    const base64Encoding = FileSystem?.EncodingType?.Base64 || FileSystem?.EncodingType?.BASE64 || 'base64';
-    base64 = await FileSystem.readAsStringAsync(file.uri, { encoding: base64Encoding });
+    const response = await fetch(file.uri);
+    blob = await response.blob();
   } catch (e) {
-    throw new Error(`Unable to read file: ${e?.message || e}`);
+    throw new Error(`Unable to prepare file upload: ${e?.message || e}`);
   }
 
   const name = String(file.name || '').trim() || `upload-${Date.now()}`;
@@ -668,9 +770,13 @@ export async function uploadMedia(formData) {
 
   const path = `uploads/${u.uid}/${Date.now()}_${safeName}`;
   const storageRef = ref(storage, path);
-  await uploadString(storageRef, base64, 'base64', { contentType });
-  const url = await getDownloadURL(storageRef);
-  return { ok: true, url, path };
+  try {
+    await uploadBytes(storageRef, blob, { contentType });
+    const url = await getDownloadURL(storageRef);
+    return { ok: true, url, path };
+  } finally {
+    try { blob?.close?.(); } catch (_) {}
+  }
 }
 
 export async function signS3(_) {

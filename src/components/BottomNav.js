@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform, Image } f
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { logPress } from '../utils/logger';
+import { isAdminRole, isStaffRole, normalizeUserRole } from '../core/tenant/models';
 
 const chatsIcon = require('../../assets/icons/chats.png');
 const chatsUnreadIcon = require('../../assets/icons/chats(unread).png');
@@ -25,7 +26,7 @@ export default function BottomNav({ navigationRef, currentRoute }) {
   if (Platform.OS === 'web') return null;
   const { user } = useAuth();
   const { urgentMemos = [], unreadThreadCount = 0 } = useData();
-  const role = (user && user.role) ? (user.role || '').toString().toLowerCase() : 'parent';
+  const role = normalizeUserRole(user?.role);
 
   // For parents, show any pending urgent alerts they created on the MyChild tab
   const parentPendingCount = (user && role === 'parent') ? (urgentMemos || []).filter((m) => (m.proposerId === user.id) && (!m.status || m.status === 'pending')).length : 0;
@@ -34,10 +35,10 @@ export default function BottomNav({ navigationRef, currentRoute }) {
   let tabs = [
     { key: 'Chats', label: 'Chats', icon: (active) => (<NavImageIcon source={unreadThreadCount > 0 ? chatsUnreadIcon : chatsIcon} active={active} />), count: unreadThreadCount },
   ];
-  if (role === 'therapist') {
+  if (isStaffRole(role)) {
     tabs.unshift({ key: 'Home', label: 'Dashboard', icon: (active) => (<NavImageIcon source={controlsIcon} active={active} />) });
     tabs.push({ key: 'MyClass', label: 'My Class', icon: (active) => (<NavImageIcon source={myClassIcon} active={active} />) });
-  } else if (role === 'admin' || role === 'administrator') {
+  } else if (isAdminRole(role)) {
   tabs.push({ key: 'Controls', label: 'Dashboard', icon: (active) => (<NavImageIcon source={controlsIcon} active={active} />), count: (urgentMemos || []).filter((m) => !m.status || m.status === 'pending').length });
   } else {
     tabs.unshift({ key: 'Home', label: 'Dashboard', icon: (active) => (<NavImageIcon source={controlsIcon} active={active} />) });

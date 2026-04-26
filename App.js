@@ -48,6 +48,8 @@ import LoginScreen from './screens/LoginScreen';
 import TwoFactorScreen from './screens/TwoFactorScreen';
 import { initSentry, Sentry } from './src/sentry';
 import { CommonActions } from '@react-navigation/native';
+import { TenantProvider } from './src/core/tenant/TenantContext';
+import { isAdminRole, isStaffRole, normalizeUserRole } from './src/core/tenant/models';
 
 initSentry();
 
@@ -182,30 +184,32 @@ function SettingsStack() {
 
 function MainShell({ currentRoute }) {
   return (
-    <DataProvider>
-      <MainRoutes />
-      <BottomNav navigationRef={navigationRef} currentRoute={currentRoute} />
-      <UrgentMemoOverlay />
-      <ArrivalDetector />
-      <DevRoleSwitcher />
-    </DataProvider>
+    <TenantProvider>
+      <DataProvider>
+        <MainRoutes />
+        <BottomNav navigationRef={navigationRef} currentRoute={currentRoute} />
+        <UrgentMemoOverlay />
+        <ArrivalDetector />
+        <DevRoleSwitcher />
+      </DataProvider>
+    </TenantProvider>
   );
 }
 
 // MainRoutes chooses which top-level stacks to expose based on authenticated user role.
 function MainRoutes() {
   const { user } = useAuth();
-  const role = (user && user.role) ? (user.role || '').toString().toLowerCase() : 'parent';
+  const role = normalizeUserRole(user?.role);
 
   const screens = [];
-  if (!(role === 'admin' || role === 'administrator')) {
+  if (!isAdminRole(role)) {
     screens.push({ name: 'Home', component: CommunityStack });
   }
   screens.push({ name: 'Chats', component: ChatsStack });
 
-  if (role === 'therapist') {
+  if (isStaffRole(role)) {
     screens.push({ name: 'MyClass', component: MyClassStack });
-  } else if (role === 'admin' || role === 'administrator') {
+  } else if (isAdminRole(role)) {
     screens.push({ name: 'Controls', component: ControlsStack });
   } else {
     screens.push({ name: 'MyChild', component: MyChildStack });
@@ -214,7 +218,7 @@ function MainRoutes() {
   screens.push({ name: 'Settings', component: SettingsStack });
 
   return (
-    <RootStack.Navigator screenOptions={{ headerShown: false }} initialRouteName={(role === 'admin' || role === 'administrator') ? 'Controls' : 'Home'}>
+    <RootStack.Navigator screenOptions={{ headerShown: false }} initialRouteName={isAdminRole(role) ? 'Controls' : 'Home'}>
       {screens.map(s => (
         <RootStack.Screen key={s.name} name={s.name} component={s.component} />
       ))}

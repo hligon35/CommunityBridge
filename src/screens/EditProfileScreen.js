@@ -7,6 +7,8 @@ import * as Api from '../Api';
 import * as ImagePicker from 'expo-image-picker';
 import { avatarSourceFor } from '../utils/idVisibility';
 
+const IMAGE_PICKER_MEDIA_TYPES = ImagePicker.MediaTypeOptions?.Images ?? ImagePicker.MediaType?.Images;
+
 function passwordPolicy(pw) {
   const v = String(pw || '');
   const hasMinLen = v.length >= 8;
@@ -75,7 +77,7 @@ export default function EditProfileScreen({ navigation }) {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: IMAGE_PICKER_MEDIA_TYPES,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.85,

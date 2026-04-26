@@ -3,6 +3,8 @@ import { View, Text, TextInput, Button, FlatList, Image, TouchableOpacity, Activ
 import { ScreenWrapper, CenteredContainer, WebColumns, WebStickySection, WebSurface } from '../components/ScreenWrapper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+const IMAGE_PICKER_MEDIA_TYPES = ImagePicker.MediaTypeOptions?.Images ?? ImagePicker.MediaType?.Images;
+
 import { useAuth } from '../AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { useData } from '../DataContext';
@@ -162,9 +164,12 @@ export default function HomeScreen() {
         Alert.alert('Permission required', 'Please allow access to your photos to attach an image.');
         return;
       }
-      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaType.Images, quality: 0.7 });
-      if (!res.cancelled) {
-        setImage(res.uri);
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: IMAGE_PICKER_MEDIA_TYPES, quality: 0.7 });
+      if (!res?.canceled && !res?.cancelled) {
+        const asset = Array.isArray(res?.assets) ? res.assets[0] : null;
+        const uri = asset?.uri || res?.uri || '';
+        if (!uri) return;
+        setImage(uri);
         // close modal after a successful pick
         setShowLinkModal(false);
       }

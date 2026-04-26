@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userOrgId() {
+      return signedIn() && userDoc().exists() ? userDoc().data.organizationId : null;
+    }
+
+    function userCampusIds() {
+      return signedIn() && userDoc().exists() ? userDoc().data.campusIds : [];
+    }
+
+    function hasOrgAccess(orgId) {
+      return signedIn() && userOrgId() == orgId;
+    }
+
+    function isTenantAdmin() {
+      return signedIn() && userDoc().exists() &&
+        (userDoc().data.role in ['admin', 'campusAdmin', 'orgAdmin', 'superAdmin']);
+    }
+
+    match /organizations/{orgId} {
+      allow read: if hasOrgAccess(orgId);
+      allow write: if isTenantAdmin() && hasOrgAccess(orgId);
+
+      match /branches/{branchId} {
+        allow read: if hasOrgAccess(orgId);
+        allow write: if isTenantAdmin() && hasOrgAccess(orgId);
+      }
+
+      match /campuses/{campusId} {
+        allow read: if hasOrgAccess(orgId);
+        allow write: if isTenantAdmin() && hasOrgAccess(orgId);
+      }
+
+      match /users/{uid} {
+        allow read: if hasOrgAccess(orgId) && (request.auth.uid == uid || isTenantAdmin());
+        allow write: if isTenantAdmin() && hasOrgAccess(orgId);
+      }
+
+      match /students/{studentId} {
+        allow read: if hasOrgAccess(orgId) && (
+          isTenantAdmin() ||
+          resource.data.campusId in userCampusIds()
+        );
+        allow write: if isTenantAdmin() && hasOrgAccess(orgId);
+      }
+
+      match /messages/{messageId} {
+        allow read: if hasOrgAccess(orgId) && request.auth.uid in resource.data.participantUids;
+        allow create: if hasOrgAccess(orgId) && request.auth.uid == request.resource.data.senderUid;
+        allow update, delete: if false;
+      }
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid && request.resource.data.organizationId is string;
+      allow update: if signedIn() && request.auth.uid == uid && request.resource.data.organizationId == resource.data.organizationId;
+      allow delete: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
