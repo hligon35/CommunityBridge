@@ -15,6 +15,26 @@ npm start
 # Web: npm run web
 ```
 
+### Web vs native dev — which task to run
+
+There are two Expo dev entry points and they are **not** interchangeable:
+
+- `npm run web` (script: [scripts/start-web-dev.js](scripts/start-web-dev.js))
+	- This is the only correct way to develop the React Native Web app in a browser.
+	- It clears stale web-export artifacts under `public/_expo` and `public/assets`,
+	  swaps in a minimal dev shell that has the `<div id="root">` mount point,
+	  then launches `expo start --web` on `http://localhost:8081/`.
+- `npm run start:expo` — bare `expo start` for native (iOS/Android via Expo Go or
+  a dev client). It now runs `scripts/preflight-expo-start.js` to clear stale
+  web-export artifacts so it does not accidentally serve a stale prod web bundle,
+  but it does **not** swap in the dev `#root` shell. Opening the browser at
+  `localhost:8081` from `start:expo` will render the marketing index, not the app.
+
+If you opened the dev server on web and "every page redirects to home" / icons
+are missing / Metro logs `Asset not found` for hashed PNGs, you are almost
+certainly running `start:expo` when you wanted `web`. Stop the task and run
+`npm run web`.
+
 If you see `PluginError: Failed to resolve plugin for module "expo-notifications"`, install deps then restart Metro:
 
 ```powershell

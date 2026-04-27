@@ -12,6 +12,7 @@
     "gcp-build": "node ./scripts/build-web.js",
     "build:web": "node ./scripts/build-web.js",
     "start": "node ./scripts/start-server.js",
+    "prestart:expo": "node ./scripts/preflight-expo-start.js",
     "start:expo": "cross-env EXPO_NO_DEPENDENCY_VALIDATION=1 NODE_OPTIONS=--max_old_space_size=8192 expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
