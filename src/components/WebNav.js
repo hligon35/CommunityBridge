@@ -4,10 +4,13 @@ import { useNavigation } from '@react-navigation/native';
 import LogoTitle from './LogoTitle';
 import { useAuth } from '../AuthContext';
 import { navigationRef } from '../navigationRef';
+import { useTenant } from '../core/tenant/TenantContext';
 
 export default function WebNav() {
   const navigation = useNavigation();
   const { user, logout } = useAuth();
+  const tenant = useTenant();
+  const labels = tenant?.labels || {};
   const role = (user && user.role) ? (user.role || '').toString().toLowerCase() : 'parent';
   const [open, setOpen] = useState(false);
 
@@ -52,9 +55,9 @@ export default function WebNav() {
           <View style={styles.links}>
             <TouchableOpacity onPress={() => { setOpen(false); navTo('Home'); }} style={styles.link}><Text style={styles.linkText}>Home</Text></TouchableOpacity>
             <TouchableOpacity onPress={() => { setOpen(false); navTo('Chats'); }} style={styles.link}><Text style={styles.linkText}>Messages</Text></TouchableOpacity>
-            {role !== 'therapist' && <TouchableOpacity onPress={() => { setOpen(false); navTo('MyChild'); }} style={styles.link}><Text style={styles.linkText}>My Child</Text></TouchableOpacity>}
-            {role === 'therapist' && <TouchableOpacity onPress={() => { setOpen(false); navTo('MyClass'); }} style={styles.link}><Text style={styles.linkText}>My Class</Text></TouchableOpacity>}
-            {(role === 'admin' || role === 'administrator') && <TouchableOpacity onPress={() => { setOpen(false); navTo('Controls'); }} style={styles.link}><Text style={styles.linkText}>Dashboard</Text></TouchableOpacity>}
+            {role !== 'therapist' && <TouchableOpacity onPress={() => { setOpen(false); navTo('MyChild'); }} style={styles.link}><Text style={styles.linkText}>{labels.myChild || 'My Child'}</Text></TouchableOpacity>}
+            {role === 'therapist' && <TouchableOpacity onPress={() => { setOpen(false); navTo('MyClass'); }} style={styles.link}><Text style={styles.linkText}>{labels.myClass || 'My Class'}</Text></TouchableOpacity>}
+            {(role === 'admin' || role === 'administrator') && <TouchableOpacity onPress={() => { setOpen(false); navTo('Controls'); }} style={styles.link}><Text style={styles.linkText}>{labels.dashboard || 'Dashboard'}</Text></TouchableOpacity>}
             <TouchableOpacity onPress={() => { setOpen(false); navTo('Settings'); }} style={styles.link}><Text style={styles.linkText}>Settings</Text></TouchableOpacity>
             <TouchableOpacity onPress={openHelp} style={styles.link}><Text style={styles.linkText}>Help</Text></TouchableOpacity>
 

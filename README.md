@@ -22,6 +22,38 @@ npx expo install expo-notifications expo-device
 npx expo start -c
 ```
 
+## Tenant directory seed data
+
+The seeded tenant directory source lives in [src/seed/tenantDirectory.seed.json](src/seed/tenantDirectory.seed.json). The app fallback layer in [src/seed/tenantSeed.js](src/seed/tenantSeed.js) and the Firestore bootstrap script in [scripts/seed-tenant-directory.js](scripts/seed-tenant-directory.js) both read from that same file, so organization/program/campus data is defined in one place.
+
+Current seed contents:
+
+- Organization: Centria Healthcare
+- Programs: Centria Autism, Life Skills Autism Academy
+- Campuses: the listed Centria Autism and Life Skills Autism Academy campuses
+- Each campus stores both `zipCode` and `enrollmentCode`
+- For now `enrollmentCode` matches `zipCode`
+- Enrollment resolution still requires `organizationId + programId + enrollmentCode`, so duplicate ZIPs across programs stay valid
+
+Dry-run the tenant seed:
+
+```powershell
+npm run seed:tenant-directory:dry
+```
+
+Write the tenant seed to Firestore:
+
+```powershell
+$env:GOOGLE_APPLICATION_CREDENTIALS = "C:\path\to\service-account.json"
+npm run seed:tenant-directory
+```
+
+Notes:
+
+- The script uses Firebase Application Default Credentials, matching the other maintenance scripts in this repo.
+- To swap dev seed data later, point the script at another JSON file with `--seed-file path\to\file.json` or `CB_TENANT_SEED_FILE`.
+- The script upserts `organizations/{organizationId}`, `organizations/{organizationId}/programs/{programId}`, and `organizations/{organizationId}/campuses/{campusId}`.
+
 Configuration
 
 - Set `EXPO_PUBLIC_API_BASE_URL` in your environment to change the API base URL (recommended).

@@ -22,3 +22,20 @@
 - Filter `DataContext` reads and writes by the active tenant context.
 - Add admin management screens for organizations, branches, campuses, enrollment codes, and role assignments.
 - Add server-side migration scripts to backfill memberships and tenant ownership for existing users and data.
+
+## Open gaps (signup / tenant context)
+
+- `screens/SignUpScreen.js` currently collects only name/email/password/role; it does NOT collect
+  `organizationId`, `programId`, or `enrollmentCode`. The earlier "refactored signup" note above
+  referred to the cloud-function side; the React Native form was not updated.
+- `src/Api.js#signup` does not pass any tenant fields into `upsertUserProfile` and does not call the
+  `validateEnrollment` cloud function (`functions/index.js`).
+- Action items when reintroducing tenant-aware signup:
+  1. Add organization → program selectors (sourced from `listActiveOrganizations` /
+     `listProgramsByOrganization`) plus an `enrollmentCode` text input on `SignUpScreen`.
+  2. Call `validateEnrollment` (or `resolveSelection` in `EnrollmentService`) before
+     `createUserWithEmailAndPassword` to fail fast on bad codes.
+  3. Persist `organizationId`, `programId`, `campusId`, and `enrollmentCode` on the user profile
+     and write the org-scoped membership record at `organizations/{orgId}/users/{uid}`.
+- Real `enrollmentCode` values for Centria are placeholders (currently equal to `zipCode`); replace
+  in `src/seed/tenantDirectory.seed.json` once provided.

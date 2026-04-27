@@ -9,6 +9,15 @@ export const USER_ROLES = Object.freeze({
   ADMIN: 'admin',
 });
 
+export const PROGRAM_TYPES = Object.freeze({
+  CORPORATE: 'corporate',
+  CENTER_BASED_ABA: 'centerBasedAba',
+  EARLY_INTERVENTION_ACADEMY: 'earlyInterventionAcademy',
+});
+
+export const CONTACT_RELATIONSHIP_TYPES = Object.freeze(['mother', 'father', 'guardian', 'caregiver', 'emergencyContact', 'pickupContact']);
+export const STAFF_RELATIONSHIP_TYPES = Object.freeze(['teacher', 'therapist', 'bcba', 'campusAdmin', 'frontDesk']);
+
 function safeString(value) {
   try {
     if (value == null) return '';
@@ -16,6 +25,28 @@ function safeString(value) {
   } catch (_) {
     return '';
   }
+}
+
+function safeBoolean(value, fallback = false) {
+  if (typeof value === 'boolean') return value;
+  if (value == null) return fallback;
+  const normalized = safeString(value).toLowerCase();
+  if (!normalized) return fallback;
+  if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+  if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
+function isoTimestamp(value) {
+  try {
+    if (!value) return null;
+    if (typeof value === 'string') return value;
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value?.toDate === 'function') return value.toDate().toISOString();
+  } catch (_) {
+    // ignore malformed timestamp values
+  }
+  return null;
 }
 
 export function normalizeUserRole(role) {
@@ -27,6 +58,102 @@ export function normalizeUserRole(role) {
   if (value === 'superadmin' || value === 'super_admin') return USER_ROLES.SUPER_ADMIN;
   if (value === 'teacher' || value === 'staff') return USER_ROLES.FACULTY;
   return safeString(role) || USER_ROLES.PARENT;
+}
+
+export function normalizeProgramType(programType) {
+  const value = safeString(programType).toLowerCase();
+  if (!value) return PROGRAM_TYPES.CENTER_BASED_ABA;
+  if (value === 'center_based_aba' || value === 'centerbasedaba') return PROGRAM_TYPES.CENTER_BASED_ABA;
+  if (value === 'early_intervention_academy' || value === 'earlyinterventionacademy') return PROGRAM_TYPES.EARLY_INTERVENTION_ACADEMY;
+  if (value === 'corporate') return PROGRAM_TYPES.CORPORATE;
+  return safeString(programType) || PROGRAM_TYPES.CENTER_BASED_ABA;
+}
+
+export function buildOrganizationModel(value) {
+  const item = value && typeof value === 'object' ? value : {};
+  return {
+    id: safeString(item.id || item.slug),
+    name: safeString(item.name),
+    slug: safeString(item.slug || item.id),
+    phone: safeString(item.phone),
+    email: safeString(item.email),
+    active: safeBoolean(item.active, true),
+    createdAt: isoTimestamp(item.createdAt),
+    updatedAt: isoTimestamp(item.updatedAt),
+  };
+}
+
+export function buildProgramModel(value) {
+  const item = value && typeof value === 'object' ? value : {};
+  return {
+    id: safeString(item.id || item.slug),
+    organizationId: safeString(item.organizationId),
+    name: safeString(item.name),
+    slug: safeString(item.slug || item.id),
+    type: normalizeProgramType(item.type),
+    description: safeString(item.description),
+    active: safeBoolean(item.active, true),
+    createdAt: isoTimestamp(item.createdAt),
+    updatedAt: isoTimestamp(item.updatedAt),
+  };
+}
+
+export function buildCampusModel(value) {
+  const item = value && typeof value === 'object' ? value : {};
+  return {
+    id: safeString(item.id || item.slug),
+    organizationId: safeString(item.organizationId),
+    programId: safeString(item.programId || item.branchId),
+    name: safeString(item.name),
+    slug: safeString(item.slug || item.id),
+    phone: safeString(item.phone),
+    email: safeString(item.email),
+    address1: safeString(item.address1),
+    address2: safeString(item.address2),
+    city: safeString(item.city),
+    state: safeString(item.state),
+    zipCode: safeString(item.zipCode),
+    enrollmentCode: safeString(item.enrollmentCode),
+    campusType: safeString(item.campusType),
+    active: safeBoolean(item.active, true),
+    createdAt: isoTimestamp(item.createdAt),
+    updatedAt: isoTimestamp(item.updatedAt),
+  };
+}
+
+export function buildAppUserModel(value) {
+  const item = value && typeof value === 'object' ? value : {};
+  return {
+    id: safeString(item.id || item.uid),
+    firstName: safeString(item.firstName),
+    lastName: safeString(item.lastName),
+    email: safeString(item.email),
+    role: normalizeUserRole(item.role),
+    organizationId: safeString(item.organizationId),
+    programIds: uniqueIds(item.programIds || item.branchIds),
+    campusIds: uniqueIds(item.campusIds),
+    linkedStudentIds: uniqueIds(item.linkedStudentIds),
+    active: safeBoolean(item.active, true),
+    createdAt: isoTimestamp(item.createdAt),
+    updatedAt: isoTimestamp(item.updatedAt),
+  };
+}
+
+export function buildStudentModel(value) {
+  const item = value && typeof value === 'object' ? value : {};
+  return {
+    id: safeString(item.id),
+    firstName: safeString(item.firstName),
+    lastName: safeString(item.lastName),
+    organizationId: safeString(item.organizationId),
+    programId: safeString(item.programId || item.branchId),
+    campusId: safeString(item.campusId),
+    guardianIds: uniqueIds(item.guardianIds || item.parentIds),
+    staffIds: uniqueIds(item.staffIds || item.assignedABA),
+    active: safeBoolean(item.active, true),
+    createdAt: isoTimestamp(item.createdAt),
+    updatedAt: isoTimestamp(item.updatedAt),
+  };
 }
 
 export function isAdminRole(role) {
@@ -50,14 +177,15 @@ export function normalizeMemberships(values) {
     .map((value) => {
       if (!value || typeof value !== 'object') return null;
       const organizationId = safeString(value.organizationId);
-      const branchId = safeString(value.branchId);
+      const programId = safeString(value.programId || value.branchId);
       const campusId = safeString(value.campusId);
       if (!organizationId) return null;
       return {
         organizationId,
-        branchId,
+        programId,
         campusId,
         role: normalizeUserRole(value.role),
+        programType: normalizeProgramType(value.programType),
       };
     })
     .filter(Boolean);
@@ -67,24 +195,33 @@ export function buildTenantProfile(profile) {
   const memberships = normalizeMemberships(profile?.memberships);
   const fallbackMembership = profile?.organizationId ? [{
     organizationId: safeString(profile.organizationId),
-    branchId: safeString(profile.branchId || profile?.tenant?.branchId),
+    programId: safeString(profile.programId || profile?.branchId || profile?.tenant?.programId || profile?.tenant?.branchId),
     campusId: safeString(profile.campusId || profile?.tenant?.campusId),
     role: normalizeUserRole(profile?.role),
+    programType: normalizeProgramType(profile?.programType || profile?.tenant?.programType),
   }] : [];
   const resolvedMemberships = memberships.length ? memberships : fallbackMembership;
-  const branchIds = uniqueIds([
+  const programIds = uniqueIds([
+    ...(Array.isArray(profile?.programIds) ? profile.programIds : []),
     ...(Array.isArray(profile?.branchIds) ? profile.branchIds : []),
-    ...resolvedMemberships.map((membership) => membership.branchId),
+    ...resolvedMemberships.map((membership) => membership.programId),
   ]);
   const campusIds = uniqueIds([
     ...(Array.isArray(profile?.campusIds) ? profile.campusIds : []),
     ...resolvedMemberships.map((membership) => membership.campusId),
   ]);
+  const currentProgramType = normalizeProgramType(
+    profile?.programType ||
+    profile?.tenant?.programType ||
+    resolvedMemberships[0]?.programType
+  );
   return {
     organizationId: safeString(profile?.organizationId || profile?.tenant?.organizationId),
-    branchIds,
+    programIds,
     campusIds,
     memberships: resolvedMemberships,
     role: normalizeUserRole(profile?.role),
+    currentProgramId: safeString(profile?.programId || profile?.branchId || profile?.tenant?.programId || profile?.tenant?.branchId || programIds[0]),
+    currentProgramType,
   };
 }

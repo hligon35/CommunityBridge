@@ -9,14 +9,14 @@ export async function listStudentsByOrganization(organizationId) {
   return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() || {}) }));
 }
 
-export async function listStudentsByBranch(organizationId, branchId) {
+export async function listStudentsByProgram(organizationId, programId) {
   if (!db) return [];
   const orgId = String(organizationId || '').trim();
-  const normalizedBranchId = String(branchId || '').trim();
-  if (!orgId || !normalizedBranchId) return [];
+  const normalizedProgramId = String(programId || '').trim();
+  if (!orgId || !normalizedProgramId) return [];
   const snap = await getDocs(query(
     collection(db, 'organizations', orgId, 'students'),
-    where('branchId', '==', normalizedBranchId),
+    where('programId', '==', normalizedProgramId),
     limit(100)
   ));
   return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() || {}) }));
@@ -33,4 +33,8 @@ export async function listStudentsByCampus(organizationId, campusId) {
     limit(100)
   ));
   return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() || {}) }));
+}
+
+export async function listStudentsByBranch(organizationId, branchId) {
+  return listStudentsByProgram(organizationId, branchId);
 }

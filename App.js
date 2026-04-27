@@ -41,6 +41,11 @@ import PrivacyDefaultsScreen from './src/screens/PrivacyDefaultsScreen';
 import AdminAlertsScreen from './src/screens/AdminAlertsScreen';
 import AdminMemosScreen from './src/screens/AdminMemosScreen';
 import ExportDataScreen from './src/screens/ExportDataScreen';
+import AttendanceScreen from './src/screens/modules/AttendanceScreen';
+import ProgramDirectoryScreen from './src/screens/modules/ProgramDirectoryScreen';
+import CampusDirectoryScreen from './src/screens/modules/CampusDirectoryScreen';
+import ProgramDocumentsScreen from './src/screens/modules/ProgramDocumentsScreen';
+import CampusDocumentsScreen from './src/screens/modules/CampusDocumentsScreen';
 import { HelpButton, BackButton } from './src/components/TopButtons';
 import { View, Text } from 'react-native';
 import LogoTitle from './src/components/LogoTitle';
@@ -106,6 +111,11 @@ function ControlsStack() {
       <ControlsStackNav.Screen name="AdminAlerts" component={AdminAlertsScreen} options={{ title: 'Alerts' }} />
       
       <ControlsStackNav.Screen name="ExportData" component={ExportDataScreen} options={{ title: 'Export Data' }} />
+      <ControlsStackNav.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
+      <ControlsStackNav.Screen name="ProgramDirectory" component={ProgramDirectoryScreen} options={{ title: 'Program Directory' }} />
+      <ControlsStackNav.Screen name="CampusDirectory" component={CampusDirectoryScreen} options={{ title: 'Campus Directory' }} />
+      <ControlsStackNav.Screen name="ProgramDocuments" component={ProgramDocumentsScreen} options={{ title: 'Program Documents' }} />
+      <ControlsStackNav.Screen name="CampusDocuments" component={CampusDocumentsScreen} options={{ title: 'Campus Documents' }} />
     </ControlsStackNav.Navigator>
   );
 }

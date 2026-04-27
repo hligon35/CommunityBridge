@@ -14,6 +14,7 @@ export default function AdminMemosScreen() {
   const [typingStopped, setTypingStopped] = useState(true);
   const [debugLogs, setDebugLogs] = useState([]);
   const typingTimer = useRef(null);
+  const blurTimer = useRef(null);
   const [searchLayout, setSearchLayout] = useState(null);
   const inputRef = useRef(null);
 
@@ -142,8 +143,8 @@ export default function AdminMemosScreen() {
         placeholder="Search name (parents or faculty)"
         value={query}
         onChangeText={(t) => { setQuery(t); pushLog(`query -> ${t}`); }}
-        onFocus={() => { pushLog('search focused'); setIsFocused(true); }}
-        onBlur={() => { pushLog('search blurred'); setTimeout(() => { if (!dropdownVisible) setIsFocused(false); }, 120); }}
+        onFocus={() => { pushLog('search focused'); if (blurTimer.current) { clearTimeout(blurTimer.current); blurTimer.current = null; } setIsFocused(true); }}
+        onBlur={() => { pushLog('search blurred'); if (blurTimer.current) clearTimeout(blurTimer.current); blurTimer.current = setTimeout(() => { setIsFocused(false); blurTimer.current = null; }, 220); }}
         onLayout={(e) => setSearchLayout(e.nativeEvent.layout)}
       />
 
@@ -152,10 +153,58 @@ export default function AdminMemosScreen() {
         <View style={[styles.dropdownWindow, { maxHeight: DROPDOWN_HEIGHT, marginTop: 8 }]}>
           <View style={styles.dropdownHeaderRow}>
             <Text style={styles.dropdownTitle}>Select recipients</Text>
+            <View style={styles.dropdownHeaderActions}>
+            {filteredRecipients && filteredRecipients.length ? (() => {
+              const visibleIds = filteredRecipients.map((r) => r.id);
+              const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+              const toggleAll = () => {
+                pushLog(allSelected ? 'deselect all' : 'select all');
+                // Cancel any pending blur-dismissal so the dropdown stays open.
+                if (blurTimer.current) { clearTimeout(blurTimer.current); blurTimer.current = null; }
+                setIsFocused(true);
+                try { inputRef.current?.focus?.(); } catch (e) {}
+                setSelectedIds((s) => {
+                  if (allSelected) return s.filter((id) => !visibleIds.includes(id));
+                  const merged = new Set([...(s || []), ...visibleIds]);
+                  return Array.from(merged);
+                });
+              };
+              return (
+                <TouchableOpacity
+                  onPress={toggleAll}
+                  onPressIn={() => { setIsFocused(true); }}
+                  style={styles.selectAllBtn}
+                  accessibilityLabel={allSelected ? 'Deselect all' : 'Select all'}
+                >
+                  <View style={[styles.checkCircle, styles.checkCircleSmall, allSelected ? styles.checkCircleActive : null]}>
+                    {allSelected ? <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>✓</Text> : null}
+                  </View>
+                  <Text style={styles.selectAllText}>{allSelected ? 'Clear all' : 'Select all'}</Text>
+                </TouchableOpacity>
+              );
+            })() : null}
+            <TouchableOpacity
+              onPress={() => {
+                pushLog('done pressed');
+                if (blurTimer.current) { clearTimeout(blurTimer.current); blurTimer.current = null; }
+                setIsFocused(false);
+                try { inputRef.current?.blur?.(); } catch (e) {}
+              }}
+              style={styles.doneBtn}
+              accessibilityLabel="Done selecting recipients"
+            >
+              <Text style={styles.doneBtnText}>Done</Text>
+            </TouchableOpacity>
+            </View>
           </View>
           {/* removed matches count row per design */}
           {filteredRecipients && filteredRecipients.length ? (
-            <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: DROPDOWN_HEIGHT - 86 }}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              style={{ maxHeight: DROPDOWN_HEIGHT - 86 }}
+            >
               {filteredRecipients.map((item) => (
                 <View key={item.id}>
                   {/* renderRecipient uses handleToggle; switch to logged toggle to capture logs */}
@@ -171,7 +220,7 @@ export default function AdminMemosScreen() {
         </View>
       ) : null}
     </View>
-  ), [query, filteredRecipients.length, dropdownVisible]);
+  ), [query, filteredRecipients, selectedIds, dropdownVisible]);
 
   // Bottom area: subject, message, send button
   const renderBottom = useCallback(() => (
@@ -223,30 +272,62 @@ export default function AdminMemosScreen() {
   return (
     <View style={{ flex: 1 }}>
       <ScreenHeader title="Compose Memo" />
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="always">
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="always"
+        onScrollBeginDrag={() => { try { inputRef.current?.blur(); } catch (e) {} setIsFocused(false); }}
+      >
         {renderTop()}
 
-        {/* Recipients list rendered here so it sits above subject/send.
-            Hide the full list on first load; only show when the search is active,
-            there is a non-empty query, or there are selected recipients. */}
-        {(!dropdownVisible && ((query && query.trim().length > 0) || selectedIds.length > 0)) && filteredRecipients && filteredRecipients.length ? (
-          <View style={{ marginTop: 12 }}>
-            {filteredRecipients.map((item) => (
-              <View key={item.id}>
-                {renderRecipient({ item })}
-              </View>
-            ))}
-          </View>
-        ) : null}
+        {/* When the dropdown is closed, show a compact summary of the selected
+            recipients directly under the search field. If more than 3 are selected
+            we collapse to the first 3 plus a "+N more" chip showing the total. */}
+        {!dropdownVisible && selectedIds.length > 0 ? (() => {
+          const selectedItems = selectedIds
+            .map((id) => allRecipients.find((r) => r.id === id))
+            .filter(Boolean);
+          const MAX_CHIPS = 3;
+          const visible = selectedItems.slice(0, MAX_CHIPS);
+          const overflow = selectedItems.length - visible.length;
+          return (
+            <View style={styles.chipsRow}>
+              {visible.map((item) => {
+                const name = item.name || `${item.firstName || ''} ${item.lastName || ''}`.trim() || 'Recipient';
+                return (
+                  <View key={item.id} style={styles.chip}>
+                    <Text style={styles.chipText} numberOfLines={1}>{name}</Text>
+                    <TouchableOpacity
+                      onPress={() => handleToggleLogged(item.id)}
+                      style={styles.chipRemove}
+                      accessibilityLabel={`Remove ${name}`}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.chipRemoveText}>×</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+              {overflow > 0 ? (
+                <View style={[styles.chip, styles.chipMore]}>
+                  <Text style={[styles.chipText, styles.chipMoreText]}>+{overflow} more ({selectedItems.length} total)</Text>
+                </View>
+              ) : null}
+            </View>
+          );
+        })() : null}
 
-        {renderBottom()}
-      </ScrollView>
-      {/* Backdrop: tapping outside dropdown/search should dismiss dropdown (only when visible) */}
-      {dropdownVisible ? (
-        <TouchableWithoutFeedback onPress={() => { pushLog('dropdown dismissed by backdrop'); setIsFocused(false); try { inputRef.current?.blur(); } catch (e) {} }}>
-          <View style={styles.backdrop} />
+        {/* Wrap the bottom area so tapping in/around it dismisses the search dropdown. */}
+        <TouchableWithoutFeedback onPress={() => { try { inputRef.current?.blur(); } catch (e) {} setIsFocused(false); }}>
+          <View>
+            {renderBottom()}
+            {/* Tall tap target so empty space below the form also dismisses the dropdown. */}
+            <View style={{ height: 80 }} />
+          </View>
         </TouchableWithoutFeedback>
-      ) : null}
+      </ScrollView>
+      {/* No absolute backdrop: dismissal happens via TouchableWithoutFeedback around
+          the bottom area, onScrollBeginDrag, and the search input's onBlur. Adding
+          an absolute overlay would intercept taps on the dropdown's Select all button. */}
       {/* Render debug overlay (non-interactive) */}
       <View pointerEvents="none">
         <DebugOverlay />
@@ -276,10 +357,23 @@ const styles = StyleSheet.create({
   modalContainerCentered: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
   dropdownHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingVertical: 6, borderBottomColor: '#f1f5f9', borderBottomWidth: 1 },
   dropdownTitle: { fontWeight: '700', fontSize: 16 },
+  selectAllBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 6 },
+  selectAllText: { marginLeft: 6, color: '#2563eb', fontWeight: '700', fontSize: 13 },
+  dropdownHeaderActions: { flexDirection: 'row', alignItems: 'center' },
+  doneBtn: { marginLeft: 8, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#2563eb', borderRadius: 6 },
+  doneBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
+  chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eef2ff', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4, marginRight: 6, marginBottom: 6, maxWidth: '100%' },
+  chipText: { color: '#1e3a8a', fontSize: 13, fontWeight: '600', maxWidth: 180 },
+  chipRemove: { marginLeft: 6, paddingHorizontal: 4 },
+  chipRemoveText: { color: '#1e3a8a', fontSize: 16, fontWeight: '700', lineHeight: 16 },
+  chipMore: { backgroundColor: '#e2e8f0' },
+  chipMoreText: { color: '#334155' },
   dropdownSearchRow: { paddingHorizontal: 8, paddingVertical: 8, borderBottomColor: '#f3f4f6', borderBottomWidth: 1 },
   recipientRowSelected: { backgroundColor: '#eef2ff' },
   recipientMeta: { fontSize: 12, color: '#6b7280', marginTop: 4 },
   checkCircle: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: '#cbd5e1', alignItems: 'center', justifyContent: 'center' },
+  checkCircleSmall: { width: 20, height: 20, borderRadius: 10 },
   checkCircleActive: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
   debugOverlay: { position: 'absolute', right: 10, top: 10, width: 200, maxHeight: 260, backgroundColor: 'rgba(0,0,0,0.7)', padding: 8, borderRadius: 8, zIndex: 999 },
   debugTitle: { color: '#fff', fontWeight: '700', marginBottom: 6 },

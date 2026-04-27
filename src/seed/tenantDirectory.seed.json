@@ -1,0 +1,137 @@
+{
+  "organizations": [
+    {
+      "id": "centria-healthcare",
+      "name": "Centria Healthcare",
+      "slug": "centria-healthcare",
+      "shortCode": "CENTRIA",
+      "phone": "855-772-8847",
+      "email": "info@centriahealthcare.com",
+      "active": true
+    }
+  ],
+  "programs": [
+    {
+      "id": "centria-autism",
+      "organizationId": "centria-healthcare",
+      "name": "Centria Autism",
+      "slug": "centria-autism",
+      "type": "centerBasedAba",
+      "description": "Broad ABA therapy provider offering center-based services.",
+      "active": true
+    },
+    {
+      "id": "life-skills-autism-academy",
+      "organizationId": "centria-healthcare",
+      "name": "Life Skills Autism Academy",
+      "slug": "life-skills-autism-academy",
+      "type": "earlyInterventionAcademy",
+      "description": "Specialized early intervention, school-like autism program.",
+      "active": true
+    }
+  ],
+  "campuses": [
+    {
+      "id": "centria-autism-indianapolis-lawrence-46216",
+      "organizationId": "centria-healthcare",
+      "programId": "centria-autism",
+      "name": "Centria Autism - Indianapolis (Lawrence)",
+      "slug": "centria-autism-indianapolis-lawrence",
+      "phone": "317-300-5725",
+      "email": "info@centriahealthcare.com",
+      "address1": "5505 N Post Rd",
+      "address2": "",
+      "city": "Indianapolis",
+      "state": "IN",
+      "zipCode": "46216",
+      "enrollmentCode": "46216",
+      "campusType": "Center",
+      "active": true
+    },
+    {
+      "id": "centria-autism-indianapolis-speedway-46254",
+      "organizationId": "centria-healthcare",
+      "programId": "centria-autism",
+      "name": "Centria Autism - Indianapolis (Speedway)",
+      "slug": "centria-autism-indianapolis-speedway",
+      "phone": "855-772-8847",
+      "email": "info@centriahealthcare.com",
+      "address1": "6855 Shore Terrace Suite 220",
+      "address2": "",
+      "city": "Indianapolis",
+      "state": "IN",
+      "zipCode": "46254",
+      "enrollmentCode": "46254",
+      "campusType": "Center",
+      "active": true
+    },
+    {
+      "id": "life-skills-greenwood-46143",
+      "organizationId": "centria-healthcare",
+      "programId": "life-skills-autism-academy",
+      "name": "Life Skills Autism Academy - Greenwood",
+      "slug": "life-skills-autism-academy-greenwood",
+      "phone": "317-812-9490",
+      "email": "info@centriahealthcare.com",
+      "address1": "965 Emerson Pkwy H-1",
+      "address2": "",
+      "city": "Greenwood",
+      "state": "IN",
+      "zipCode": "46143",
+      "enrollmentCode": "46143",
+      "campusType": "Center",
+      "active": true
+    },
+    {
+      "id": "life-skills-indianapolis-north-46216",
+      "organizationId": "centria-healthcare",
+      "programId": "life-skills-autism-academy",
+      "name": "Life Skills Autism Academy - Indianapolis North",
+      "slug": "life-skills-autism-academy-indianapolis-north",
+      "phone": "317-812-9711",
+      "email": "info@centriahealthcare.com",
+      "address1": "5515 N Post Rd",
+      "address2": "",
+      "city": "Indianapolis",
+      "state": "IN",
+      "zipCode": "46216",
+      "enrollmentCode": "46216",
+      "campusType": "Center",
+      "active": true
+    },
+    {
+      "id": "life-skills-indianapolis-west-46254",
+      "organizationId": "centria-healthcare",
+      "programId": "life-skills-autism-academy",
+      "name": "Life Skills Autism Academy - Indianapolis West",
+      "slug": "life-skills-autism-academy-indianapolis-west",
+      "phone": "317-812-9300",
+      "email": "info@centriahealthcare.com",
+      "address1": "6855 Shore Terrace Suites 130/220",
+      "address2": "",
+      "city": "Indianapolis",
+      "state": "IN",
+      "zipCode": "46254",
+      "enrollmentCode": "46254",
+      "campusType": "Center",
+      "active": true
+    },
+    {
+      "id": "life-skills-indianapolis-south-46203",
+      "organizationId": "centria-healthcare",
+      "programId": "life-skills-autism-academy",
+      "name": "Life Skills Autism Academy - Indianapolis South",
+      "slug": "life-skills-autism-academy-indianapolis-south",
+      "phone": "855-772-8847",
+      "email": "info@centriahealthcare.com",
+      "address1": "1315 S Sherman Dr",
+      "address2": "",
+      "city": "Indianapolis",
+      "state": "IN",
+      "zipCode": "46203",
+      "enrollmentCode": "46203",
+      "campusType": "Center",
+      "active": true
+    }
+  ]
+}

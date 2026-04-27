@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import devToolsFlag from '../utils/devToolsFlag';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import ImageToggle from '../components/ImageToggle';
+import TenantSwitcher from '../components/TenantSwitcher';
 import { avatarSourceFor, setIdVisibilityEnabled, initIdVisibilityFromStorage } from '../utils/idVisibility';
 import { registerForExpoPushTokenAsync } from '../utils/pushNotifications';
 import * as Api from '../Api';
@@ -687,31 +688,36 @@ export default function SettingsScreen({ navigation }) {
               <TouchableOpacity
                 onPress={checkForOtaUpdate}
                 disabled={updateBusy}
-                style={{ paddingVertical: 8, paddingHorizontal: 10, backgroundColor: updateBusy ? '#9ca3af' : '#111827', borderRadius: 10, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center' }}
-                activeOpacity={0.85}
+                style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', paddingVertical: 4 }}
+                activeOpacity={0.7}
               >
-                <Image source={checkUpdatesIcon} style={{ width: 24, height: 24, resizeMode: 'contain', marginRight: 10, opacity: updateBusy ? 0.85 : 1 }} />
-                <Text style={{ color: '#fff', fontWeight: '700' }}>{updateBusy ? 'Checking…' : 'Check for update now'}</Text>
+                <Image source={checkUpdatesIcon} style={{ width: 48, height: 48, resizeMode: 'contain', marginRight: 10, opacity: updateBusy ? 0.5 : 1 }} />
+                <Text style={{ color: '#111827', fontWeight: '700' }}>{updateBusy ? 'Checking…' : 'Check for update now'}</Text>
               </TouchableOpacity>
             </View>
           ) : null}
 
         </View>
 
+        {/* Organization */}
+        <View style={{ width: '100%', maxWidth: isWeb ? 980 : 720, marginTop: 12 }}>
+          <TenantSwitcher />
+        </View>
+
         {/* Account */}
         <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8 }}>Account</Text>
+          <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8, alignSelf: 'center' }}>Account</Text>
           <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
             Permanently delete your account.
           </Text>
           <TouchableOpacity
             onPress={confirmAndDeleteAccount}
             disabled={deleteBusy}
-            style={{ paddingVertical: 10, paddingHorizontal: 14, backgroundColor: deleteBusy ? '#9ca3af' : '#b91c1c', borderRadius: 10, alignSelf: 'flex-start', alignItems: 'center', justifyContent: 'center', minWidth: 112 }}
-            activeOpacity={0.85}
+            style={{ alignSelf: 'center', alignItems: 'center', justifyContent: 'center', paddingVertical: 4 }}
+            activeOpacity={0.7}
           >
-            <Image source={deleteAccountIcon} style={{ width: 28, height: 28, resizeMode: 'contain', marginBottom: 6, opacity: deleteBusy ? 0.85 : 1 }} />
-            <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>{deleteBusy ? 'Deleting…' : 'Delete Account'}</Text>
+            <Image source={deleteAccountIcon} style={{ width: 48, height: 48, resizeMode: 'contain', marginBottom: 6, opacity: deleteBusy ? 0.5 : 1 }} />
+            <Text style={{ color: '#b91c1c', fontWeight: '700', textAlign: 'center' }}>{deleteBusy ? 'Deleting…' : 'Delete Account'}</Text>
           </TouchableOpacity>
         </View>
         {/* Dev role switcher moved to DevRoleSwitcher (floating) */}

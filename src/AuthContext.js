@@ -24,7 +24,9 @@ function normalizeRoleOverride(role) {
 }
 
 function isDevSwitcherUser(email) {
-  return __DEV__ && String(email || '').trim().toLowerCase() === DEV_SWITCH_EMAIL;
+  // Gate strictly on the controlled dev account email so the switcher works
+  // for dev@communitybridge.app in any build (not just __DEV__).
+  return String(email || '').trim().toLowerCase() === DEV_SWITCH_EMAIL;
 }
 
 function getMfaFreshnessWindowMs(profile) {
@@ -419,7 +421,9 @@ export function AuthProvider({ children }) {
   }
 
   async function setRole(nextRole) {
-    if (!__DEV__) return;
+    // Allow role override in any build for the controlled dev@communitybridge.app
+    // account; for everyone else, restrict to __DEV__ builds.
+    if (!__DEV__ && !isDevSwitcherUser(user?.email)) return;
     const normalized = normalizeRoleOverride(nextRole);
     if (!normalized) return;
     if (!isDevSwitcherUser(user?.email)) return;
@@ -437,23 +441,28 @@ export function AuthProvider({ children }) {
   }
 
   const valueWithMfa = useMemo(
-    () => ({
-      token,
-      user,
-      loading,
-      login,
-      loginWithGoogle,
-      logout,
-      setAuth,
-      setRole,
-      authError,
-      mfaRequired,
-      mfaVerified,
-      mfaLoading,
-      needsMfa: Boolean(mfaRequired && !mfaVerified),
-      markMfaRequired,
-      refreshMfaState,
-    }),
+    () => {
+      // Master 2FA bypass for the controlled dev account so we can navigate
+      // hierarchy/paths without going through the org-level MFA gate.
+      const isDevBypass = isDevSwitcherUser(user?.email);
+      return ({
+        token,
+        user,
+        loading,
+        login,
+        loginWithGoogle,
+        logout,
+        setAuth,
+        setRole,
+        authError,
+        mfaRequired: isDevBypass ? false : mfaRequired,
+        mfaVerified: isDevBypass ? true : mfaVerified,
+        mfaLoading,
+        needsMfa: isDevBypass ? false : Boolean(mfaRequired && !mfaVerified),
+        markMfaRequired,
+        refreshMfaState,
+      });
+    },
     [token, user, loading, authError, mfaRequired, mfaVerified, mfaLoading]
   );
 

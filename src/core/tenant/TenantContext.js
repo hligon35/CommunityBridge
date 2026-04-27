@@ -2,12 +2,13 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../AuthContext';
 import { listActiveOrganizations, getOrganizationById } from './OrganizationRepository';
-import { listBranchesByOrganization } from './BranchRepository';
+import { listProgramsByOrganization } from './ProgramRepository';
 import { listCampusesByOrganization } from './CampusRepository';
 import { buildTenantProfile, uniqueIds } from './models';
+import { getProgramTypeConfig } from './programConfig';
 
 const TenantContext = createContext(null);
-const BRANCH_KEY = 'bb_selected_branch_context_v1';
+const PROGRAM_KEY = 'bb_selected_program_context_v1';
 const CAMPUS_KEY = 'bb_selected_campus_context_v1';
 
 export function useTenant() {
@@ -18,10 +19,10 @@ export function TenantProvider({ children }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [organizations, setOrganizations] = useState([]);
-  const [branches, setBranches] = useState([]);
+  const [programs, setPrograms] = useState([]);
   const [campuses, setCampuses] = useState([]);
   const [currentOrganization, setCurrentOrganization] = useState(null);
-  const [currentBranchId, setCurrentBranchIdState] = useState('');
+  const [currentProgramId, setCurrentProgramIdState] = useState('');
   const [currentCampusId, setCurrentCampusIdState] = useState('');
 
   const tenantProfile = useMemo(() => buildTenantProfile(user || {}), [user]);
@@ -32,48 +33,48 @@ export function TenantProvider({ children }) {
       if (!tenantProfile.organizationId) {
         if (!mounted) return;
         setOrganizations([]);
-        setBranches([]);
+        setPrograms([]);
         setCampuses([]);
         setCurrentOrganization(null);
-        setCurrentBranchIdState('');
+        setCurrentProgramIdState('');
         setCurrentCampusIdState('');
         return;
       }
 
       setLoading(true);
       try {
-        const [organization, organizationList, branchList, campusList, storedBranchId, storedCampusId] = await Promise.all([
+        const [organization, organizationList, programList, storedProgramId, storedCampusId] = await Promise.all([
           getOrganizationById(tenantProfile.organizationId),
           listActiveOrganizations(),
-          listBranchesByOrganization(tenantProfile.organizationId),
-          listCampusesByOrganization(tenantProfile.organizationId),
-          AsyncStorage.getItem(BRANCH_KEY),
+          listProgramsByOrganization(tenantProfile.organizationId),
+          AsyncStorage.getItem(PROGRAM_KEY),
           AsyncStorage.getItem(CAMPUS_KEY),
         ]);
 
         if (!mounted) return;
-        const allowedBranchIds = uniqueIds(tenantProfile.branchIds);
+        const allowedProgramIds = uniqueIds(tenantProfile.programIds);
         const allowedCampusIds = uniqueIds(tenantProfile.campusIds);
-        const filteredBranches = allowedBranchIds.length
-          ? branchList.filter((branch) => allowedBranchIds.includes(String(branch.id || '').trim()))
-          : branchList;
+        const filteredPrograms = allowedProgramIds.length
+          ? programList.filter((program) => allowedProgramIds.includes(String(program.id || '').trim()))
+          : programList;
+        const selectedProgramId = filteredPrograms.find((program) => program.id === storedProgramId)?.id
+          || tenantProfile.currentProgramId
+          || filteredPrograms[0]?.id
+          || '';
+        const campusList = await listCampusesByOrganization(tenantProfile.organizationId, selectedProgramId);
         const filteredCampuses = allowedCampusIds.length
           ? campusList.filter((campus) => allowedCampusIds.includes(String(campus.id || '').trim()))
           : campusList;
-
-        const selectedBranchId = filteredBranches.find((branch) => branch.id === storedBranchId)?.id
-          || filteredBranches[0]?.id
-          || '';
         const selectedCampusId = filteredCampuses.find((campus) => campus.id === storedCampusId)?.id
-          || filteredCampuses.find((campus) => !selectedBranchId || campus.branchId === selectedBranchId)?.id
+          || filteredCampuses.find((campus) => !selectedProgramId || campus.programId === selectedProgramId)?.id
           || filteredCampuses[0]?.id
           || '';
 
         setOrganizations(organizationList);
         setCurrentOrganization(organization || organizationList.find((item) => item.id === tenantProfile.organizationId) || null);
-        setBranches(filteredBranches);
+        setPrograms(filteredPrograms);
         setCampuses(filteredCampuses);
-        setCurrentBranchIdState(selectedBranchId);
+        setCurrentProgramIdState(selectedProgramId);
         setCurrentCampusIdState(selectedCampusId);
       } finally {
         if (mounted) setLoading(false);
@@ -83,14 +84,14 @@ export function TenantProvider({ children }) {
     return () => {
       mounted = false;
     };
-  }, [tenantProfile.organizationId, tenantProfile.branchIds, tenantProfile.campusIds]);
+  }, [tenantProfile.organizationId, tenantProfile.programIds, tenantProfile.campusIds, tenantProfile.currentProgramId]);
 
-  async function setSelectedBranchId(branchId) {
-    const normalized = String(branchId || '').trim();
-    setCurrentBranchIdState(normalized);
+  async function setSelectedProgramId(programId) {
+    const normalized = String(programId || '').trim();
+    setCurrentProgramIdState(normalized);
     try {
-      if (normalized) await AsyncStorage.setItem(BRANCH_KEY, normalized);
-      else await AsyncStorage.removeItem(BRANCH_KEY);
+      if (normalized) await AsyncStorage.setItem(PROGRAM_KEY, normalized);
+      else await AsyncStorage.removeItem(PROGRAM_KEY);
     } catch (_) {
       // ignore persistence failures
     }
@@ -107,20 +108,39 @@ export function TenantProvider({ children }) {
     }
   }
 
+  const currentProgram = useMemo(
+    () => programs.find((item) => item.id === currentProgramId) || programs[0] || null,
+    [programs, currentProgramId]
+  );
+  const currentCampus = useMemo(
+    () => campuses.find((item) => item.id === currentCampusId) || campuses[0] || null,
+    [campuses, currentCampusId]
+  );
+  const currentProgramType = currentProgram?.type || tenantProfile.currentProgramType;
+  const programConfig = useMemo(() => getProgramTypeConfig(currentProgramType), [currentProgramType]);
+
   const value = useMemo(() => ({
     loading,
     organizations,
-    branches,
+    programs,
     campuses,
     currentOrganization,
-    currentBranchId,
+    currentProgram,
+    currentProgramId,
+    currentProgramType,
+    currentCampus,
     currentCampusId,
     organizationId: tenantProfile.organizationId,
     role: tenantProfile.role,
     memberships: tenantProfile.memberships,
-    setSelectedBranchId,
+    labels: programConfig.labels,
+    dashboardPreset: programConfig.dashboardPreset,
+    childProfileMode: programConfig.childProfileMode,
+    featureFlags: programConfig.featureFlags,
+    programConfig,
+    setSelectedProgramId,
     setSelectedCampusId,
-  }), [loading, organizations, branches, campuses, currentOrganization, currentBranchId, currentCampusId, tenantProfile]);
+  }), [loading, organizations, programs, campuses, currentOrganization, currentProgram, currentProgramId, currentProgramType, currentCampus, currentCampusId, tenantProfile, programConfig]);
 
   return <TenantContext.Provider value={value}>{children}</TenantContext.Provider>;
 }

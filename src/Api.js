@@ -139,12 +139,12 @@ export async function listOrganizations() {
   return callFirebaseFunction('listOrganizationsPublic');
 }
 
-export async function listBranches(organizationId) {
-  return callFirebaseFunction('listBranchesPublic', { organizationId });
+export async function listPrograms(organizationId) {
+  return callFirebaseFunction('listProgramsPublic', { organizationId });
 }
 
-export async function listCampuses({ organizationId, branchId }) {
-  return callFirebaseFunction('listCampusesPublic', { organizationId, branchId });
+export async function listCampuses({ organizationId, programId }) {
+  return callFirebaseFunction('listCampusesPublic', { organizationId, programId });
 }
 
 export async function resolveEnrollmentContext(payload) {
@@ -226,28 +226,6 @@ export async function signup(payload) {
   const email = normalizeEmailInput(payload?.email);
   const password = String(payload?.password || '');
   const role = String(payload?.role || 'parent');
-  const organizationId = String(payload?.organizationId || '').trim();
-  const branchId = String(payload?.branchId || '').trim();
-  const enrollmentCode = String(payload?.enrollmentCode || '').trim();
-
-  if (!organizationId || !branchId || !enrollmentCode) {
-    const err = new Error('Organization, branch, and enrollment code are required.');
-    err.code = 'BB_TENANT_CONTEXT_REQUIRED';
-    throw err;
-  }
-
-  const tenantResolution = await resolveEnrollmentContext({
-    organizationId,
-    branchId,
-    campusId: payload?.campusId,
-    enrollmentCode,
-  });
-  const resolvedCampusId = String(tenantResolution?.campus?.id || '').trim();
-  if (!resolvedCampusId) {
-    const err = new Error('Unable to resolve an active campus for the provided enrollment code.');
-    err.code = 'BB_ENROLLMENT_INVALID';
-    throw err;
-  }
 
   const cred = await createUserWithEmailAndPassword(a, email, password);
   try {
@@ -263,57 +241,9 @@ export async function signup(payload) {
     email,
     role,
     avatar: DEFAULT_AVATAR_TOKEN,
-    organizationId,
-    branchId,
-    branchIds: [branchId],
-    campusId: resolvedCampusId,
-    campusIds: [resolvedCampusId],
-    organizationName: tenantResolution?.organization?.name || '',
-    branchName: tenantResolution?.branch?.name || '',
-    campusName: tenantResolution?.campus?.name || '',
-    memberships: [{
-      organizationId,
-      branchId,
-      campusId: resolvedCampusId,
-      role,
-    }],
-    tenant: {
-      organizationId,
-      branchId,
-      campusId: resolvedCampusId,
-    },
     active: true,
   });
   const token = await getIdToken(cred.user, true);
-
-  try {
-    await setDoc(
-      doc(db, 'organizations', organizationId, 'users', cred.user.uid),
-      {
-        id: cred.user.uid,
-        uid: cred.user.uid,
-        name,
-        firstName,
-        lastName,
-        email,
-        role,
-        organizationId,
-        branchId,
-        branchIds: [branchId],
-        campusId: resolvedCampusId,
-        campusIds: [resolvedCampusId],
-        organizationName: tenantResolution?.organization?.name || '',
-        branchName: tenantResolution?.branch?.name || '',
-        campusName: tenantResolution?.campus?.name || '',
-        active: true,
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-  } catch (_) {
-    // Keep primary signup resilient even if the org-scoped record cannot be written yet.
-  }
 
   // Secure-by-default directory access: create a self-owned parent directory record + link on signup.
   // Admins can later re-link accounts to seeded directory records if desired.
@@ -329,9 +259,6 @@ export async function signup(payload) {
           name: name || profile?.name || '',
           email: email || profile?.email || '',
           familyId: cred.user.uid,
-          organizationId,
-          branchId,
-          campusId: resolvedCampusId,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         }),

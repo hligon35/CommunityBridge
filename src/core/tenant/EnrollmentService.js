@@ -1,9 +1,10 @@
 import * as Api from '../../Api';
+import { resolveSeedEnrollmentContext } from '../../seed/tenantSeed';
 
-export async function resolveSelection({ organizationId, branchId, enrollmentCode, campusId }) {
+export async function resolveSelection({ organizationId, programId, enrollmentCode, campusId }) {
   const payload = {
     organizationId: String(organizationId || '').trim(),
-    branchId: String(branchId || '').trim(),
+    programId: String(programId || '').trim(),
     campusId: String(campusId || '').trim(),
     enrollmentCode: String(enrollmentCode || '').trim(),
   };
@@ -11,16 +12,24 @@ export async function resolveSelection({ organizationId, branchId, enrollmentCod
   if (!payload.organizationId) {
     throw new Error('Select an organization.');
   }
-  if (!payload.branchId) {
-    throw new Error('Select a branch.');
+  if (!payload.programId) {
+    throw new Error('Select a program.');
   }
   if (!payload.enrollmentCode) {
     throw new Error('Enter your enrollment code.');
   }
 
-  const result = await Api.resolveEnrollmentContext(payload);
-  if (!result?.organization?.id || !result?.branch?.id || !result?.campus?.id) {
-    throw new Error('The enrollment code did not match an active campus for the selected branch.');
+  try {
+    const result = await Api.resolveEnrollmentContext(payload);
+    if (result?.organization?.id && result?.program?.id && result?.campus?.id) {
+      return result;
+    }
+  } catch (_) {
+    // fall back to seeded data below
   }
-  return result;
+  const seeded = resolveSeedEnrollmentContext(payload);
+  if (!seeded?.organization?.id || !seeded?.program?.id || !seeded?.campus?.id) {
+    throw new Error('The enrollment code did not match an active campus for the selected organization and program.');
+  }
+  return seeded;
 }

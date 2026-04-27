@@ -477,6 +477,21 @@ exports.listOrganizationsPublic = regional.https.onCall(async () => {
   return { items };
 });
 
+exports.listProgramsPublic = regional.https.onCall(async (data) => {
+  const organizationId = safeString(data?.organizationId).trim();
+  if (!organizationId) {
+    throw new functions.https.HttpsError('invalid-argument', 'organizationId is required.');
+  }
+  const snap = await admin.firestore().collection('organizations').doc(organizationId).collection('programs').where('active', '==', true).limit(100).get();
+  const items = snap.docs
+    .map((docSnap) => sanitizeLookupDoc(docSnap.id, docSnap.data(), {
+      organizationId,
+      type: safeString(docSnap.data()?.type).trim(),
+    }))
+    .filter((item) => item.id && item.name);
+  return { items };
+});
+
 exports.listBranchesPublic = regional.https.onCall(async (data) => {
   const organizationId = safeString(data?.organizationId).trim();
   if (!organizationId) {
@@ -494,17 +509,17 @@ exports.listBranchesPublic = regional.https.onCall(async (data) => {
 
 exports.listCampusesPublic = regional.https.onCall(async (data) => {
   const organizationId = safeString(data?.organizationId).trim();
-  const branchId = safeString(data?.branchId).trim();
+  const programId = safeString(data?.programId || data?.branchId).trim();
   if (!organizationId) {
     throw new functions.https.HttpsError('invalid-argument', 'organizationId is required.');
   }
   let queryRef = admin.firestore().collection('organizations').doc(organizationId).collection('campuses').where('active', '==', true);
-  if (branchId) queryRef = queryRef.where('branchId', '==', branchId);
+  if (programId) queryRef = queryRef.where('programId', '==', programId);
   const snap = await queryRef.limit(100).get();
   const items = snap.docs
     .map((docSnap) => sanitizeLookupDoc(docSnap.id, docSnap.data(), {
       organizationId,
-      branchId: safeString(docSnap.data()?.branchId).trim(),
+      programId: safeString(docSnap.data()?.programId || docSnap.data()?.branchId).trim(),
     }))
     .filter((item) => item.id && item.name);
   return { items };
@@ -512,30 +527,30 @@ exports.listCampusesPublic = regional.https.onCall(async (data) => {
 
 exports.resolveEnrollmentContextPublic = regional.https.onCall(async (data) => {
   const organizationId = safeString(data?.organizationId).trim();
-  const branchId = safeString(data?.branchId).trim();
+  const programId = safeString(data?.programId || data?.branchId).trim();
   const campusId = safeString(data?.campusId).trim();
   const enrollmentCode = safeString(data?.enrollmentCode).trim().toUpperCase();
 
-  if (!organizationId || !branchId || !enrollmentCode) {
-    throw new functions.https.HttpsError('invalid-argument', 'organizationId, branchId, and enrollmentCode are required.');
+  if (!organizationId || !programId || !enrollmentCode) {
+    throw new functions.https.HttpsError('invalid-argument', 'organizationId, programId, and enrollmentCode are required.');
   }
 
   const orgRef = admin.firestore().collection('organizations').doc(organizationId);
-  const branchRef = orgRef.collection('branches').doc(branchId);
-  const [orgSnap, branchSnap] = await Promise.all([orgRef.get(), branchRef.get()]);
+  const programRef = orgRef.collection('programs').doc(programId);
+  const [orgSnap, programSnap] = await Promise.all([orgRef.get(), programRef.get()]);
   if (!orgSnap.exists || orgSnap.data()?.active === false) {
     throw new functions.https.HttpsError('not-found', 'Organization not found.');
   }
-  if (!branchSnap.exists || branchSnap.data()?.active === false) {
-    throw new functions.https.HttpsError('not-found', 'Branch not found.');
+  if (!programSnap.exists || programSnap.data()?.active === false) {
+    throw new functions.https.HttpsError('not-found', 'Program not found.');
   }
 
-  let campusQuery = orgRef.collection('campuses').where('active', '==', true).where('branchId', '==', branchId).limit(100);
+  let campusQuery = orgRef.collection('campuses').where('active', '==', true).where('programId', '==', programId).limit(100);
   if (campusId) {
     const scopedSnap = await orgRef.collection('campuses').doc(campusId).get();
     const scopedData = scopedSnap.exists ? (scopedSnap.data() || {}) : null;
-    if (!scopedSnap.exists || scopedData.active === false || safeString(scopedData.branchId).trim() !== branchId) {
-      throw new functions.https.HttpsError('not-found', 'Campus not found for this branch.');
+    if (!scopedSnap.exists || scopedData.active === false || safeString(scopedData.programId || scopedData.branchId).trim() !== programId) {
+      throw new functions.https.HttpsError('not-found', 'Campus not found for this program.');
     }
     const codes = normalizedEnrollmentCodes(scopedData);
     if (!codes.includes(enrollmentCode)) {
@@ -545,8 +560,8 @@ exports.resolveEnrollmentContextPublic = regional.https.onCall(async (data) => {
       organization: sanitizeLookupDoc(orgSnap.id, orgSnap.data(), {
         shortCode: safeString(orgSnap.data()?.shortCode || orgSnap.data()?.code).trim(),
       }),
-      branch: sanitizeLookupDoc(branchSnap.id, branchSnap.data(), { organizationId }),
-      campus: sanitizeLookupDoc(scopedSnap.id, scopedData, { organizationId, branchId }),
+      program: sanitizeLookupDoc(programSnap.id, programSnap.data(), { organizationId, type: safeString(programSnap.data()?.type).trim() }),
+      campus: sanitizeLookupDoc(scopedSnap.id, scopedData, { organizationId, programId }),
     };
   }
 
@@ -560,8 +575,8 @@ exports.resolveEnrollmentContextPublic = regional.https.onCall(async (data) => {
     organization: sanitizeLookupDoc(orgSnap.id, orgSnap.data(), {
       shortCode: safeString(orgSnap.data()?.shortCode || orgSnap.data()?.code).trim(),
     }),
-    branch: sanitizeLookupDoc(branchSnap.id, branchSnap.data(), { organizationId }),
-    campus: sanitizeLookupDoc(matchedCampus.id, matchedCampus.data(), { organizationId, branchId }),
+    program: sanitizeLookupDoc(programSnap.id, programSnap.data(), { organizationId, type: safeString(programSnap.data()?.type).trim() }),
+    campus: sanitizeLookupDoc(matchedCampus.id, matchedCampus.data(), { organizationId, programId }),
   };
 });
 

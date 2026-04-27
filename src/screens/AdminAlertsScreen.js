@@ -10,7 +10,13 @@ export default function AdminAlertsScreen() {
   const navigation = useNavigation();
 
   useEffect(() => {
-    setList((urgentMemos || []).slice().sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    const HANDLED = new Set(['accepted', 'denied', 'opened', 'read', 'resolved', 'dismissed']);
+    setList(
+      (urgentMemos || [])
+        .filter((m) => !HANDLED.has(String(m?.status || 'pending').toLowerCase()))
+        .slice()
+        .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))
+    );
   }, [urgentMemos]);
 
   function childNameForId(id) {

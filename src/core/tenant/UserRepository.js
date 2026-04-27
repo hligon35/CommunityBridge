@@ -14,14 +14,20 @@ export async function listUsersByOrganization(organizationId) {
   return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() || {}) }));
 }
 
-export async function listUsersByBranch(organizationId, branchId) {
+export async function listUsersByProgram(organizationId, programId) {
   const users = await listUsersByOrganization(organizationId);
-  const normalizedBranchId = String(branchId || '').trim();
-  return users.filter((user) => Array.isArray(user.branchIds) ? user.branchIds.includes(normalizedBranchId) : user.branchId === normalizedBranchId);
+  const normalizedProgramId = String(programId || '').trim();
+  return users.filter((user) => Array.isArray(user.programIds)
+    ? user.programIds.includes(normalizedProgramId)
+    : (user.programId || user.branchId) === normalizedProgramId);
 }
 
 export async function listUsersByCampus(organizationId, campusId) {
   const users = await listUsersByOrganization(organizationId);
   const normalizedCampusId = String(campusId || '').trim();
   return users.filter((user) => Array.isArray(user.campusIds) ? user.campusIds.includes(normalizedCampusId) : user.campusId === normalizedCampusId);
+}
+
+export async function listUsersByBranch(organizationId, branchId) {
+  return listUsersByProgram(organizationId, branchId);
 }

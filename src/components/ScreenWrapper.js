@@ -3,25 +3,28 @@ import { View, Platform, StyleSheet } from 'react-native';
 import ScreenHeader from './ScreenHeader';
 import WebNav from './WebNav';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useTenant } from '../core/tenant/TenantContext';
 
 export function ScreenWrapper({ children, style, hideBanner = false, bannerShowBack, bannerTitle, bannerLeft, bannerRight }) {
   const navigation = useNavigation();
   const route = useRoute();
+  const tenant = useTenant();
+  const labels = tenant?.labels || {};
 
   const nameMap = {
     CommunityMain: 'Home',
     PostThread: 'Post',
     ChatsList: 'Chats',
     ChatThread: 'New Message',
-    MyChildMain: 'My Child',
+    MyChildMain: labels.myChild || 'My Child',
     SettingsMain: 'Profile Settings',
-    MyClassMain: 'My Class',
-    ControlsMain: 'Dashboard',
+    MyClassMain: labels.myClass || 'My Class',
+    ControlsMain: labels.dashboard || 'Dashboard',
     StudentDirectory: 'Student Directory',
     ParentDirectory: 'Parent Directory',
-    FacultyDirectory: 'Faculty Directory',
+    FacultyDirectory: labels.facultyDirectory || 'Faculty Directory',
     ChildDetail: 'Student',
-    FacultyDetail: 'Faculty',
+    FacultyDetail: labels.facultyDetail || 'Faculty',
     ManagePermissions: 'Manage Permissions',
     PrivacyDefaults: 'Profile Settings',
     ModeratePosts: 'Moderate Posts',

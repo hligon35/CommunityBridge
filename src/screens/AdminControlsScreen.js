@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GOOGLE_PLACES_API_KEY } from '../config';
 import * as FileSystem from 'expo-file-system';
 import * as Api from '../Api';
+import { useTenant } from '../core/tenant/TenantContext';
 import { SETTINGS_KEYS, readJsonSetting, writeBooleanSetting, writeJsonSetting } from '../utils/appSettings';
 import ImageToggle from '../components/ImageToggle';
 
@@ -36,6 +37,8 @@ const currentLocationIcon = require('../../assets/icons/currentLocation.png');
 export default function AdminControlsScreen() {
   const navigation = useNavigation();
   const { messages, children, parents = [], therapists = [], urgentMemos = [] } = useData();
+  const tenant = useTenant() || {};
+  const tenantFlags = tenant.featureFlags || {};
   const isWeb = Platform.OS === 'web';
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [importModalVisible, setImportModalVisible] = useState(false);
@@ -849,6 +852,89 @@ export default function AdminControlsScreen() {
                 </ScrollView>
               </View>
             ) : null}
+        {/* Admin Tools - core admin entry points */}
+        <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8 }}>Admin Tools</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            {[
+              { key: 'AdminMemos', label: 'Compose Memo', icon: 'campaign' },
+              { key: 'AdminChatMonitor', label: 'Chat Monitor', icon: 'forum' },
+              { key: 'ManagePermissions', label: 'Permissions', icon: 'admin-panel-settings' },
+              { key: 'PrivacyDefaults', label: 'Privacy Defaults', icon: 'privacy-tip' },
+            ].map((t) => (
+              <TouchableOpacity
+                key={t.key}
+                onPress={() => navigation.navigate(t.key)}
+                style={{
+                  width: '48%',
+                  marginRight: '2%',
+                  marginBottom: 10,
+                  backgroundColor: '#fff',
+                  borderWidth: 1,
+                  borderColor: '#e5e7eb',
+                  borderRadius: 14,
+                  padding: 14,
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                accessibilityLabel={`Open ${t.label}`}
+              >
+                <View>
+                  <MaterialIcons name={t.icon} size={24} color="#2563eb" />
+                  {t.badge ? (
+                    <View style={{ position: 'absolute', top: -6, right: -10, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#dc2626', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
+                      <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{t.badge > 99 ? '99+' : t.badge}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={{ marginTop: 8, fontWeight: '700', color: '#0f172a', textAlign: 'center' }}>{t.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Program / Campus modules (feature-flagged) */}
+        {(() => {
+          const moduleTiles = [
+            tenantFlags.attendanceModule !== false ? { key: 'Attendance', label: 'Attendance', icon: 'event-available' } : null,
+            tenantFlags.programDirectory !== false ? { key: 'ProgramDirectory', label: 'Program Directory', icon: 'business' } : null,
+            tenantFlags.campusDirectory !== false ? { key: 'CampusDirectory', label: 'Campus Directory', icon: 'apartment' } : null,
+            tenantFlags.programDocuments !== false ? { key: 'ProgramDocuments', label: 'Program Docs', icon: 'description' } : null,
+            tenantFlags.campusDocuments !== false ? { key: 'CampusDocuments', label: 'Campus Docs', icon: 'folder' } : null,
+          ].filter(Boolean);
+          if (!moduleTiles.length) return null;
+          return (
+            <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8 }}>Modules</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                {moduleTiles.map((m) => (
+                  <TouchableOpacity
+                    key={m.key}
+                    onPress={() => navigation.navigate(m.key)}
+                    style={{
+                      width: '48%',
+                      marginRight: '2%',
+                      marginBottom: 10,
+                      backgroundColor: '#fff',
+                      borderWidth: 1,
+                      borderColor: '#e5e7eb',
+                      borderRadius: 14,
+                      padding: 14,
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    accessibilityLabel={`Open ${m.label}`}
+                  >
+                    <MaterialIcons name={m.icon} size={24} color="#2563eb" />
+                    <Text style={{ marginTop: 8, fontWeight: '700', color: '#0f172a', textAlign: 'center' }}>{m.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          );
+        })()}
         {/* IDs (admin) - moved below Directory */}
         <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
           <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8 }}>Account IDs</Text>

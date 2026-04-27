@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ScreenWrapper, CenteredContainer } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
@@ -224,29 +224,36 @@ export default function NewThreadScreen({ navigation }) {
 
   return (
     <ScreenWrapper bannerTitle="New Message" bannerShowBack>
-      <CenteredContainer>
-        <Text style={{ fontSize: 16, fontWeight: '800', color: '#111827' }}>Choose who to message</Text>
-        {note ? <Text style={{ marginTop: 8, color: '#6b7280' }}>{note}</Text> : null}
+      <ScrollView
+        style={{ flex: 1, width: '100%' }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 32 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator
+      >
+        <CenteredContainer>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: '#111827' }}>Choose who to message</Text>
+          {note ? <Text style={{ marginTop: 8, color: '#6b7280' }}>{note}</Text> : null}
 
-        <RoleSection title="Admin" items={admins} selectedId={selected?.id} onPick={pick} />
-        <RoleSection title="Therapists" items={connectedTherapists} selectedId={selected?.id} onPick={pick} />
-        <RoleSection title="Parents" items={connectedParents} selectedId={selected?.id} onPick={pick} />
+          <RoleSection title="Admin" items={admins} selectedId={selected?.id} onPick={pick} />
+          <RoleSection title="Therapists" items={connectedTherapists} selectedId={selected?.id} onPick={pick} />
+          <RoleSection title="Parents" items={connectedParents} selectedId={selected?.id} onPick={pick} />
 
-        <TouchableOpacity
-          onPress={start}
-          disabled={!selected}
-          style={{
-            marginTop: 18,
-            paddingVertical: 12,
-            borderRadius: 10,
-            alignItems: 'center',
-            backgroundColor: selected ? '#2563eb' : '#9ca3af',
-          }}
-          accessibilityLabel="Start new message"
-        >
-          <Text style={{ color: '#fff', fontWeight: '800' }}>{selected ? `Message ${selected.name}` : 'Select a recipient'}</Text>
-        </TouchableOpacity>
-      </CenteredContainer>
+          <TouchableOpacity
+            onPress={start}
+            disabled={!selected}
+            style={{
+              marginTop: 18,
+              paddingVertical: 12,
+              borderRadius: 10,
+              alignItems: 'center',
+              backgroundColor: selected ? '#2563eb' : '#9ca3af',
+            }}
+            accessibilityLabel="Start new message"
+          >
+            <Text style={{ color: '#fff', fontWeight: '800' }}>{selected ? `Message ${selected.name}` : 'Select a recipient'}</Text>
+          </TouchableOpacity>
+        </CenteredContainer>
+      </ScrollView>
     </ScreenWrapper>
   );
 }

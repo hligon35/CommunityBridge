@@ -19,8 +19,18 @@ service cloud.firestore {
         : userData.mfaVerifiedAt > request.time - duration.value(30, 'd');
     }
 
+    // Narrow carve-out: the controlled dev account
+    // (dev@communitybridge.app, with devUser==true on its profile) is exempt
+    // from the MFA gate so the dev switcher can navigate the full hierarchy
+    // in any environment. Everyone else still requires a fresh mfaVerifiedAt.
+    function isDevBypassUser() {
+      return signedIn() && userDoc().exists() &&
+        userDoc().data.devUser == true &&
+        userDoc().data.email == 'dev@communitybridge.app';
+    }
+
     function mfaVerified() {
-      return !mfaRequired() || (
+      return !mfaRequired() || isDevBypassUser() || (
         signedIn() &&
         userDoc().exists() &&
         (userDoc().data.mfaVerifiedAt is timestamp) &&

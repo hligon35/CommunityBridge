@@ -8,10 +8,17 @@ import { ScreenWrapper } from '../components/ScreenWrapper';
 import ImageToggle from '../components/ImageToggle';
 import { childHasParent, findLinkedParentId } from '../utils/directoryLinking';
 import { avatarSourceFor } from '../utils/idVisibility';
+import { useTenant } from '../core/tenant/TenantContext';
 
 export default function MyChildScreen() {
   const { children, parents, urgentMemos, sendTimeUpdateAlert, timeChangeProposals, proposeTimeChange, respondToProposal, respondToUrgentMemo } = useData();
   const { user } = useAuth();
+  const tenant = useTenant() || {};
+  const childProfileMode = tenant.childProfileMode || { mode: 'family', entityLabel: 'child', collectionLabel: 'children', profileTitle: 'My Child', profileSummaryTitle: 'Family Overview' };
+  const featureFlags = tenant.featureFlags || {};
+  const entityLabel = childProfileMode.entityLabel || 'child';
+  const entityLabelCap = entityLabel.charAt(0).toUpperCase() + entityLabel.slice(1);
+  const possessivePrefix = childProfileMode.mode === 'student' ? 'Your student' : childProfileMode.mode === 'operations' ? 'This profile' : 'Your child';
 
   const role = (user?.role || '').toString().toLowerCase();
   const isParent = role.includes('parent');
@@ -30,7 +37,7 @@ export default function MyChildScreen() {
   useEffect(() => {
     if (childList.length > 1 && selectedIndex === 0) setSelectedIndex(1);
   }, [childList.length]);
-  const child = childList[selectedIndex] || { id: 'no-child', name: 'No children added', age: '', room: '', avatar: null, carePlan: '', notes: '' };
+  const child = childList[selectedIndex] || { id: 'no-child', name: `No ${childProfileMode.collectionLabel || 'children'} added`, age: '', room: '', avatar: null, carePlan: '', notes: '' };
 
   // const provided above via single useData call
   const [showProposeModal, setShowProposeModal] = useState(false);
@@ -226,7 +233,11 @@ export default function MyChildScreen() {
         </ScrollView>
       ) : null}
       {/* Developer action moved to DevRoleSwitcher */}
-      
+
+      {childProfileMode.profileSummaryTitle ? (
+        <Text style={styles.summaryTitle}>{childProfileMode.profileSummaryTitle}</Text>
+      ) : null}
+
       <View style={styles.card}>
         <Image source={avatarSourceFor(child)} style={styles.avatar} />
         <View style={{ flex: 1, marginLeft: 12 }}>
@@ -237,7 +248,7 @@ export default function MyChildScreen() {
 
       <View style={styles.halfRow}>
         <View style={[styles.section, styles.halfTile, styles.needsTile]}>
-          <Text style={styles.sectionTitle}>Your child needs...</Text>
+          <Text style={styles.sectionTitle}>{`${possessivePrefix} needs...`}</Text>
           <Text style={styles.sectionText}>{child.notes || 'No notes available.'}</Text>
         </View>
 
@@ -444,28 +455,32 @@ export default function MyChildScreen() {
             {child?.curriculum || child?.programCurriculum || child?.carePlan || 'No curriculum details available yet.'}
           </Text>
 
-          <View style={{ height: 10 }} />
-          <Text style={[styles.sectionTitle, { marginBottom: 6 }]}>Curriculum Documents</Text>
-          {(programDocs || []).length ? (
-            (programDocs || []).map((d) => (
-              <View key={d.url} style={styles.docRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: '700' }} numberOfLines={1}>{d.title}</Text>
-                  <Text style={{ color: '#6b7280', fontSize: 12 }} numberOfLines={1}>{d.url}</Text>
-                </View>
-                <TouchableOpacity onPress={() => openDoc(d.url)} style={styles.docBtn} accessibilityLabel={`Download ${d.title}`}>
-                  <MaterialIcons name="file-download" size={18} color="#2563eb" />
-                  <Text style={styles.docBtnText}>Download</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => printDoc(d.url)} style={styles.docBtn} accessibilityLabel={`Print ${d.title}`}>
-                  <MaterialIcons name="print" size={18} color="#2563eb" />
-                  <Text style={styles.docBtnText}>Print</Text>
-                </TouchableOpacity>
-              </View>
-            ))
-          ) : (
-            <Text style={styles.sectionText}>No program documents available.</Text>
-          )}
+          {featureFlags.programDocuments !== false ? (
+            <>
+              <View style={{ height: 10 }} />
+              <Text style={[styles.sectionTitle, { marginBottom: 6 }]}>Curriculum Documents</Text>
+              {(programDocs || []).length ? (
+                (programDocs || []).map((d) => (
+                  <View key={d.url} style={styles.docRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontWeight: '700' }} numberOfLines={1}>{d.title}</Text>
+                      <Text style={{ color: '#6b7280', fontSize: 12 }} numberOfLines={1}>{d.url}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => openDoc(d.url)} style={styles.docBtn} accessibilityLabel={`Download ${d.title}`}>
+                      <MaterialIcons name="file-download" size={18} color="#2563eb" />
+                      <Text style={styles.docBtnText}>Download</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => printDoc(d.url)} style={styles.docBtn} accessibilityLabel={`Print ${d.title}`}>
+                      <MaterialIcons name="print" size={18} color="#2563eb" />
+                      <Text style={styles.docBtnText}>Print</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.sectionText}>No program documents available.</Text>
+              )}
+            </>
+          ) : null}
         </View>
       </View>
 
@@ -582,7 +597,7 @@ export default function MyChildScreen() {
 
         <View style={[styles.card, { marginTop: 12 }]}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.sectionTitle}>Care Plan</Text>
+            <Text style={styles.sectionTitle}>{childProfileMode.mode === 'student' ? 'Learning Plan' : childProfileMode.mode === 'operations' ? 'Program Plan' : 'Care Plan'}</Text>
             <Text style={styles.sectionText}>{child.carePlan || "Sam's goals: fine motor, communication prompts, and independent dressing."}</Text>
           </View>
         </View>
@@ -598,6 +613,7 @@ const styles = StyleSheet.create({
   avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#eee' },
   name: { fontSize: 18, fontWeight: '700' },
   meta: { color: '#6b7280', marginTop: 4 },
+  summaryTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 8 },
   section: { marginTop: 12, backgroundColor: '#fff', padding: 12, borderRadius: 8 },
   sectionTitle: { fontWeight: '700', marginBottom: 6 },
   sectionText: { color: '#374151' },

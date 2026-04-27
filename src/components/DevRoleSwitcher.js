@@ -1,17 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { View, TouchableOpacity, Text, Alert, StyleSheet, Modal, ActivityIndicator } from 'react-native';
+import { View, TouchableOpacity, Text, Alert, StyleSheet, Modal, ActivityIndicator, ScrollView } from 'react-native';
 import devToolsFlag from '../utils/devToolsFlag';
 import devDirectoryFlag from '../utils/devDirectoryFlag';
 import devWallFlag from '../utils/devWallFlag';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
+import { useTenant } from '../core/tenant/TenantContext';
+import { navigationRef } from '../navigationRef';
 import { MaterialIcons } from '@expo/vector-icons';
 import { logPress, logger } from '../utils/logger';
 import ImageToggle from './ImageToggle';
 
+const DEV_SWITCH_EMAIL = 'dev@communitybridge.app';
+
+function isDevAccount(user) {
+  return String(user?.email || '').trim().toLowerCase() === DEV_SWITCH_EMAIL;
+}
+
 export default function DevRoleSwitcher() {
-  if (!__DEV__) return null;
   const { setRole, user } = useAuth();
+  // Visible in __DEV__ builds for everyone, OR for the dev@communitybridge.app
+  // account in any build (controlled gate so the dev account can navigate the
+  // hierarchy/paths in production-like environments).
+  if (!__DEV__ && !isDevAccount(user)) return null;
   const [open, setOpen] = useState(false);
   const [devTools, setDevTools] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -87,6 +98,73 @@ export default function DevRoleSwitcher() {
   };
 
   const { urgentMemos, fetchAndSync, resetMessagesToDemo, clearMessages, resetChildrenToDemo, parents, children, sendTimeUpdateAlert, sendAdminMemo } = useData();
+  const tenant = useTenant() || {};
+  const {
+    organizations = [],
+    programs = [],
+    campuses = [],
+    currentOrganization,
+    currentProgram,
+    currentProgramId,
+    currentCampus,
+    currentCampusId,
+    setSelectedProgramId,
+    setSelectedCampusId,
+  } = tenant;
+
+  const NAV_TARGETS = [
+    { key: 'home', label: 'Dashboard (Home)', target: () => ({ tab: 'Home', screen: 'CommunityMain' }) },
+    { key: 'mychild', label: 'My Child', target: () => ({ tab: 'MyChild', screen: 'MyChildMain' }) },
+    { key: 'myclass', label: 'My Class', target: () => ({ tab: 'MyClass', screen: 'MyClassMain' }) },
+    { key: 'chats', label: 'Chats', target: () => ({ tab: 'Chats', screen: 'ChatsList' }) },
+    { key: 'settings', label: 'Settings', target: () => ({ tab: 'Settings', screen: 'SettingsMain' }) },
+    { key: 'help', label: 'Settings → Help', target: () => ({ tab: 'Settings', screen: 'Help' }) },
+    { key: 'controls', label: 'Admin Controls', target: () => ({ tab: 'Controls', screen: 'ControlsMain' }) },
+    { key: 'student-dir', label: 'Student Directory', target: () => ({ tab: 'Controls', screen: 'StudentDirectory' }) },
+    { key: 'faculty-dir', label: 'Faculty Directory', target: () => ({ tab: 'Controls', screen: 'FacultyDirectory' }) },
+    { key: 'parent-dir', label: 'Parent Directory', target: () => ({ tab: 'Controls', screen: 'ParentDirectory' }) },
+    { key: 'attendance', label: 'Attendance', target: () => ({ tab: 'Controls', screen: 'Attendance' }) },
+    { key: 'program-dir', label: 'Program Directory', target: () => ({ tab: 'Controls', screen: 'ProgramDirectory' }) },
+    { key: 'campus-dir', label: 'Campus Directory', target: () => ({ tab: 'Controls', screen: 'CampusDirectory' }) },
+    { key: 'program-docs', label: 'Program Docs', target: () => ({ tab: 'Controls', screen: 'ProgramDocuments' }) },
+    { key: 'campus-docs', label: 'Campus Docs', target: () => ({ tab: 'Controls', screen: 'CampusDocuments' }) },
+  ];
+
+  function jumpTo(targetFactory) {
+    try {
+      const { tab, screen } = targetFactory();
+      logPress('DevTools:Navigate', { tab, screen });
+      if (!navigationRef.isReady()) {
+        Alert.alert('Navigation not ready', 'Try again in a moment.');
+        return;
+      }
+      navigationRef.navigate(tab, screen ? { screen } : undefined);
+      setOpen(false);
+    } catch (e) {
+      console.warn('jumpTo failed', e?.message || e);
+      Alert.alert('Navigation failed', e?.message || 'Could not navigate.');
+    }
+  }
+
+  function cycleProgram() {
+    if (!Array.isArray(programs) || programs.length < 2 || !setSelectedProgramId) return;
+    const idx = programs.findIndex((p) => p.id === currentProgramId);
+    const next = programs[(idx + 1) % programs.length];
+    if (next) {
+      logPress('DevTools:CycleProgram', { from: currentProgramId, to: next.id });
+      setSelectedProgramId(next.id);
+    }
+  }
+
+  function cycleCampus() {
+    if (!Array.isArray(campuses) || campuses.length < 2 || !setSelectedCampusId) return;
+    const idx = campuses.findIndex((c) => c.id === currentCampusId);
+    const next = campuses[(idx + 1) % campuses.length];
+    if (next) {
+      logPress('DevTools:CycleCampus', { from: currentCampusId, to: next.id });
+      setSelectedCampusId(next.id);
+    }
+  }
 
   async function seedAdminAlertA() {
     try {
@@ -139,7 +217,9 @@ export default function DevRoleSwitcher() {
         </View>
       </View>
       {open && (
-        <View style={styles.menu}>
+        <ScrollView style={styles.menu} contentContainerStyle={{ paddingBottom: 4 }} showsVerticalScrollIndicator={false}>
+          {/* Roles */}
+          <Text style={styles.sectionLabel}>Role</Text>
           <TouchableOpacity onPress={() => changeRole('parent')} style={styles.menuBtn}>
             <Text>Parent</Text>
           </TouchableOpacity>
@@ -149,6 +229,31 @@ export default function DevRoleSwitcher() {
           <TouchableOpacity onPress={() => changeRole('admin')} style={styles.menuBtn}>
             <Text>Admin</Text>
           </TouchableOpacity>
+
+          {/* Tenant hierarchy */}
+          <View style={{ height: 1, backgroundColor: '#f3f4f6', marginVertical: 6 }} />
+          <Text style={styles.sectionLabel}>Tenant</Text>
+          <View style={styles.menuBtn}>
+            <Text style={styles.kv}>Org: <Text style={styles.kvVal}>{currentOrganization?.name || '—'}</Text></Text>
+            <Text style={styles.kv}>Program: <Text style={styles.kvVal}>{currentProgram?.name || '—'}</Text></Text>
+            <Text style={styles.kv}>Campus: <Text style={styles.kvVal}>{currentCampus?.name || '—'}</Text></Text>
+          </View>
+          <TouchableOpacity onPress={cycleProgram} disabled={programs.length < 2} style={[styles.menuBtn, programs.length < 2 && { opacity: 0.4 }]}>
+            <Text>Next Program ({programs.length})</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={cycleCampus} disabled={campuses.length < 2} style={[styles.menuBtn, campuses.length < 2 && { opacity: 0.4 }]}>
+            <Text>Next Campus ({campuses.length})</Text>
+          </TouchableOpacity>
+
+          {/* Jump-to screens */}
+          <View style={{ height: 1, backgroundColor: '#f3f4f6', marginVertical: 6 }} />
+          <Text style={styles.sectionLabel}>Jump to screen</Text>
+          {NAV_TARGETS.map((item) => (
+            <TouchableOpacity key={item.key} onPress={() => jumpTo(item.target)} style={styles.menuBtn}>
+              <Text>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+
           <View style={{ height: 1, backgroundColor: '#f3f4f6', marginVertical: 6 }} />
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 6 }}>
             <Text style={{ marginRight: 8 }}>Show Dev Tools</Text>
@@ -198,7 +303,7 @@ export default function DevRoleSwitcher() {
           <TouchableOpacity onPress={() => { try { logPress('DevTools:ClearChildren'); resetChildrenToDemo(); Alert.alert('Cleared', 'Children cleared (use dev seed to repopulate)'); } catch (e) { Alert.alert('Error', 'Could not clear children'); } }} style={styles.menuBtn}>
             <Text>Clear Children (use dev seed)</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       )}
 
       <Modal visible={showLoginModal} animationType="slide" onRequestClose={() => setShowLoginModal(false)}>
@@ -241,7 +346,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
+    maxHeight: 460,
+    width: 260,
   },
+  sectionLabel: {
+    paddingHorizontal: 6,
+    paddingTop: 4,
+    paddingBottom: 2,
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  kv: { fontSize: 12, color: '#475569' },
+  kvVal: { color: '#0f172a', fontWeight: '700' },
   menuBtn: {
     paddingVertical: 8,
     paddingHorizontal: 12,

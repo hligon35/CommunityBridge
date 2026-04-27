@@ -33,7 +33,7 @@ export default function ScreenHeader({ title, showBack = true, left, right }) {
         <View style={styles.backPlaceholder} />
       )}
 
-      {title ? <Text style={styles.title}>{title}</Text> : <View style={styles.titlePlaceholder} />}
+      {title ? <Text style={styles.title} numberOfLines={1} pointerEvents="none">{title}</Text> : <View style={styles.titlePlaceholder} />}
 
       <View style={styles.right}>{right || null}</View>
     </View>
@@ -42,11 +42,26 @@ export default function ScreenHeader({ title, showBack = true, left, right }) {
 
 const styles = StyleSheet.create({
   header: { position: 'relative', height: 56, justifyContent: 'center', paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  back: { position: 'absolute', left: 12, top: 8 },
-  left: { position: 'absolute', left: 12, top: 8 },
-  backInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 6, paddingHorizontal: 6, backgroundColor: 'transparent' },
-  backPlaceholder: { width: 84, position: 'absolute', left: 12, top: 8 },
-  title: { fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  back: { position: 'absolute', left: 12, top: 10, width: 44, height: 40, alignItems: 'center', justifyContent: 'center' },
+  left: { position: 'absolute', left: 12, top: 10 },
+  backInner: {
+    width: 40,
+    height: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  backPlaceholder: { width: 84, position: 'absolute', left: 12, top: 10 },
+  title: { fontSize: 18, fontWeight: '700', textAlign: 'center', marginHorizontal: 64 },
   titlePlaceholder: { height: 0 },
-  right: { position: 'absolute', right: 12, top: 8, minWidth: 34, alignItems: 'flex-end' }
+  right: { position: 'absolute', right: 12, top: 10, minWidth: 34, alignItems: 'flex-end' }
 });

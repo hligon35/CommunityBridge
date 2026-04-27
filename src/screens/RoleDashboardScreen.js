@@ -2,8 +2,10 @@ import React, { useMemo } from 'react';
 import { Alert, Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import TenantSwitcher from '../components/TenantSwitcher';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
+import { useTenant } from '../core/tenant/TenantContext';
 
 const moodGoodIcon = require('../../assets/icons/good.png');
 const moodModerateIcon = require('../../assets/icons/moderate.png');
@@ -67,8 +69,12 @@ function childCarouselImageFor(child, index) {
 export default function RoleDashboardScreen({ navigation }) {
   const { user } = useAuth();
   const { children = [], therapists = [], urgentMemos = [] } = useData();
+  const tenant = useTenant();
   const role = String(user?.role || 'parent').trim().toLowerCase();
   const isTherapist = role === 'therapist';
+  const labels = tenant?.labels || {};
+  const dashboardPreset = tenant?.dashboardPreset || {};
+  const childProfileMode = tenant?.childProfileMode || {};
   const relevantChildren = useMemo(() => findRelevantChildren(role, user?.id, children), [children, role, user?.id]);
   const careTeamCount = useMemo(() => {
     if (isTherapist) return Math.max(1, relevantChildren.length);
@@ -137,8 +143,8 @@ export default function RoleDashboardScreen({ navigation }) {
     };
   }, [relevantChildren]);
 
-  const dashboardCards = [
-    {
+  const cardDefinitions = {
+    'next-session': {
       key: 'next-session',
       title: 'Next Session',
       value: nextSession,
@@ -146,14 +152,14 @@ export default function RoleDashboardScreen({ navigation }) {
       imageSource: nextSessionIcon,
       onPress: () => navigation.getParent()?.navigate(isTherapist ? 'MyClass' : 'MyChild'),
     },
-    {
+    'mood-score': {
       key: 'mood-score',
       title: 'Mood Score',
       value: moodSummary.value,
       hint: moodSummary.hint,
       imageSource: moodSummary.imageSource,
     },
-    {
+    'progress-report': {
       key: 'progress-report',
       title: 'Progress Report',
       value: `${relevantChildren.length}`,
@@ -161,22 +167,22 @@ export default function RoleDashboardScreen({ navigation }) {
       imageSource: progressReportIcon,
       onPress: () => navigation.getParent()?.navigate(isTherapist ? 'MyClass' : 'MyChild'),
     },
-    {
+    'items-needed': {
       key: 'items-needed',
       title: 'Items Needed',
       value: pendingItems ? `${pendingItems} pending` : 'None right now',
       hint: 'Check with your center for updates.',
       imageSource: itemsNeededIcon,
     },
-    {
+    'care-team': {
       key: 'care-team',
-      title: 'My Care Team',
+      title: labels.careTeam || 'My Care Team',
       value: careTeamCount ? `${careTeamCount} members` : 'No team assigned',
       hint: isTherapist ? 'Your assigned caseload.' : 'Therapists connected to your family.',
       imageSource: careTeamIcon,
       onPress: () => navigation.getParent()?.navigate(isTherapist ? 'MyClass' : 'MyChild'),
     },
-    {
+    billing: {
       key: 'billing',
       title: 'Billing',
       value: 'Office managed',
@@ -184,29 +190,46 @@ export default function RoleDashboardScreen({ navigation }) {
       imageSource: insuranceBillingIcon,
       onPress: () => Alert.alert('Billing', 'Billing is currently handled outside the app.'),
     },
-    {
-      key: 'parent-resources',
-      title: 'Parent Resources',
-      value: isTherapist ? 'Staff resources' : 'Help & support',
+    resources: {
+      key: 'resources',
+      title: labels.resources || 'Parent Resources',
+      value: isTherapist ? (labels.resourcesValueStaff || 'Staff resources') : (labels.resourcesValueFamily || 'Help & support'),
       hint: 'Open guidance, support, and reference details.',
       imageSource: parentResourcesIcon,
       onPress: () => navigation.getParent()?.navigate('Settings', { screen: 'Help' }),
       fullWidth: true,
     },
-  ];
+  };
+  const activePreset = isTherapist ? dashboardPreset.staff : dashboardPreset.family;
+  const presetKeys = Array.isArray(activePreset) && activePreset.length
+    ? activePreset
+    : ['next-session', 'mood-score', 'progress-report', 'items-needed', 'care-team', 'billing', 'resources'];
+  const featureFlags = tenant?.featureFlags || {};
+  const cardFlagGates = {
+    billing: () => featureFlags.programBilling !== false,
+  };
+  const dashboardCards = presetKeys
+    .map((key) => cardDefinitions[key])
+    .filter((card) => {
+      if (!card) return false;
+      const gate = cardFlagGates[card.key];
+      return gate ? gate() : true;
+    });
 
   return (
     <ScreenWrapper bannerShowBack={false} style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
-          <Text style={styles.heroEyebrow}>{isTherapist ? 'Therapist Dashboard' : 'Family Dashboard'}</Text>
+          <Text style={styles.heroEyebrow}>{isTherapist ? (labels.staffDashboard || 'Therapist Dashboard') : (labels.dashboard || 'Dashboard')}</Text>
           <Text style={styles.heroTitle}>Community tools are paused for now.</Text>
           <Text style={styles.heroText}>Use this dashboard to jump into schedules, care-team information, billing context, and support resources while the wall is offline.</Text>
         </View>
 
+        <TenantSwitcher />
+
         {!isTherapist && relevantChildren.length ? (
           <View style={styles.familyCarouselSection}>
-            <Text style={styles.familyCarouselTitle}>Your Family</Text>
+            <Text style={styles.familyCarouselTitle}>{labels.familySection || 'Your Family'}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.familyCarouselTrack}>
               {relevantChildren.map((child, index) => (
                 <TouchableOpacity
@@ -217,7 +240,7 @@ export default function RoleDashboardScreen({ navigation }) {
                 >
                   <Image source={childCarouselImageFor(child, index)} style={styles.familyCardImage} resizeMode="contain" />
                   <Text style={styles.familyCardName} numberOfLines={1}>{child?.name || 'Child'}</Text>
-                  <Text style={styles.familyCardMeta} numberOfLines={1}>{child?.room || child?.age || 'Family member'}</Text>
+                  <Text style={styles.familyCardMeta} numberOfLines={1}>{child?.room || child?.age || childProfileMode.entityLabel || 'Family member'}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>

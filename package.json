@@ -45,6 +45,8 @@
     "smoke:server": "cross-env BB_BASE_URL=http://127.0.0.1:3005 node ./scripts/smoke-e2e.js",
     "db:dups": "node ./scripts/find-duplicate-users.js",
     "db:migrate:pg": "node ./scripts/migrate-sqlite-to-postgres.js",
+    "seed:tenant-directory": "node ./scripts/seed-tenant-directory.js",
+    "seed:tenant-directory:dry": "node ./scripts/seed-tenant-directory.js --dry",
     "seed:test-users": "node ./scripts/seed-test-users.js",
     "seed:test-users:dry": "node ./scripts/seed-test-users.js --dry",
     "dev:user:sync": "node ./scripts/sync-dev-account.js",
