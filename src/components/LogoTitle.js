@@ -10,6 +10,6 @@ export default function LogoTitle({ width = 120, height = 36, style }) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 0, paddingHorizontal: 0, marginVertical: -6 },
+  wrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: -8, paddingHorizontal: 0, marginVertical: -16 },
   text: { fontSize: 20, fontWeight: '800', color: '#5a20c5ff' },
 });

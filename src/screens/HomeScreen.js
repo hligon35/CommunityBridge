@@ -393,7 +393,7 @@ export default function HomeScreen() {
             <FlatList
               data={feedItems}
               onTouchStart={() => Keyboard.dismiss()}
-              keyExtractor={(i) => (i && i.id ? String(i.id) : String(i?.__type || Math.random()))}
+              keyExtractor={(i, index) => (i && i.id ? String(i.id) : `idx-${index}-${i?.__type || ''}`)}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}

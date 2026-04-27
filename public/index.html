@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/png" href="/icon.png" sizes="any" />
     <link rel="apple-touch-icon" href="/icon.png" />
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+    <link rel="dns-prefetch" href="https://www.gstatic.com" />
+    <link rel="preload" as="image" href="/icon.png" fetchpriority="high" />
     <script>
       (function () {
         var CANONICAL_HOST = 'communitybridge.app';
@@ -58,12 +61,57 @@
         // ignore
       }
     </script>
-    <title>CommunityBridge</title>
-    <meta name="description" content="CommunityBridge keeps parents, caregivers, and providers aligned with updates, messages, and schedules." />
+    <title>CommunityBridge — Family updates, messages, and therapy schedules</title>
+    <meta name="description" content="CommunityBridge keeps parents, caregivers, and providers aligned with board posts, direct messages, urgent memos, and pickup time changes — in one secure place." />
+    <meta name="keywords" content="family communication app, ABA therapy schedules, caregiver messaging, school parent app, therapy team coordination, CommunityBridge" />
+    <meta name="theme-color" content="#16a34a" />
+    <link rel="canonical" href="https://communitybridge.app/" />
 
-    <meta property="og:title" content="CommunityBridge" />
-    <meta property="og:description" content="One place for family updates and therapy schedules." />
+    <meta property="og:site_name" content="CommunityBridge" />
+    <meta property="og:title" content="CommunityBridge — Family updates, messages, and therapy schedules" />
+    <meta property="og:description" content="One place for family updates, direct messages, urgent memos, and therapy schedules." />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://communitybridge.app/" />
+    <meta property="og:image" content="https://communitybridge.app/og-image.png" />
+    <meta property="og:image:alt" content="CommunityBridge — connect your school community" />
+    <meta property="og:locale" content="en_US" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="CommunityBridge — Family updates and therapy schedules" />
+    <meta name="twitter:description" content="One place for family updates, direct messages, urgent memos, and therapy schedules." />
+    <meta name="twitter:image" content="https://communitybridge.app/og-image.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://communitybridge.app/#org",
+            "name": "CommunityBridge",
+            "url": "https://communitybridge.app/",
+            "logo": "https://communitybridge.app/titlelogo.png"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://communitybridge.app/#website",
+            "url": "https://communitybridge.app/",
+            "name": "CommunityBridge",
+            "publisher": { "@id": "https://communitybridge.app/#org" },
+            "inLanguage": "en-US"
+          },
+          {
+            "@type": "MobileApplication",
+            "name": "CommunityBridge",
+            "operatingSystem": "iOS, Android",
+            "applicationCategory": "CommunicationApplication",
+            "url": "https://communitybridge.app/download",
+            "image": "https://communitybridge.app/og-image.png",
+            "description": "Family updates, direct messages, urgent memos, and therapy schedules in one secure app."
+          }
+        ]
+      }
+    </script>
 
     <style>
       :root {
@@ -239,7 +287,7 @@
     <div class="wrap">
       <div class="nav">
         <a class="brand" href="/" aria-label="CommunityBridge home">
-          <img class="brandLogo" src="/titlelogo.png" alt="CommunityBridge" />
+          <img class="brandLogo" src="/titlelogo.png" alt="CommunityBridge" decoding="async" />
           <div class="brandTag">Family updates • messages • schedules</div>
         </a>
 
@@ -278,8 +326,8 @@
             </div>
 
             <div class="heroMedia">
-              <div class="heroArt" aria-label="CommunityBridge app icon">
-                <img class="heroImg" src="/icon.png" alt="CommunityBridge app icon" />
+              <div class="heroArt" aria-label="CommunityBridge — connect your school community">
+                <img class="heroImg" src="/icon.png" alt="CommunityBridge — connect your school community" decoding="async" fetchpriority="high" />
               </div>
 
               <div class="storeRow" aria-label="App store buttons">
@@ -287,17 +335,17 @@
                   class="storeBtn"
                   href="https://testflight.apple.com/join/REPLACE_ME"
                   target="_blank"
-                  rel="noopener"
+                  rel="noopener noreferrer"
                   title="TestFlight link for iPhone/iPad testers"
                 >
-                  <img src="/appleStore.png" alt="Download on the App Store" />
+                  <img src="/appleStore.png" alt="Download on the App Store" loading="lazy" decoding="async" />
                 </a>
                 <a
                   class="storeBtn"
                   href="/downloads/buddyboard-android.apk"
                   title="Android APK for testers"
                 >
-                  <img src="/googleStore.png" alt="Get it on Google Play" />
+                  <img src="/googleStore.png" alt="Get it on Google Play" loading="lazy" decoding="async" />
                 </a>
               </div>
             </div>

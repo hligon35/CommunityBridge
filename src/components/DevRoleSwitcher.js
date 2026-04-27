@@ -97,10 +97,9 @@ export default function DevRoleSwitcher() {
     Alert.alert('Role changed', `Switched to ${r}`);
   };
 
-  const { urgentMemos, fetchAndSync, resetMessagesToDemo, clearMessages, resetChildrenToDemo, parents, children, sendTimeUpdateAlert, sendAdminMemo } = useData();
+  const { resetMessagesToDemo, clearMessages, resetChildrenToDemo, parents, children, sendTimeUpdateAlert, sendAdminMemo } = useData();
   const tenant = useTenant() || {};
   const {
-    organizations = [],
     programs = [],
     campuses = [],
     currentOrganization,
@@ -112,22 +111,45 @@ export default function DevRoleSwitcher() {
     setSelectedCampusId,
   } = tenant;
 
-  const NAV_TARGETS = [
-    { key: 'home', label: 'Dashboard (Home)', target: () => ({ tab: 'Home', screen: 'CommunityMain' }) },
-    { key: 'mychild', label: 'My Child', target: () => ({ tab: 'MyChild', screen: 'MyChildMain' }) },
-    { key: 'myclass', label: 'My Class', target: () => ({ tab: 'MyClass', screen: 'MyClassMain' }) },
-    { key: 'chats', label: 'Chats', target: () => ({ tab: 'Chats', screen: 'ChatsList' }) },
-    { key: 'settings', label: 'Settings', target: () => ({ tab: 'Settings', screen: 'SettingsMain' }) },
-    { key: 'help', label: 'Settings → Help', target: () => ({ tab: 'Settings', screen: 'Help' }) },
-    { key: 'controls', label: 'Admin Controls', target: () => ({ tab: 'Controls', screen: 'ControlsMain' }) },
-    { key: 'student-dir', label: 'Student Directory', target: () => ({ tab: 'Controls', screen: 'StudentDirectory' }) },
-    { key: 'faculty-dir', label: 'Faculty Directory', target: () => ({ tab: 'Controls', screen: 'FacultyDirectory' }) },
-    { key: 'parent-dir', label: 'Parent Directory', target: () => ({ tab: 'Controls', screen: 'ParentDirectory' }) },
-    { key: 'attendance', label: 'Attendance', target: () => ({ tab: 'Controls', screen: 'Attendance' }) },
-    { key: 'program-dir', label: 'Program Directory', target: () => ({ tab: 'Controls', screen: 'ProgramDirectory' }) },
-    { key: 'campus-dir', label: 'Campus Directory', target: () => ({ tab: 'Controls', screen: 'CampusDirectory' }) },
-    { key: 'program-docs', label: 'Program Docs', target: () => ({ tab: 'Controls', screen: 'ProgramDocuments' }) },
-    { key: 'campus-docs', label: 'Campus Docs', target: () => ({ tab: 'Controls', screen: 'CampusDocuments' }) },
+  // Navigation targets are grouped by area. All routes are defined in App.js;
+  // the active role determines which root tab is mounted, but the dev switcher
+  // can still navigate cross-role after using the Role buttons above.
+  const NAV_GROUPS = [
+    {
+      title: 'Main',
+      items: [
+        { key: 'home', label: 'Dashboard (Home)', target: () => ({ tab: 'Home', screen: 'CommunityMain' }) },
+        { key: 'chats', label: 'Chats', target: () => ({ tab: 'Chats', screen: 'ChatsList' }) },
+        { key: 'mychild', label: 'My Child', target: () => ({ tab: 'MyChild', screen: 'MyChildMain' }) },
+        { key: 'myclass', label: 'My Class', target: () => ({ tab: 'MyClass', screen: 'MyClassMain' }) },
+        { key: 'settings', label: 'Settings', target: () => ({ tab: 'Settings', screen: 'SettingsMain' }) },
+        { key: 'help', label: 'Help', target: () => ({ tab: 'Settings', screen: 'Help' }) },
+      ],
+    },
+    {
+      title: 'Admin',
+      items: [
+        { key: 'controls', label: 'Admin Controls', target: () => ({ tab: 'Controls', screen: 'ControlsMain' }) },
+        { key: 'attendance', label: 'Attendance', target: () => ({ tab: 'Controls', screen: 'Attendance' }) },
+      ],
+    },
+    {
+      title: 'Directories',
+      items: [
+        { key: 'student-dir', label: 'Students', target: () => ({ tab: 'Controls', screen: 'StudentDirectory' }) },
+        { key: 'faculty-dir', label: 'Faculty', target: () => ({ tab: 'Controls', screen: 'FacultyDirectory' }) },
+        { key: 'parent-dir', label: 'Parents', target: () => ({ tab: 'Controls', screen: 'ParentDirectory' }) },
+        { key: 'program-dir', label: 'Programs', target: () => ({ tab: 'Controls', screen: 'ProgramDirectory' }) },
+        { key: 'campus-dir', label: 'Campuses', target: () => ({ tab: 'Controls', screen: 'CampusDirectory' }) },
+      ],
+    },
+    {
+      title: 'Documents',
+      items: [
+        { key: 'program-docs', label: 'Program Docs', target: () => ({ tab: 'Controls', screen: 'ProgramDocuments' }) },
+        { key: 'campus-docs', label: 'Campus Docs', target: () => ({ tab: 'Controls', screen: 'CampusDocuments' }) },
+      ],
+    },
   ];
 
   function jumpTo(targetFactory) {
@@ -218,7 +240,7 @@ export default function DevRoleSwitcher() {
       </View>
       {open && (
         <ScrollView style={styles.menu} contentContainerStyle={{ paddingBottom: 4 }} showsVerticalScrollIndicator={false}>
-          {/* Roles */}
+          {/* Role */}
           <Text style={styles.sectionLabel}>Role</Text>
           <TouchableOpacity onPress={() => changeRole('parent')} style={styles.menuBtn}>
             <Text>Parent</Text>
@@ -230,8 +252,8 @@ export default function DevRoleSwitcher() {
             <Text>Admin</Text>
           </TouchableOpacity>
 
-          {/* Tenant hierarchy */}
-          <View style={{ height: 1, backgroundColor: '#f3f4f6', marginVertical: 6 }} />
+          {/* Tenant */}
+          <View style={styles.divider} />
           <Text style={styles.sectionLabel}>Tenant</Text>
           <View style={styles.menuBtn}>
             <Text style={styles.kv}>Org: <Text style={styles.kvVal}>{currentOrganization?.name || '—'}</Text></Text>
@@ -245,50 +267,59 @@ export default function DevRoleSwitcher() {
             <Text>Next Campus ({campuses.length})</Text>
           </TouchableOpacity>
 
-          {/* Jump-to screens */}
-          <View style={{ height: 1, backgroundColor: '#f3f4f6', marginVertical: 6 }} />
-          <Text style={styles.sectionLabel}>Jump to screen</Text>
-          {NAV_TARGETS.map((item) => (
-            <TouchableOpacity key={item.key} onPress={() => jumpTo(item.target)} style={styles.menuBtn}>
-              <Text>{item.label}</Text>
-            </TouchableOpacity>
+          {/* Navigation (grouped) */}
+          {NAV_GROUPS.map((group) => (
+            <View key={group.title}>
+              <View style={styles.divider} />
+              <Text style={styles.sectionLabel}>Navigate — {group.title}</Text>
+              {group.items.map((item) => (
+                <TouchableOpacity key={item.key} onPress={() => jumpTo(item.target)} style={styles.menuBtn}>
+                  <Text>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           ))}
 
-          <View style={{ height: 1, backgroundColor: '#f3f4f6', marginVertical: 6 }} />
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 6 }}>
-            <Text style={{ marginRight: 8 }}>Show Dev Tools</Text>
+          {/* View Toggles */}
+          <View style={styles.divider} />
+          <Text style={styles.sectionLabel}>View Toggles</Text>
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Show Dev Tools</Text>
             <ImageToggle value={devTools} onValueChange={setDevToolsPersisted} accessibilityLabel="Show Dev Tools" />
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 6, marginTop:6 }}>
-            <Text style={{ marginRight: 8 }}>Show Directory (seed)</Text>
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Show Directory (seed)</Text>
             <ImageToggle value={showDirectory} onValueChange={setShowDirectoryPersisted} accessibilityLabel="Show Directory" />
           </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 6, marginTop:6 }}>
-            <Text style={{ marginRight: 8 }}>Show Wall Posts</Text>
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Show Wall Posts</Text>
             <ImageToggle value={showWall} onValueChange={setShowWallPersisted} accessibilityLabel="Show Wall Posts" />
           </View>
 
-          <TouchableOpacity onPress={() => setShowLoginModal(true)} style={styles.menuBtn}>
-            <Text>Open Login Screen</Text>
-          </TouchableOpacity>
-          <View style={{ height: 1, backgroundColor: '#f3f4f6', marginVertical: 6 }} />
+          {/* Seed Data */}
+          <View style={styles.divider} />
+          <Text style={styles.sectionLabel}>Seed — Admin Alerts</Text>
           <TouchableOpacity onPress={() => seedAdminAlertA()} style={styles.menuBtn}>
-            <Text>Seed Admin Alert A (pickup)</Text>
+            <Text>Pickup alert A</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => seedAdminAlertB()} style={styles.menuBtn}>
-            <Text>Seed Admin Alert B (dropoff)</Text>
+            <Text>Dropoff alert B</Text>
           </TouchableOpacity>
-          <View style={{ height: 1, backgroundColor: '#f3f4f6', marginVertical: 6 }} />
+
+          <View style={styles.divider} />
+          <Text style={styles.sectionLabel}>Seed — Parent Memos</Text>
           <TouchableOpacity onPress={() => seedParentAlertA()} style={styles.menuBtn}>
-            <Text>Seed Parent Alert A</Text>
+            <Text>Parent memo A</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => seedParentAlertB()} style={styles.menuBtn}>
-            <Text>Seed Parent Alert B</Text>
+            <Text>Parent memo B</Text>
           </TouchableOpacity>
-          <View style={{ height: 1, backgroundColor: '#f3f4f6', marginVertical: 6 }} />
+
+          {/* Reset Data */}
+          <View style={styles.divider} />
+          <Text style={styles.sectionLabel}>Reset Data</Text>
           <TouchableOpacity onPress={() => { try { logPress('DevTools:LoadDemoMessages'); resetMessagesToDemo(); Alert.alert('Demo messages loaded'); } catch (e) { Alert.alert('Error', 'Could not load demo messages'); } }} style={styles.menuBtn}>
-            <Text>Load Demo Messages</Text>
+            <Text>Load demo messages</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => {
             logPress('DevTools:ClearMessagesPrompt');
@@ -297,11 +328,17 @@ export default function DevRoleSwitcher() {
               { text: 'Clear', style: 'destructive', onPress: () => { try { logPress('DevTools:ClearMessagesConfirm'); clearMessages(); Alert.alert('Cleared', 'All messages removed'); } catch (e) { Alert.alert('Error', 'Could not clear messages'); } } }
             ]);
           }} style={styles.menuBtn}>
-            <Text>Clear Messages</Text>
+            <Text>Clear messages</Text>
           </TouchableOpacity>
-          <View style={{ height: 1, backgroundColor: '#f3f4f6', marginVertical: 6 }} />
           <TouchableOpacity onPress={() => { try { logPress('DevTools:ClearChildren'); resetChildrenToDemo(); Alert.alert('Cleared', 'Children cleared (use dev seed to repopulate)'); } catch (e) { Alert.alert('Error', 'Could not clear children'); } }} style={styles.menuBtn}>
-            <Text>Clear Children (use dev seed)</Text>
+            <Text>Clear children (use dev seed)</Text>
+          </TouchableOpacity>
+
+          {/* Auth */}
+          <View style={styles.divider} />
+          <Text style={styles.sectionLabel}>Auth</Text>
+          <TouchableOpacity onPress={() => setShowLoginModal(true)} style={styles.menuBtn}>
+            <Text>Open Login Screen</Text>
           </TouchableOpacity>
         </ScrollView>
       )}
@@ -361,6 +398,15 @@ const styles = StyleSheet.create({
   },
   kv: { fontSize: 12, color: '#475569' },
   kvVal: { color: '#0f172a', fontWeight: '700' },
+  divider: { height: 1, backgroundColor: '#f3f4f6', marginVertical: 6 },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+  },
+  toggleLabel: { marginRight: 8, color: '#0f172a' },
   menuBtn: {
     paddingVertical: 8,
     paddingHorizontal: 12,

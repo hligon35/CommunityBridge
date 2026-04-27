@@ -9,9 +9,9 @@ const SUPPORT_EMAIL = (() => {
     const v = (typeof process !== 'undefined' && process.env && process.env.EXPO_PUBLIC_SUPPORT_EMAIL)
       ? String(process.env.EXPO_PUBLIC_SUPPORT_EMAIL)
       : '';
-    return v.trim() || 'info@communitybridge.app';
+    return v.trim() || 'support@communitybridge.app';
   } catch (e) {
-    return 'info@communitybridge.app';
+    return 'support@communitybridge.app';
   }
 })();
 

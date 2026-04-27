@@ -77,7 +77,7 @@ export default function PostThreadScreen() {
           <View style={{ flex: 1 }}>
             <FlatList
               data={post.comments || []}
-              keyExtractor={(c) => c.id || `${c.createdAt || Math.random()}`}
+              keyExtractor={(c, index) => (c && c.id != null ? String(c.id) : `idx-${index}-${c?.createdAt || ''}`)}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
               contentContainerStyle={{ paddingBottom: 120 }}
