@@ -3,10 +3,17 @@
     {
       "id": "centria-healthcare",
       "name": "Centria Healthcare",
+      "directoryName": "Centria Healthcare HQ",
       "slug": "centria-healthcare",
+      "type": "Corporate",
       "shortCode": "CENTRIA",
       "phone": "855-772-8847",
       "email": "info@centriahealthcare.com",
+      "address1": "27777 Inkster Rd Suite 100",
+      "address2": "",
+      "city": "Farmington Hills",
+      "state": "MI",
+      "zipCode": "48334",
       "active": true
     }
   ],
@@ -16,7 +23,7 @@
       "organizationId": "centria-healthcare",
       "name": "Centria Autism",
       "slug": "centria-autism",
-      "type": "centerBasedAba",
+      "type": "Center Based ABA",
       "description": "Broad ABA therapy provider offering center-based services.",
       "active": true
     },
@@ -25,7 +32,7 @@
       "organizationId": "centria-healthcare",
       "name": "Life Skills Autism Academy",
       "slug": "life-skills-autism-academy",
-      "type": "earlyInterventionAcademy",
+      "type": "Early Intervention Academy",
       "description": "Specialized early intervention, school-like autism program.",
       "active": true
     }

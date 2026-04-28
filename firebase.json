@@ -57,6 +57,35 @@
           }
         },
         {
+          "source": "/organizations-intake-submit",
+          "run": {
+            "serviceId": "communitybridge",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/organizations-intake-config",
+          "run": {
+            "serviceId": "communitybridge",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/organizations-intake-action",
+          "run": {
+            "serviceId": "communitybridge",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/organizations",
+          "destination": "/organizations/index.html"
+        },
+        {
+          "source": "/organizations/**",
+          "destination": "/organizations/index.html"
+        },
+        {
           "source": "/app-login",
           "destination": "/app-login/index.html"
         },

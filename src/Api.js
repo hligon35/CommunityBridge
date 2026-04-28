@@ -3,6 +3,8 @@ import { logger } from './utils/logger';
 import { getAuthInstance, getAuthInitError, db, storage, functions } from './firebase';
 import { BASE_URL } from './config';
 import { DEFAULT_AVATAR_TOKEN } from './utils/idVisibility';
+import { isAdminRole } from './core/tenant/models';
+import { resolveSeedEnrollmentContext } from './seed/tenantSeed';
 
 import {
   GoogleAuthProvider,
@@ -226,6 +228,29 @@ export async function signup(payload) {
   const email = normalizeEmailInput(payload?.email);
   const password = String(payload?.password || '');
   const role = String(payload?.role || 'parent');
+  const organizationId = String(payload?.organizationId || '').trim();
+  const programId = String(payload?.programId || '').trim();
+  const campusId = String(payload?.campusId || '').trim();
+  const enrollmentCode = String(payload?.enrollmentCode || '').trim();
+
+  let enrollmentContext = null;
+  if (organizationId || programId || campusId || enrollmentCode) {
+    if (!organizationId || !programId || !enrollmentCode) {
+      const err = new Error('Organization, program, and enrollment code are required.');
+      err.code = 'BB_ENROLLMENT_CONTEXT_REQUIRED';
+      throw err;
+    }
+    try {
+      enrollmentContext = await resolveEnrollmentContext({ organizationId, programId, campusId, enrollmentCode });
+    } catch (_) {
+      enrollmentContext = resolveSeedEnrollmentContext({ organizationId, programId, campusId, enrollmentCode });
+    }
+    if (!enrollmentContext?.organization?.id || !enrollmentContext?.program?.id || !enrollmentContext?.campus?.id) {
+      const err = new Error('The enrollment code did not match the selected organization and program.');
+      err.code = 'BB_INVALID_ENROLLMENT_CODE';
+      throw err;
+    }
+  }
 
   const cred = await createUserWithEmailAndPassword(a, email, password);
   try {
@@ -240,6 +265,13 @@ export async function signup(payload) {
     lastName,
     email,
     role,
+    organizationId: enrollmentContext?.organization?.id || organizationId || '',
+    organizationName: enrollmentContext?.organization?.name || '',
+    programId: enrollmentContext?.program?.id || programId || '',
+    programName: enrollmentContext?.program?.name || '',
+    campusId: enrollmentContext?.campus?.id || campusId || '',
+    campusName: enrollmentContext?.campus?.name || '',
+    enrollmentCode: enrollmentContext?.campus?.enrollmentCode || enrollmentCode || '',
     avatar: DEFAULT_AVATAR_TOKEN,
     active: true,
   });
@@ -881,7 +913,7 @@ export async function getMessages() {
   queries.push(query(messagesRef, where('participantUids', 'array-contains', u.uid), orderBy('createdAt', 'desc'), limit(300)));
 
   // Admin inbox: messages addressed to the admin role (for legacy "admin-1" recipients)
-  if (role === 'admin' || role === 'administrator') {
+  if (isAdminRole(role)) {
     queries.push(query(messagesRef, where('toRoles', 'array-contains', 'admin'), orderBy('createdAt', 'desc'), limit(300)));
   }
 
@@ -982,7 +1014,7 @@ export async function getTimeChangeProposals() {
   const role = String((await getUserProfile(u.uid))?.role || 'parent').toLowerCase();
 
   const col = collection(db, 'timeChangeProposals');
-  const q = (role === 'admin' || role === 'administrator')
+  const q = isAdminRole(role)
     ? query(col, orderBy('createdAt', 'desc'), limit(200))
     : query(col, where('proposerUid', '==', u.uid), orderBy('createdAt', 'desc'), limit(200));
 

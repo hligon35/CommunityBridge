@@ -19,6 +19,9 @@ import { configureNotificationHandling } from './src/utils/pushNotifications';
 import { navigationRef } from './src/navigationRef';
 
 import RoleDashboardScreen from './src/screens/RoleDashboardScreen';
+import InsuranceBillingScreen from './src/screens/InsuranceBillingScreen';
+import CareTeamScreen from './src/screens/CareTeamScreen';
+import ScheduleCalendarScreen from './src/screens/ScheduleCalendarScreen';
 import ChatsScreen from './src/screens/ChatsScreen';
 import ChatThreadScreen from './src/screens/ChatThreadScreen';
 import NewThreadScreen from './src/screens/NewThreadScreen';
@@ -133,6 +136,9 @@ function CommunityStack() {
       })}
     >
       <CommunityStackNav.Screen name="CommunityMain" component={RoleDashboardScreen} options={{ title: 'Dashboard' }} />
+      <CommunityStackNav.Screen name="InsuranceBilling" component={InsuranceBillingScreen} options={{ title: 'Billing & Insurance' }} />
+      <CommunityStackNav.Screen name="CareTeam" component={CareTeamScreen} options={{ title: 'My Care Team' }} />
+      <CommunityStackNav.Screen name="ScheduleCalendar" component={ScheduleCalendarScreen} options={{ title: 'Schedule' }} />
     </CommunityStackNav.Navigator>
   );
 }

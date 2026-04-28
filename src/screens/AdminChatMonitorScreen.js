@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useData } from '../DataContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -7,7 +7,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 export default function AdminChatMonitorScreen() {
   const route = useRoute();
   const navigation = useNavigation();
-  const { messages = [], parents = [], therapists = [] } = useData();
+  const { messages = [], parents = [], therapists = [], chatBlockedUserIds = [], blockChatUser, unblockChatUser } = useData();
   const [query, setQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const { initialUserId } = route.params || {};
@@ -45,14 +45,39 @@ export default function AdminChatMonitorScreen() {
     return list.filter(l => (l.participants || []).some(p => `${p}`.toLowerCase().includes(uid)));
   }, [messages, selectedUser]);
 
+  const isSelectedUserChatBlocked = useMemo(() => {
+    if (!selectedUser?.id) return false;
+    return (chatBlockedUserIds || []).some((id) => String(id) === String(selectedUser.id));
+  }, [chatBlockedUserIds, selectedUser]);
+
+  function toggleSelectedUserChatBlock() {
+    if (!selectedUser?.id) return;
+    if (isSelectedUserChatBlocked) {
+      unblockChatUser(selectedUser.id);
+      return;
+    }
+    Alert.alert(
+      'Block messaging',
+      `Disable ${selectedUser.name || 'this user'} from sending messages?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Block', style: 'destructive', onPress: () => blockChatUser(selectedUser.id) },
+      ]
+    );
+  }
+
   return (
     <ScreenWrapper>
       <View style={{ padding: 12 }}>
-        <Text style={{ fontWeight: '700', fontSize: 16 }}>Chat Monitor</Text>
-        <Text style={{ color: '#6b7280', marginTop: 6 }}>Search users (parents or therapists) to view their conversations.</Text>
-        <View style={{ marginTop: 12 }}>
-          <TextInput placeholder="Search users" value={query} onChangeText={setQuery} style={{ borderWidth: 1, borderColor: '#e5e7eb', padding: 8, borderRadius: 8 }} />
-        </View>
+        {!selectedUser ? (
+          <>
+            <Text style={{ fontWeight: '700', fontSize: 16 }}>Chat Monitor</Text>
+            <Text style={{ color: '#6b7280', marginTop: 6 }}>Search users (parents or therapists) to view their conversations.</Text>
+            <View style={{ marginTop: 12 }}>
+              <TextInput placeholder="Search users" value={query} onChangeText={setQuery} style={{ borderWidth: 1, borderColor: '#e5e7eb', padding: 8, borderRadius: 8 }} />
+            </View>
+          </>
+        ) : null}
 
         {!selectedUser ? (
           <FlatList
@@ -69,9 +94,26 @@ export default function AdminChatMonitorScreen() {
           />
         ) : (
           <View style={{ marginTop: 12 }}>
-            <TouchableOpacity onPress={() => setSelectedUser(null)} style={{ marginBottom: 12 }}><Text style={{ color: '#2563eb' }}>← Back to users</Text></TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <TouchableOpacity onPress={() => setSelectedUser(null)}>
+                <Text style={{ color: '#2563eb' }}>← Back to users</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={toggleSelectedUserChatBlock}
+                style={{ paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: isSelectedUserChatBlocked ? '#dcfce7' : '#fee2e2', borderWidth: 1, borderColor: isSelectedUserChatBlocked ? '#86efac' : '#fecaca' }}
+              >
+                <Text style={{ fontWeight: '700', color: isSelectedUserChatBlocked ? '#166534' : '#b91c1c' }}>
+                  {isSelectedUserChatBlocked ? 'Unblock Messaging' : 'Block Messaging'}
+                </Text>
+              </TouchableOpacity>
+            </View>
             <Text style={{ fontWeight: '700' }}>{selectedUser.name}</Text>
             <Text style={{ color: '#6b7280', marginTop: 6 }}>Conversations involving {selectedUser.name}:</Text>
+            {isSelectedUserChatBlocked ? (
+              <Text style={{ color: '#166534', marginTop: 8 }}>
+                This user is currently blocked from sending messages.
+              </Text>
+            ) : null}
             <FlatList
               data={threadsForSelected}
               keyExtractor={(i) => `${i.id}`}

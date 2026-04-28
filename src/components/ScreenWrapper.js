@@ -55,7 +55,7 @@ export function ScreenWrapper({ children, style, hideBanner = false, bannerShowB
         <>
           {children}
           {/* spacer to prevent bottom nav from overlapping content */}
-          <View style={{ height: 88 }} accessibilityElementsHidden importantForAccessibility="no" />
+          <View style={{ height: 72 }} accessibilityElementsHidden importantForAccessibility="no" />
         </>
       )}
     </View>

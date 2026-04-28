@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, TextInput, Button, RefreshControl, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard, Platform } from 'react-native';
+import { View, Text, FlatList, TextInput, Button, RefreshControl, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard, Platform, Alert } from 'react-native';
 // removed SafeAreaView usage to avoid shifting content down
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { isAdminRole } from '../core/tenant/models';
 
 export default function ChatThreadScreen({ route }) {
   const { threadId, isNew, to: initialTo } = route.params || {};
-  const { messages, sendMessage, markThreadRead } = useData();
+  const { messages, sendMessage, markThreadRead, chatBlockedUserIds = [] } = useData();
   const [text, setText] = useState('');
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
@@ -29,7 +30,7 @@ export default function ChatThreadScreen({ route }) {
   const isParticipant = useMemo(() => {
     if (isNew) return true;
     if (!threadMessages || !threadMessages.length) return false;
-    if (user && (user.role === 'admin' || user.role === 'ADMIN')) return true;
+    if (user && isAdminRole(user.role)) return true;
     const participants = new Set();
     threadMessages.forEach(m => {
       if (m.sender?.id) participants.add(m.sender.id.toString());
@@ -40,12 +41,25 @@ export default function ChatThreadScreen({ route }) {
     return !!Array.from(participants).find(p => p.toLowerCase() === uid.toLowerCase());
   }, [threadMessages, user, isNew]);
 
+  const isChatBlocked = useMemo(() => {
+    const uid = user?.id != null ? String(user.id) : '';
+    return !!uid && (chatBlockedUserIds || []).some((id) => String(id) === uid);
+  }, [chatBlockedUserIds, user]);
+
   async function handleSend() {
     if (!text.trim()) return;
     if (!isParticipant) return; // prevent sending if not authorized
-    await sendMessage({ threadId, body: text, to: (Array.isArray(initialTo) && initialTo.length) ? initialTo : undefined });
-    setText('');
-    Keyboard.dismiss();
+    if (isChatBlocked) {
+      Alert.alert('Messaging blocked', 'An administrator has disabled your ability to send messages.');
+      return;
+    }
+    try {
+      await sendMessage({ threadId, body: text, to: (Array.isArray(initialTo) && initialTo.length) ? initialTo : undefined });
+      setText('');
+      Keyboard.dismiss();
+    } catch (e) {
+      Alert.alert('Unable to send', e?.message || 'Could not send message.');
+    }
   }
   if (!isParticipant) {
     return (
@@ -104,16 +118,24 @@ export default function ChatThreadScreen({ route }) {
             }}
           />
 
-          <View style={{ padding: 8, flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#eee', backgroundColor: '#fff' }}>
+          <View style={{ padding: 8, borderTopWidth: 1, borderTopColor: '#eee', backgroundColor: '#fff' }}>
+            {isChatBlocked ? (
+              <Text style={{ color: '#b91c1c', fontWeight: '600', marginBottom: 8 }}>
+                Messaging has been disabled for this account by an administrator.
+              </Text>
+            ) : null}
+            <View style={{ flexDirection: 'row' }}>
             <TextInput
               value={text}
               onChangeText={setText}
               placeholder="Message"
-              style={{ flex: 1, padding: 8, borderWidth: 1, borderColor: '#ddd', marginRight: 8 }}
+              style={{ flex: 1, padding: 8, borderWidth: 1, borderColor: '#ddd', marginRight: 8, backgroundColor: isChatBlocked ? '#f8fafc' : '#fff', color: isChatBlocked ? '#94a3b8' : '#111827' }}
               onSubmitEditing={handleSend}
               returnKeyType="send"
+              editable={!isChatBlocked}
             />
-            <Button title="Send" onPress={handleSend} />
+            <Button title="Send" onPress={handleSend} disabled={isChatBlocked} />
+            </View>
           </View>
         </KeyboardAvoidingView>
       </OuterWrapper>

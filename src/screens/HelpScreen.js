@@ -53,8 +53,6 @@ export default function HelpScreen() {
           <MaterialIcons name="email" size={20} color="#fff" style={{ marginRight: 8 }} />
           <Text style={styles.contactText}>Email Support</Text>
         </TouchableOpacity>
-
-        <View style={{ height: 28 }} />
       </ScrollView>
     </ScreenWrapper>
   );

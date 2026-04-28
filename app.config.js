@@ -1,5 +1,31 @@
 // Dynamic Expo config to ensure EXPO_PUBLIC_* values are available at runtime
 // via Constants.expoConfig.extra (not just process.env).
+const fs = require('fs');
+const path = require('path');
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    content.split(/\r?\n/).forEach((line) => {
+      const trimmed = String(line || '').trim();
+      if (!trimmed || trimmed.startsWith('#')) return;
+      const separatorIndex = trimmed.indexOf('=');
+      if (separatorIndex <= 0) return;
+      const key = trimmed.slice(0, separatorIndex).trim();
+      if (!key || Object.prototype.hasOwnProperty.call(process.env, key)) return;
+      const value = trimmed.slice(separatorIndex + 1).trim();
+      process.env[key] = value;
+    });
+  } catch (_) {
+    // Keep Expo config resilient if a local env file is malformed.
+  }
+}
+
+loadEnvFile(path.resolve(__dirname, '.env'));
+loadEnvFile(path.resolve(__dirname, '.env.local'));
+loadEnvFile(path.resolve(__dirname, 'env', 'expo.env'));
+
 module.exports = ({ config }) => {
   const extra = { ...(config.extra || {}) };
 

@@ -33,6 +33,7 @@ export const moduleStyles = StyleSheet.create({
   cardRow: { flexDirection: 'row', alignItems: 'center' },
   cardTitle: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
   cardMeta: { color: '#64748b', fontSize: 12, marginTop: 2 },
+  contactLink: { color: '#2563eb', textDecorationLine: 'underline' },
   badge: {
     backgroundColor: '#dcfce7',
     borderRadius: 999,

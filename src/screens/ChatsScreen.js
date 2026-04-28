@@ -6,6 +6,7 @@ import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { MaterialIcons } from '@expo/vector-icons';
 import { logPress } from '../utils/logger';
 import { HelpButton } from '../components/TopButtons';
+import { isAdminRole } from '../core/tenant/models';
 
 function timeAgo(iso) {
   if (!iso) return '';
@@ -138,7 +139,7 @@ export default function ChatsScreen({ navigation }) {
   });
 
   // enforce access: non-admin users only see threads where they are a participant
-  const visibleList = (user && (user.role === 'admin' || user.role === 'ADMIN')) ? list : list.filter(l => {
+  const visibleList = (user && isAdminRole(user.role)) ? list : list.filter(l => {
     if (!user) return false;
     // try matching by id or name
     return (l.participants || []).some(p => p.toString().toLowerCase().includes((user.id || user.name || '').toString().toLowerCase()));
@@ -179,14 +180,22 @@ export default function ChatsScreen({ navigation }) {
         accessibilityLabel={accessibilityLabel}
         hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
         style={{
-          width: 36,
-          height: 36,
+            width: 36,
+            height: 36,
+            borderRadius: 10,
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: 'transparent',
+            backgroundColor: active ? '#dbeafe' : '#f8fafc',
+            borderWidth: 1,
+            borderColor: active ? '#93c5fd' : '#e2e8f0',
+            shadowColor: '#0f172a',
+            shadowOpacity: active ? 0.12 : 0.06,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: active ? 3 : 2,
         }}
       >
-        <MaterialIcons name={name} size={20} color={active ? '#2563eb' : '#111827'} />
+          <MaterialIcons name={name} size={20} color={active ? '#1d4ed8' : '#0f172a'} />
       </TouchableOpacity>
     );
   }

@@ -4,7 +4,6 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
-import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
@@ -12,7 +11,6 @@ import SignUpScreen from './SignUpScreen';
 import ForgotPasswordScreen from './ForgotPasswordScreen';
 import { useAuth } from '../src/AuthContext';
 import { logger } from '../src/utils/logger';
-import { Sentry } from '../src/sentry';
 import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportError';
 import { getAuthInitError, getFirebaseAppInitError } from '../src/firebase';
 
@@ -38,17 +36,16 @@ function maskClientId(id) {
   return `${s.slice(0, 4)}…${s.slice(-6)}`;
 }
 
-const loginButtonImage = require('../assets/icons/buttons/loginButton.png');
 const googleWebButtonImage = require('../assets/icons/Google assets/wgbutton.png');
 const googleIconImage = require('../assets/icons/Google assets/ggIcon.png');
 const faceIdIconImage = require('../assets/icons/faceID.png');
-const loginLogoImage = require('../assets/icon.png');
+const loginLogoImage = require('../assets/titlelogo.png');
 
 function AuthButtonImage({ source, style, imageStyle }) {
   return <Image source={source} style={[styles.authButtonImage, style, imageStyle]} resizeMode="contain" />;
 }
 
-function LoginToast({ toast, onClose }) {
+function LoginToast({ toast, onClose, hostStyle }) {
   if (!toast?.visible) return null;
 
   const tone = toast.tone || 'error';
@@ -59,7 +56,7 @@ function LoginToast({ toast, onClose }) {
       : { card: styles.toastError, icon: 'error-outline', iconColor: '#b91c1c' };
 
   return (
-    <View pointerEvents="box-none" style={styles.toastHost}>
+    <View pointerEvents="box-none" style={[styles.toastHost, hostStyle]}>
       <View style={[styles.toastCard, config.card]}>
         <MaterialIcons name={config.icon} size={20} color={config.iconColor} style={styles.toastIcon} />
         <View style={styles.toastCopy}>
@@ -246,6 +243,9 @@ function GoogleSignInButton(props) {
 
 export default function LoginScreen({ navigation, suppressAutoRedirect = false }) {
   const { height: windowHeight } = useWindowDimensions();
+  const toastTopOffset = Platform.OS === 'web'
+    ? 48
+    : Math.max(72, Math.round(windowHeight * 0.14));
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -320,33 +320,6 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const SENTRY_OTLP_BASE = 'https://o4510654674632704.ingest.us.sentry.io/api/4510654676533248/otlp';
-  const SENTRY_OTLP_TRACES_URL = `${SENTRY_OTLP_BASE}/v1/traces`;
-  const SENTRY_OTLP_METRICS_URL = `${SENTRY_OTLP_BASE}/v1/metrics`;
-  const SENTRY_OTLP_LOGS_URL = `${SENTRY_OTLP_BASE}/v1/logs`;
-  const sentryEnv = String(
-    process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT ||
-      getExpoExtraValue('EXPO_PUBLIC_SENTRY_ENVIRONMENT') ||
-      ''
-  ).toLowerCase();
-  const sentryDsn = String(
-    process.env.EXPO_PUBLIC_SENTRY_DSN ||
-      getExpoExtraValue('EXPO_PUBLIC_SENTRY_DSN') ||
-      ''
-  );
-  let updatesChannel = '';
-  try {
-    updatesChannel = String(Updates.channel || Updates.releaseChannel || '').toLowerCase();
-  } catch (_) {
-    updatesChannel = '';
-  }
-
-  const showSentryTestButton = (
-    updatesChannel === 'testflight-internal' ||
-    sentryEnv === 'internal' ||
-    sentryEnv === 'testflight-internal'
-  );
 
   const fieldWidthStyle = useMemo(() => ({ width: '100%', maxWidth: 360 }), []);
 
@@ -460,40 +433,6 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     );
   }
 
-  async function sendInternalSentryTestError() {
-    try {
-      if (!sentryDsn) {
-        Alert.alert(
-          'Sentry not configured',
-          'Sentry DSN is empty in this build/update. Add EXPO_PUBLIC_SENTRY_DSN to EAS project env (or build profile env) and publish again.'
-        );
-        return;
-      }
-
-      let eventId;
-      Sentry.withScope((scope) => {
-        scope.setTag('bb_sentry_test', '1');
-        scope.setTag('bb_env', sentryEnv || 'unknown');
-        scope.setExtra('apiBaseUrl', String(process.env.EXPO_PUBLIC_API_BASE_URL || ''));
-        scope.setExtra('time', new Date().toISOString());
-        eventId = Sentry.captureException(new Error('First error'));
-      });
-
-      try {
-        await Sentry.flush(2000);
-      } catch (_) {
-        // ignore flush failures
-      }
-
-      Alert.alert(
-        'Sentry test event sent',
-        `Event ID: ${eventId || '(none)'}\n\nCheck Sentry Issues to confirm it arrived:\nhttps://sparq-digital.sentry.io/issues/?project=4511236400873472`
-      );
-    } catch (e) {
-      Alert.alert('Failed', e?.message || 'Could not send test error.');
-    }
-  }
-
   async function doBiometricUnlock() {
     setBiometricBusy(true);
     try {
@@ -588,7 +527,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   // Keep the mobile sign-in stack closer to screen center while preserving web spacing.
   const brandSectionMinHeight = Platform.OS === 'web'
     ? Math.max(240, Math.round(windowHeight * 0.34))
-    : Math.max(220, Math.round(windowHeight * 0.28));
+    : Math.max(176, Math.round(windowHeight * 0.2));
   const OuterWrapper = Platform.OS === 'web' ? View : TouchableWithoutFeedback;
   const outerWrapperProps = Platform.OS === 'web' ? {} : { onPress: Keyboard.dismiss, accessible: false };
 
@@ -600,7 +539,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
   return (
     <View style={styles.screen}>
-      <LoginToast toast={toast} onClose={dismissToast} />
+      <LoginToast toast={toast} onClose={dismissToast} hostStyle={{ top: toastTopOffset }} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -634,66 +573,45 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
                 />
               </View>
 
-              <View style={fieldWidthStyle}>
+              <View style={[fieldWidthStyle, styles.passwordFieldWrap]}>
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
-                  style={styles.input}
+                  style={[styles.input, styles.passwordInput]}
                   placeholder="Password"
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
                   textContentType="password"
                 />
-              </View>
-
-              <View style={[fieldWidthStyle, styles.showPasswordRow]}>
                 <TouchableOpacity
                   onPress={() => setShowPassword((v) => !v)}
-                  accessibilityRole="checkbox"
-                  accessibilityLabel="Show password"
-                  accessibilityState={{ checked: showPassword }}
-                  style={styles.showPasswordToggle}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  style={styles.peekIconBtn}
                   disabled={busy}
                 >
                   <MaterialIcons
-                    name={showPassword ? 'check-box' : 'check-box-outline-blank'}
+                    name={showPassword ? 'visibility-off' : 'visibility'}
                     size={20}
                     color="#2563eb"
                   />
-                  <Text style={styles.showPasswordText}>Show password</Text>
                 </TouchableOpacity>
               </View>
 
-              <View style={styles.blankRow} />
-
           <View style={styles.actionsRow}>
-            {showSentryTestButton ? (
-              <TouchableOpacity
-                onPress={sendInternalSentryTestError}
-                accessibilityRole="button"
-                accessibilityLabel="Internal: send Sentry test error"
-                style={[styles.iconPushBtn, isMobilePlatform ? styles.mobileIconPushBtn : null]}
-                disabled={busy}
-              >
-                <MaterialIcons name="bug-report" size={20} color="#2563eb" />
-              </TouchableOpacity>
-            ) : null}
-
             <TouchableOpacity
               onPress={doLogin}
               accessibilityRole="button"
               accessibilityLabel="Sign in"
-              style={[styles.primaryPushBtn, isMobilePlatform ? styles.mobilePrimaryPushBtn : null, busy ? { opacity: 0.7 } : null]}
+              style={[styles.primaryPushBtn, busy ? { opacity: 0.7 } : null]}
               disabled={busy}
               activeOpacity={0.9}
             >
               {busy ? (
                 <ActivityIndicator color="#fff" />
-              ) : isMobilePlatform ? (
-                <AuthButtonImage source={loginButtonImage} imageStyle={styles.mobileLoginButtonImage} />
               ) : (
-                <AuthButtonImage source={loginButtonImage} style={styles.primaryButtonImage} />
+                <Text style={styles.primaryPushBtnText}>Sign In</Text>
               )}
             </TouchableOpacity>
 
@@ -797,32 +715,6 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
                 />
               </View>
             ) : null}
-
-            {showSentryTestButton ? (
-              <View style={{ width: '100%', maxWidth: 360, marginTop: 10 }}>
-                {/* Debug Sentry test is available via the bug icon near Sign In */}
-              </View>
-            ) : null}
-
-            {showSentryTestButton ? (
-              <View style={{ width: '100%', maxWidth: 360, marginTop: 10 }}>
-                <TouchableOpacity
-                  onPress={() => {
-                    Alert.alert(
-                      'Sentry OTLP endpoints',
-                      `These are ingest endpoints (not browsable in a browser).\n\nTraces:\n${SENTRY_OTLP_TRACES_URL}\n\nMetrics:\n${SENTRY_OTLP_METRICS_URL}\n\nLogs:\n${SENTRY_OTLP_LOGS_URL}`
-                    );
-                  }}
-                  accessibilityRole="button"
-                  style={styles.secondaryBtn}
-                >
-                  <MaterialIcons name="info-outline" size={18} color="#2563eb" />
-                  <Text style={styles.secondaryBtnText}>Show Sentry OTLP endpoints</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
-
-            {/* Internal Sentry test moved to icon button near Sign In */}
           </View>
               </View>
             </ScrollView>
@@ -836,7 +728,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#fff' },
   toastHost: {
     position: 'absolute',
-    top: Platform.OS === 'web' ? 20 : 18,
     left: 12,
     right: 12,
     zIndex: 1000,
@@ -875,26 +766,22 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#ccc', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12, borderRadius: 10, backgroundColor: '#fff' },
   registerWrap: { marginTop: 12, alignItems: 'center' },
   registerText: { color: '#2563eb', fontWeight: '600' },
-  showPasswordRow: { width: '100%', maxWidth: 360, flexDirection: 'row', justifyContent: 'flex-end', alignSelf: 'center', marginTop: -2 },
-  showPasswordToggle: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 2 },
-  showPasswordText: { marginLeft: 8, color: '#6b7280', fontWeight: '700' },
+  passwordFieldWrap: { position: 'relative' },
+  passwordInput: { paddingRight: 42 },
+  peekIconBtn: { position: 'absolute', right: 10, top: '50%', marginTop: -25, width: 28, height: 40, alignItems: 'center', justifyContent: 'center' },
+  showPasswordRow: { width: '100%', maxWidth: 360, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', alignSelf: 'center', marginTop: -2 },
   blankRow: { height: 12 },
-  actionsRow: { width: '100%', maxWidth: 420, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', columnGap: 10 },
-  primaryPushBtn: { backgroundColor: '#2563eb', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, minWidth: 180, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
-  mobilePrimaryPushBtn: { backgroundColor: 'transparent', paddingVertical: 0, paddingHorizontal: 0, width: 176, height: 48 },
-  primaryPushBtnText: { color: '#fff', fontWeight: '800' },
+  actionsRow: { width: '100%', maxWidth: 420, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' },
+  primaryPushBtn: { backgroundColor: '#2563eb', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 10, minWidth: 176, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  primaryPushBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   iconPushBtn: { width: 44, height: 44, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' },
   mobileIconPushBtn: { borderWidth: 0, borderColor: 'transparent', backgroundColor: 'transparent' },
   linksRow: { marginTop: 12, width: '100%', maxWidth: 360, flexDirection: 'row', justifyContent: 'center', alignSelf: 'center', alignItems: 'center' },
   linkText: { color: '#2563eb', fontWeight: '700' },
   linkSeparator: { marginHorizontal: 10, color: '#6b7280', fontWeight: '700' },
   secondaryActions: { marginTop: 10, alignItems: 'center' },
-  secondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc', width: '100%', maxWidth: 360 },
-  secondaryBtnText: { marginLeft: 8, color: '#111827', fontWeight: '700' },
   authButtonImage: { width: '100%', height: '100%' },
-  primaryButtonImage: { width: 140, height: 36 },
   authIconImage: { width: 24, height: 24 },
-  mobileLoginButtonImage: { width: 176, height: 48 },
   mobileAuthIconImage: { width: 42, height: 42 },
   googleImageButtonWrap: { width: '100%', maxWidth: 360, alignItems: 'center', justifyContent: 'center' },
   googleButtonImage: { width: '100%', maxWidth: 320, height: 52 },

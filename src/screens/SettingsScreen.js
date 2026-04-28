@@ -14,6 +14,7 @@ import * as Api from '../Api';
 import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
 import { SETTINGS_KEYS, readBooleanSetting, writeBooleanSetting, writeJsonSetting } from '../utils/appSettings';
+import { isAdminRole } from '../core/tenant/models';
 
 const editIconImage = require('../../assets/icons/edit.png');
 const currentLocationIcon = require('../../assets/icons/currentLocation.png');
@@ -615,7 +616,7 @@ export default function SettingsScreen({ navigation }) {
         </View>
 
         {/* Admin: business address (used for arrival detection geofence) */}
-        {user && (user.role === 'admin' || user.role === 'administrator') ? (
+        {user && isAdminRole(user.role) ? (
           <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
             <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8 }}>Business Address</Text>
             <Text style={{ fontSize: 14, color: '#6b7280', marginBottom: 8 }}>Set the center's address used to detect nearby arrivals (lat,lng).</Text>
@@ -633,7 +634,7 @@ export default function SettingsScreen({ navigation }) {
           {/* Profile Privacy moved above Push Notifications */}
 
           {/* IDs: developer toggle (persistent) - admin only (moved for admins to Admin Controls) */}
-          {(user && (user.role === 'admin' || user.role === 'administrator')) ? (
+          {(user && isAdminRole(user.role)) ? (
             <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
               <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8 }}>IDs</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>

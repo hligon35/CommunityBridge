@@ -5,6 +5,7 @@ import LogoTitle from './LogoTitle';
 import { useAuth } from '../AuthContext';
 import { navigationRef } from '../navigationRef';
 import { useTenant } from '../core/tenant/TenantContext';
+import { isAdminRole } from '../core/tenant/models';
 
 export default function WebNav() {
   const navigation = useNavigation();
@@ -57,7 +58,7 @@ export default function WebNav() {
             <TouchableOpacity onPress={() => { setOpen(false); navTo('Chats'); }} style={styles.link}><Text style={styles.linkText}>Messages</Text></TouchableOpacity>
             {role !== 'therapist' && <TouchableOpacity onPress={() => { setOpen(false); navTo('MyChild'); }} style={styles.link}><Text style={styles.linkText}>{labels.myChild || 'My Child'}</Text></TouchableOpacity>}
             {role === 'therapist' && <TouchableOpacity onPress={() => { setOpen(false); navTo('MyClass'); }} style={styles.link}><Text style={styles.linkText}>{labels.myClass || 'My Class'}</Text></TouchableOpacity>}
-            {(role === 'admin' || role === 'administrator') && <TouchableOpacity onPress={() => { setOpen(false); navTo('Controls'); }} style={styles.link}><Text style={styles.linkText}>{labels.dashboard || 'Dashboard'}</Text></TouchableOpacity>}
+            {isAdminRole(role) && <TouchableOpacity onPress={() => { setOpen(false); navTo('Controls'); }} style={styles.link}><Text style={styles.linkText}>{labels.dashboard || 'Dashboard'}</Text></TouchableOpacity>}
             <TouchableOpacity onPress={() => { setOpen(false); navTo('Settings'); }} style={styles.link}><Text style={styles.linkText}>Settings</Text></TouchableOpacity>
             <TouchableOpacity onPress={openHelp} style={styles.link}><Text style={styles.linkText}>Help</Text></TouchableOpacity>
 

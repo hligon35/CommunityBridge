@@ -10,6 +10,7 @@ import {
   Platform,
   Image,
   ScrollView,
+  Modal,
   TouchableWithoutFeedback,
   Keyboard,
   TouchableOpacity,
@@ -22,8 +23,9 @@ import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportEr
 import { getAuthInitError, getFirebaseAppInitError } from '../src/firebase';
 import { MaterialIcons } from '@expo/vector-icons';
 import { USER_ROLES } from '../src/core/tenant/models';
+import { listSeedOrganizations, listSeedProgramsByOrganization } from '../src/seed/tenantSeed';
 
-const signupButtonImage = require('../assets/icons/buttons/signupButton.png');
+const signupLogoImage = require('../assets/titlelogo.png');
 
 export default function SignUpScreen({ onDone, onCancel }) {
   const { height: windowHeight } = useWindowDimensions();
@@ -32,8 +34,14 @@ export default function SignUpScreen({ onDone, onCancel }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState(USER_ROLES.PARENT);
+  const [organizationId, setOrganizationId] = useState('');
+  const [programId, setProgramId] = useState('');
+  const [enrollmentCode, setEnrollmentCode] = useState('');
+  const [organizations, setOrganizations] = useState([]);
+  const [programs, setPrograms] = useState([]);
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [activeMenu, setActiveMenu] = useState('');
 
   const roleOptions = [
     { value: USER_ROLES.PARENT, label: 'Parent' },
@@ -41,6 +49,75 @@ export default function SignUpScreen({ onDone, onCancel }) {
     { value: USER_ROLES.THERAPIST, label: 'Therapist' },
     { value: USER_ROLES.BCBA, label: 'BCBA' },
   ];
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const result = await Api.listOrganizations();
+        const nextItems = Array.isArray(result?.items) && result.items.length ? result.items : listSeedOrganizations();
+        if (!mounted) return;
+        setOrganizations(nextItems);
+        if (!organizationId && nextItems[0]?.id) {
+          setOrganizationId(nextItems[0].id);
+        }
+      } catch (_) {
+        const fallbackItems = listSeedOrganizations();
+        if (!mounted) return;
+        setOrganizations(fallbackItems);
+        if (!organizationId && fallbackItems[0]?.id) {
+          setOrganizationId(fallbackItems[0].id);
+        }
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!organizationId) {
+      setPrograms([]);
+      setProgramId('');
+      return () => { mounted = false; };
+    }
+    (async () => {
+      try {
+        const result = await Api.listPrograms(organizationId);
+        const nextItems = Array.isArray(result?.items) && result.items.length ? result.items : listSeedProgramsByOrganization(organizationId);
+        if (!mounted) return;
+        setPrograms(nextItems);
+        if (!nextItems.some((item) => item.id === programId)) {
+          setProgramId(nextItems[0]?.id || '');
+        }
+      } catch (_) {
+        const fallbackItems = listSeedProgramsByOrganization(organizationId);
+        if (!mounted) return;
+        setPrograms(fallbackItems);
+        if (!fallbackItems.some((item) => item.id === programId)) {
+          setProgramId(fallbackItems[0]?.id || '');
+        }
+      }
+    })();
+    return () => { mounted = false; };
+  }, [organizationId]);
+
+  const organizationOptions = useMemo(
+    () => organizations.map((item) => ({ value: item.id, label: item.name })),
+    [organizations]
+  );
+
+  const programOptions = useMemo(
+    () => programs.map((item) => ({ value: item.id, label: item.name })),
+    [programs]
+  );
+
+  const menuOptions = activeMenu === 'role'
+    ? roleOptions
+    : activeMenu === 'organization'
+      ? organizationOptions
+      : activeMenu === 'program'
+        ? programOptions
+        : [];
 
   function splitNameParts(fullName) {
     const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
@@ -56,9 +133,10 @@ export default function SignUpScreen({ onDone, onCancel }) {
     const cleanedName = String(name || '').trim();
     const cleanedEmail = String(email || '').trim();
     const cleanedPassword = String(password || '');
+    const cleanedEnrollmentCode = String(enrollmentCode || '').trim().toUpperCase();
 
-    if (!cleanedEmail || !cleanedName || !cleanedPassword) {
-      Alert.alert('Missing', 'Please provide name, email, and password');
+    if (!cleanedEmail || !cleanedName || !cleanedPassword || !organizationId || !programId || !cleanedEnrollmentCode) {
+      Alert.alert('Missing', 'Please provide name, email, password, organization, program, and enrollment code');
       return;
     }
 
@@ -73,6 +151,9 @@ export default function SignUpScreen({ onDone, onCancel }) {
         email: cleanedEmail,
         password: cleanedPassword,
         role,
+        organizationId,
+        programId,
+        enrollmentCode: cleanedEnrollmentCode,
       });
 
       try {
@@ -128,9 +209,9 @@ export default function SignUpScreen({ onDone, onCancel }) {
           >
             <View style={[styles.brandSection, { minHeight: brandSectionMinHeight }]}>
               <Image
-                source={require('../assets/icon.png')}
+                source={signupLogoImage}
                 accessibilityLabel="CommunityBridge"
-                style={[styles.logo, { height: Math.min(180, Math.round(brandSectionMinHeight * 0.65)) }]}
+                style={[styles.logo, { height: Math.min(240, Math.round(brandSectionMinHeight * 0.8)) }]}
               />
             </View>
 
@@ -158,22 +239,6 @@ export default function SignUpScreen({ onDone, onCancel }) {
                 />
               </View>
 
-              <View style={styles.fieldWidth}>
-                <Text style={styles.sectionLabel}>Account type</Text>
-                <View style={styles.roleRow}>
-                  {roleOptions.map((option) => (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[styles.roleChip, role === option.value ? styles.roleChipActive : null]}
-                      onPress={() => setRole(option.value)}
-                      accessibilityRole="button"
-                    >
-                      <Text style={[styles.roleChipText, role === option.value ? styles.roleChipTextActive : null]}>{option.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
               <View style={[styles.fieldWidth, styles.passwordFieldWrap]}>
                 <TextInput
                   placeholder="Password"
@@ -192,6 +257,63 @@ export default function SignUpScreen({ onDone, onCancel }) {
                   accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
                 >
                   <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color="#2563eb" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.fieldWidth}>
+                <Text style={styles.sectionLabel}>Organization</Text>
+                <TouchableOpacity
+                  style={styles.dropdownTrigger}
+                  onPress={() => setActiveMenu('organization')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Choose organization"
+                >
+                  <Text style={styles.dropdownTriggerText}>
+                    {organizationOptions.find((option) => option.value === organizationId)?.label || 'Select organization'}
+                  </Text>
+                  <MaterialIcons name={activeMenu === 'organization' ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={22} color="#475569" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.fieldWidth}>
+                <Text style={styles.sectionLabel}>Program</Text>
+                <TouchableOpacity
+                  style={[styles.dropdownTrigger, !organizationId ? styles.dropdownTriggerDisabled : null]}
+                  onPress={() => organizationId && setActiveMenu('program')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Choose program"
+                  disabled={!organizationId}
+                >
+                  <Text style={[styles.dropdownTriggerText, !organizationId ? styles.dropdownTriggerTextDisabled : null]}>
+                    {programOptions.find((option) => option.value === programId)?.label || 'Select program'}
+                  </Text>
+                  <MaterialIcons name={activeMenu === 'program' ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={22} color="#475569" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.fieldWidth}>
+                <TextInput
+                  placeholder="Organization / Enrollment code"
+                  value={enrollmentCode}
+                  onChangeText={setEnrollmentCode}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.fieldWidth}>
+                <Text style={styles.sectionLabel}>Account type</Text>
+                <TouchableOpacity
+                  style={styles.dropdownTrigger}
+                  onPress={() => setActiveMenu('role')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Choose account type"
+                >
+                  <Text style={styles.dropdownTriggerText}>
+                    {roleOptions.find((option) => option.value === role)?.label || 'Select account type'}
+                  </Text>
+                  <MaterialIcons name={activeMenu === 'role' ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={22} color="#475569" />
                 </TouchableOpacity>
               </View>
 
@@ -216,10 +338,51 @@ export default function SignUpScreen({ onDone, onCancel }) {
                   {busy ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Image source={signupButtonImage} style={styles.primaryButtonImage} resizeMode="contain" />
+                    <Text style={styles.primaryPushBtnText}>Create Account</Text>
                   )}
                 </TouchableOpacity>
               </View>
+
+              <Modal visible={Boolean(activeMenu)} transparent animationType="fade" onRequestClose={() => setActiveMenu('')}>
+                <TouchableWithoutFeedback onPress={() => setActiveMenu('')}>
+                  <View style={styles.modalBackdrop}>
+                    <TouchableWithoutFeedback>
+                      <View style={styles.dropdownModalCard}>
+                        <Text style={styles.dropdownModalTitle}>
+                          {activeMenu === 'organization' ? 'Select organization' : activeMenu === 'program' ? 'Select program' : 'Select account type'}
+                        </Text>
+                        {menuOptions.map((option) => {
+                          const currentValue = activeMenu === 'organization' ? organizationId : activeMenu === 'program' ? programId : role;
+                          const isSelected = option.value === currentValue;
+                          return (
+                            <TouchableOpacity
+                              key={option.value}
+                              style={[styles.dropdownOption, isSelected ? styles.dropdownOptionSelected : null]}
+                              onPress={() => {
+                                if (activeMenu === 'organization') {
+                                  setOrganizationId(option.value);
+                                  setProgramId('');
+                                } else if (activeMenu === 'program') {
+                                  setProgramId(option.value);
+                                } else {
+                                  setRole(option.value);
+                                }
+                                setActiveMenu('');
+                              }}
+                              accessibilityRole="button"
+                            >
+                              <Text style={[styles.dropdownOptionText, isSelected ? styles.dropdownOptionTextSelected : null]}>
+                                {option.label}
+                              </Text>
+                              {isSelected ? <MaterialIcons name="check" size={18} color="#2563eb" /> : null}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </TouchableWithoutFeedback>
+                  </View>
+                </TouchableWithoutFeedback>
+              </Modal>
             </View>
           </ScrollView>
         </OuterWrapper>
@@ -234,23 +397,29 @@ const styles = StyleSheet.create({
   scrollContainerWeb: { justifyContent: 'flex-start' },
   scrollContainerMobile: { justifyContent: 'center', paddingTop: 32, paddingBottom: 32 },
   brandSection: { width: '100%', maxWidth: 420, alignItems: 'center', justifyContent: 'center' },
-  logo: { width: '100%', maxWidth: 320, resizeMode: 'contain' },
+  logo: { width: '100%', maxWidth: 520, resizeMode: 'contain' },
   formCard: { width: '100%', maxWidth: 420, alignSelf: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
   title: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
   fieldWidth: { width: '100%', maxWidth: 360 },
+  sectionLabel: { fontSize: 13, fontWeight: '700', color: '#475569', marginBottom: 8 },
   input: { borderWidth: 1, borderColor: '#ccc', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12, borderRadius: 10, backgroundColor: '#fff' },
-  roleRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 },
-  roleChip: { borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#f8fafc', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, marginRight: 8, marginBottom: 8 },
-  roleChipActive: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  roleChipText: { color: '#1e293b', fontWeight: '700' },
-  roleChipTextActive: { color: '#fff' },
+  dropdownTrigger: { borderWidth: 1, borderColor: '#ccc', paddingVertical: 12, paddingHorizontal: 12, marginBottom: 12, borderRadius: 10, backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dropdownTriggerText: { color: '#111827', fontSize: 15 },
+  dropdownTriggerDisabled: { backgroundColor: '#f8fafc', borderColor: '#e5e7eb' },
+  dropdownTriggerTextDisabled: { color: '#94a3b8' },
   passwordFieldWrap: { position: 'relative' },
   passwordInput: { paddingRight: 42 },
-  peekIconBtn: { position: 'absolute', right: 10, top: 10, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  peekIconBtn: { position: 'absolute', right: 10, top: '50%', marginTop: -25, width: 28, height: 40, alignItems: 'center', justifyContent: 'center' },
   actionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', maxWidth: 360 },
   primaryPushBtn: { backgroundColor: '#2563eb', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, minWidth: 170, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
   primaryPushBtnText: { color: '#fff', fontWeight: '800' },
   secondaryPushBtn: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, minWidth: 120, alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc', marginRight: 10 },
   secondaryPushBtnText: { color: '#111827', fontWeight: '800' },
-  primaryButtonImage: { width: 150, height: 36 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.28)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  dropdownModalCard: { width: '100%', maxWidth: 360, backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
+  dropdownModalTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 10 },
+  dropdownOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10, marginTop: 6, backgroundColor: '#f8fafc' },
+  dropdownOptionSelected: { backgroundColor: '#eff6ff' },
+  dropdownOptionText: { color: '#111827', fontWeight: '600' },
+  dropdownOptionTextSelected: { color: '#1d4ed8' },
 });

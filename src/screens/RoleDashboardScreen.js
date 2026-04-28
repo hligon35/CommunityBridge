@@ -1,11 +1,13 @@
-import React, { useMemo } from 'react';
-import { Alert, Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, Image, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import TenantSwitcher from '../components/TenantSwitcher';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { useTenant } from '../core/tenant/TenantContext';
+import { avatarSourceFor } from '../utils/idVisibility';
 
 const moodGoodIcon = require('../../assets/icons/good.png');
 const moodModerateIcon = require('../../assets/icons/moderate.png');
@@ -76,10 +78,37 @@ export default function RoleDashboardScreen({ navigation }) {
   const dashboardPreset = tenant?.dashboardPreset || {};
   const childProfileMode = tenant?.childProfileMode || {};
   const relevantChildren = useMemo(() => findRelevantChildren(role, user?.id, children), [children, role, user?.id]);
+  const [selectedChildId, setSelectedChildId] = useState(null);
+
+  useEffect(() => {
+    if (isTherapist) {
+      setSelectedChildId(null);
+      return;
+    }
+    if (!relevantChildren.length) {
+      setSelectedChildId(null);
+      return;
+    }
+    const stillExists = relevantChildren.some((child) => child?.id === selectedChildId);
+    if (!stillExists) {
+      setSelectedChildId(relevantChildren[0]?.id || null);
+    }
+  }, [isTherapist, relevantChildren, selectedChildId]);
+
+  const selectedChild = useMemo(() => {
+    if (isTherapist) return null;
+    return relevantChildren.find((child) => child?.id === selectedChildId) || relevantChildren[0] || null;
+  }, [isTherapist, relevantChildren, selectedChildId]);
+
+  const activeChildren = useMemo(() => {
+    if (isTherapist) return relevantChildren;
+    return selectedChild ? [selectedChild] : [];
+  }, [isTherapist, relevantChildren, selectedChild]);
+
   const careTeamCount = useMemo(() => {
-    if (isTherapist) return Math.max(1, relevantChildren.length);
+    if (isTherapist) return Math.max(1, activeChildren.length);
     const teamIds = new Set();
-    relevantChildren.forEach((child) => {
+    activeChildren.forEach((child) => {
       [child?.amTherapist, child?.pmTherapist, child?.bcaTherapist].forEach((entry) => {
         if (!entry) return;
         if (typeof entry === 'string') teamIds.add(entry);
@@ -87,11 +116,11 @@ export default function RoleDashboardScreen({ navigation }) {
       });
     });
     return teamIds.size;
-  }, [isTherapist, relevantChildren]);
+  }, [activeChildren, isTherapist]);
 
   const nextSession = useMemo(() => {
     const timestamps = [];
-    relevantChildren.forEach((child) => {
+    activeChildren.forEach((child) => {
       [child?.dropoffTimeISO, child?.pickupTimeISO].forEach((value) => {
         const ts = Date.parse(String(value || ''));
         if (Number.isFinite(ts) && ts >= Date.now()) timestamps.push(ts);
@@ -99,17 +128,18 @@ export default function RoleDashboardScreen({ navigation }) {
     });
     timestamps.sort((left, right) => left - right);
     return timestamps.length ? formatSessionLabel(timestamps[0]) : 'No session scheduled';
-  }, [relevantChildren]);
+  }, [activeChildren]);
 
   const pendingItems = useMemo(() => {
     if (isTherapist) {
       return (urgentMemos || []).filter((memo) => !memo?.status || memo.status === 'pending').length;
     }
-    return (urgentMemos || []).filter((memo) => memo?.proposerId === user?.id && (!memo?.status || memo.status === 'pending')).length;
-  }, [isTherapist, urgentMemos, user?.id]);
+    if (!selectedChild?.id) return 0;
+    return (urgentMemos || []).filter((memo) => memo?.childId === selectedChild.id && (!memo?.status || memo.status === 'pending')).length;
+  }, [isTherapist, selectedChild?.id, urgentMemos]);
 
   const moodSummary = useMemo(() => {
-    const scores = relevantChildren
+    const scores = activeChildren
       .map((child) => Number(child?.moodScore ?? child?.mood))
       .filter((value) => Number.isFinite(value));
 
@@ -141,7 +171,7 @@ export default function RoleDashboardScreen({ navigation }) {
       hint: 'Mood check-in is trending positive.',
       imageSource: moodGoodIcon,
     };
-  }, [relevantChildren]);
+  }, [activeChildren]);
 
   const cardDefinitions = {
     'next-session': {
@@ -150,7 +180,9 @@ export default function RoleDashboardScreen({ navigation }) {
       value: nextSession,
       hint: isTherapist ? 'Based on your assigned learners.' : 'Based on your family schedule.',
       imageSource: nextSessionIcon,
-      onPress: () => navigation.getParent()?.navigate(isTherapist ? 'MyClass' : 'MyChild'),
+      onPress: () => (isTherapist
+        ? navigation.getParent()?.navigate('MyClass')
+        : navigation.navigate('ScheduleCalendar', { childId: selectedChild?.id || null })),
     },
     'mood-score': {
       key: 'mood-score',
@@ -162,10 +194,10 @@ export default function RoleDashboardScreen({ navigation }) {
     'progress-report': {
       key: 'progress-report',
       title: 'Progress Report',
-      value: `${relevantChildren.length}`,
+      value: isTherapist ? `${relevantChildren.length}` : (selectedChild?.name || 'View child'),
       hint: isTherapist ? 'Active learners assigned to you.' : 'Children linked to your account.',
       imageSource: progressReportIcon,
-      onPress: () => navigation.getParent()?.navigate(isTherapist ? 'MyClass' : 'MyChild'),
+      onPress: () => navigation.getParent()?.navigate(isTherapist ? 'MyClass' : 'MyChild', isTherapist ? undefined : { childId: selectedChild?.id || null }),
     },
     'items-needed': {
       key: 'items-needed',
@@ -180,15 +212,17 @@ export default function RoleDashboardScreen({ navigation }) {
       value: careTeamCount ? `${careTeamCount} members` : 'No team assigned',
       hint: isTherapist ? 'Your assigned caseload.' : 'Therapists connected to your family.',
       imageSource: careTeamIcon,
-      onPress: () => navigation.getParent()?.navigate(isTherapist ? 'MyClass' : 'MyChild'),
+      onPress: () => (isTherapist
+        ? navigation.getParent()?.navigate('MyClass')
+        : navigation.navigate('CareTeam', { childId: selectedChild?.id || null })),
     },
     billing: {
       key: 'billing',
-      title: 'Billing',
-      value: 'Office managed',
-      hint: 'Billing tools are offline in the app for now.',
+      title: 'Billing & Insurance',
+      value: 'View plan & payments',
+      hint: 'See your insurance card, make a payment, or contact billing.',
       imageSource: insuranceBillingIcon,
-      onPress: () => Alert.alert('Billing', 'Billing is currently handled outside the app.'),
+      onPress: () => navigation.navigate('InsuranceBilling'),
     },
     resources: {
       key: 'resources',
@@ -196,8 +230,14 @@ export default function RoleDashboardScreen({ navigation }) {
       value: isTherapist ? (labels.resourcesValueStaff || 'Staff resources') : (labels.resourcesValueFamily || 'Help & support'),
       hint: 'Open guidance, support, and reference details.',
       imageSource: parentResourcesIcon,
-      onPress: () => navigation.getParent()?.navigate('Settings', { screen: 'Help' }),
-      fullWidth: true,
+      onPress: () => {
+        const url = 'https://centriahealthcare.com/parent-resources/?utm_source=mobile-app&utm_medium=homepage&utm_campaign=family-connect';
+        if (Platform.OS === 'web') {
+          Linking.openURL(url).catch(() => {});
+        } else {
+          WebBrowser.openBrowserAsync(url).catch(() => Linking.openURL(url).catch(() => {}));
+        }
+      },
     },
   };
   const activePreset = isTherapist ? dashboardPreset.staff : dashboardPreset.family;
@@ -220,32 +260,37 @@ export default function RoleDashboardScreen({ navigation }) {
     <ScreenWrapper bannerShowBack={false} style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
-          <Text style={styles.heroEyebrow}>{isTherapist ? (labels.staffDashboard || 'Therapist Dashboard') : (labels.dashboard || 'Dashboard')}</Text>
-          <Text style={styles.heroTitle}>Community tools are paused for now.</Text>
-          <Text style={styles.heroText}>Use this dashboard to jump into schedules, care-team information, billing context, and support resources while the wall is offline.</Text>
+          {isTherapist ? (
+            <>
+              <Text style={styles.heroEyebrow}>{labels.staffDashboard || 'Therapist Dashboard'}</Text>
+              <Text style={styles.heroTitle}>Community tools are paused for now.</Text>
+              <Text style={styles.heroText}>Use this dashboard to jump into schedules, care-team information, billing context, and support resources while the wall is offline.</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.heroEyebrow}>{labels.familySection || 'Your Family'}</Text>
+              <Text style={styles.heroText}>Select a child to update the cards below.</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.familyCarouselTrack}>
+                {relevantChildren.map((child, index) => {
+                  const isSelected = child?.id === selectedChild?.id;
+                  return (
+                    <TouchableOpacity
+                      key={child?.id || `${child?.name || 'child'}-${index}`}
+                      style={[styles.familyCard, isSelected ? styles.familyCardSelected : null]}
+                      activeOpacity={0.88}
+                      onPress={() => setSelectedChildId(child?.id || null)}
+                    >
+                      <Image source={avatarSourceFor(child) || childCarouselImageFor(child, index)} style={styles.familyCardImage} resizeMode="cover" />
+                      <Text style={styles.familyCardName} numberOfLines={1}>{child?.name || 'Child'}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </>
+          )}
         </View>
 
         <TenantSwitcher />
-
-        {!isTherapist && relevantChildren.length ? (
-          <View style={styles.familyCarouselSection}>
-            <Text style={styles.familyCarouselTitle}>{labels.familySection || 'Your Family'}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.familyCarouselTrack}>
-              {relevantChildren.map((child, index) => (
-                <TouchableOpacity
-                  key={child?.id || `${child?.name || 'child'}-${index}`}
-                  style={styles.familyCard}
-                  activeOpacity={0.88}
-                  onPress={() => navigation.getParent()?.navigate('MyChild')}
-                >
-                  <Image source={childCarouselImageFor(child, index)} style={styles.familyCardImage} resizeMode="contain" />
-                  <Text style={styles.familyCardName} numberOfLines={1}>{child?.name || 'Child'}</Text>
-                  <Text style={styles.familyCardMeta} numberOfLines={1}>{child?.room || child?.age || childProfileMode.entityLabel || 'Family member'}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        ) : null}
 
         <View style={styles.grid}>
           {dashboardCards.map((card) => {
@@ -259,8 +304,7 @@ export default function RoleDashboardScreen({ navigation }) {
                   )}
                 </View>
                 <Text style={styles.cardTitle}>{card.title}</Text>
-                <Text style={styles.cardValue}>{card.value}</Text>
-                <Text style={styles.cardHint}>{card.hint}</Text>
+                  <Text style={styles.cardValue}>{card.value}</Text>
               </>
             );
 
@@ -286,33 +330,32 @@ export default function RoleDashboardScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 16, paddingBottom: Platform.OS === 'web' ? 32 : 120 },
+  content: { padding: 16, paddingBottom: Platform.OS === 'web' ? 32 : 16 },
   hero: { padding: 18, borderRadius: 18, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0' },
   heroEyebrow: { color: '#2563eb', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 },
   heroTitle: { marginTop: 8, fontSize: 24, fontWeight: '800', color: '#0f172a' },
   heroText: { marginTop: 8, color: '#475569', lineHeight: 20 },
-  familyCarouselSection: { marginTop: 14 },
-  familyCarouselTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 10 },
-  familyCarouselTrack: { paddingRight: 8 },
+  familyCarouselTrack: { paddingRight: 8, paddingTop: 12 },
   familyCard: {
-    width: 144,
+    width: 108,
     marginRight: 12,
-    padding: 14,
-    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 16,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#e2e8f0',
     alignItems: 'center',
   },
-  familyCardImage: { width: 74, height: 74 },
-  familyCardName: { marginTop: 10, fontSize: 14, fontWeight: '800', color: '#0f172a' },
-  familyCardMeta: { marginTop: 4, fontSize: 12, color: '#64748b' },
+  familyCardSelected: { borderColor: '#93c5fd', backgroundColor: '#eff6ff' },
+  familyCardImage: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#e2e8f0' },
+  familyCardName: { marginTop: 8, fontSize: 13, fontWeight: '800', color: '#0f172a', textAlign: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 16 },
-  card: { width: '48.2%', minHeight: 148, padding: 16, marginBottom: 12, borderRadius: 18, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0' },
+  card: { width: '31.5%', paddingVertical: 12, paddingHorizontal: 10, marginBottom: 10, borderRadius: 18, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0' },
   cardFullWidth: { width: '100%' },
-  cardIconRow: { width: 54, height: 54, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eff6ff' },
-  cardImageIcon: { width: 36, height: 36 },
-  cardTitle: { marginTop: 12, fontSize: 14, fontWeight: '800', color: '#0f172a' },
-  cardValue: { marginTop: 8, fontSize: 18, fontWeight: '800', color: '#111827' },
+  cardIconRow: { width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eff6ff' },
+  cardImageIcon: { width: 30, height: 30 },
+  cardTitle: { marginTop: 8, fontSize: 13, fontWeight: '800', color: '#0f172a', lineHeight: 16 },
+  cardValue: { marginTop: 4, fontSize: 11, fontWeight: '600', color: '#475569', lineHeight: 14 },
   cardHint: { marginTop: 8, color: '#64748b', lineHeight: 18 },
 });

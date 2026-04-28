@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, Linking, Modal, TouchableWithoutFeedback, Alert, Platform } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useRoute } from '@react-navigation/native';
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
 import { ScreenWrapper } from '../components/ScreenWrapper';
@@ -9,8 +10,10 @@ import ImageToggle from '../components/ImageToggle';
 import { childHasParent, findLinkedParentId } from '../utils/directoryLinking';
 import { avatarSourceFor } from '../utils/idVisibility';
 import { useTenant } from '../core/tenant/TenantContext';
+import { isAdminRole } from '../core/tenant/models';
 
 export default function MyChildScreen() {
+  const route = useRoute();
   const { children, parents, urgentMemos, sendTimeUpdateAlert, timeChangeProposals, proposeTimeChange, respondToProposal, respondToUrgentMemo } = useData();
   const { user } = useAuth();
   const tenant = useTenant() || {};
@@ -33,10 +36,19 @@ export default function MyChildScreen() {
   useEffect(() => {
     if (selectedIndex >= childList.length) setSelectedIndex(0);
   }, [childList.length]);
+  useEffect(() => {
+    const requestedChildId = route?.params?.childId;
+    if (!requestedChildId) return;
+    const nextIndex = childList.findIndex((entry) => entry?.id === requestedChildId);
+    if (nextIndex >= 0 && nextIndex !== selectedIndex) {
+      setSelectedIndex(nextIndex);
+    }
+  }, [childList, route?.params?.childId, selectedIndex]);
   // If there are multiple children, default to showing the second child now
   useEffect(() => {
+    if (route?.params?.childId) return;
     if (childList.length > 1 && selectedIndex === 0) setSelectedIndex(1);
-  }, [childList.length]);
+  }, [childList.length, route?.params?.childId, selectedIndex]);
   const child = childList[selectedIndex] || { id: 'no-child', name: `No ${childProfileMode.collectionLabel || 'children'} added`, age: '', room: '', avatar: null, carePlan: '', notes: '' };
 
   // const provided above via single useData call
@@ -403,7 +415,7 @@ export default function MyChildScreen() {
                 <Text style={{ color: '#374151' }}>Requested: {formatISO(p.proposedISO)}</Text>
                 <Text style={{ color: '#6b7280', fontSize: 12 }}>{p.note || ''}</Text>
                 <Text style={{ fontSize: 12, color: '#6b7280' }}>By: {p.proposerName || p.proposerId}</Text>
-                {user && (user.role === 'admin' || user.role === 'administrator') ? (
+                {user && isAdminRole(user.role) ? (
                   <View style={{ flexDirection: 'row', marginTop: 8 }}>
                     {p._source === 'proposal' ? (
                       <>

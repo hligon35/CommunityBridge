@@ -18,6 +18,7 @@ const ARCHIVED_KEY = 'bbs_archived_threads_v1';
 const THREAD_READS_KEY = 'bbs_thread_reads_v1';
 const CHILDREN_KEY = 'bbs_children_v1';
 const BLOCKED_KEY = 'bbs_blocked_v1';
+const CHAT_BLOCKED_KEY = 'bbs_chat_blocked_v1';
 
 
 // Helper: attach therapist objects (ABA/BCBA) to children based on assigned ABA ids
@@ -163,6 +164,7 @@ export function DataProvider({ children: reactChildren }) {
   const [parents, setParents] = useState([]);
   const [therapists, setTherapists] = useState([]);
   const [blockedUserIds, setBlockedUserIds] = useState([]);
+  const [chatBlockedUserIds, setChatBlockedUserIds] = useState([]);
 
   // Hydrate from storage then attempt remote sync.
   //
@@ -189,7 +191,10 @@ export function DataProvider({ children: reactChildren }) {
           AsyncStorage.getItem(ARCHIVED_KEY),
           AsyncStorage.getItem(THREAD_READS_KEY),
         ]);
-        const blockedRaw = await AsyncStorage.getItem(BLOCKED_KEY);
+        const [blockedRaw, chatBlockedRaw] = await Promise.all([
+          AsyncStorage.getItem(BLOCKED_KEY),
+          AsyncStorage.getItem(CHAT_BLOCKED_KEY),
+        ]);
         if (!mounted) return;
 
         // Posts
@@ -262,6 +267,12 @@ export function DataProvider({ children: reactChildren }) {
         } else {
           setBlockedUserIds([]);
         }
+        if (chatBlockedRaw) {
+          try { const parsed = JSON.parse(chatBlockedRaw); if (Array.isArray(parsed)) setChatBlockedUserIds(parsed); else setChatBlockedUserIds([]); }
+          catch (e) { setChatBlockedUserIds([]); }
+        } else {
+          setChatBlockedUserIds([]);
+        }
       } catch (e) {
         console.warn('hydrate failed', e.message);
       }
@@ -300,6 +311,9 @@ export function DataProvider({ children: reactChildren }) {
   useEffect(() => {
     AsyncStorage.setItem(BLOCKED_KEY, JSON.stringify(blockedUserIds)).catch(() => {});
   }, [blockedUserIds]);
+  useEffect(() => {
+    AsyncStorage.setItem(CHAT_BLOCKED_KEY, JSON.stringify(chatBlockedUserIds)).catch(() => {});
+  }, [chatBlockedUserIds]);
 
   // (Removed) dev-only directory seeding and demo data.
 
@@ -715,6 +729,12 @@ export function DataProvider({ children: reactChildren }) {
   }
 
   async function sendMessage(payload) {
+    const senderId = user?.id != null ? String(user.id) : '';
+    if (senderId && (chatBlockedUserIds || []).some((id) => String(id) === senderId)) {
+      const err = new Error('Your messaging access has been disabled by an administrator.');
+      err.code = 'BB_CHAT_BLOCKED';
+      throw err;
+    }
     // Attach sender info from auth (if available) so UI shows names immediately
     const sender = user ? { id: user.id, name: user.name, email: user.email } : undefined;
     const payloadWithSender = { ...payload, sender };
@@ -908,6 +928,7 @@ export function DataProvider({ children: reactChildren }) {
   async function clearAllData() {
     try {
       const keys = [POSTS_KEY, MESSAGES_KEY, MEMOS_KEY, ARCHIVED_KEY, THREAD_READS_KEY, CHILDREN_KEY, PARENTS_KEY, THERAPISTS_KEY, BLOCKED_KEY];
+      keys.push(CHAT_BLOCKED_KEY);
       await AsyncStorage.multiRemove(keys);
       setPosts([]);
       setMessages([]);
@@ -918,6 +939,7 @@ export function DataProvider({ children: reactChildren }) {
       setParents([]);
       setTherapists([]);
       setBlockedUserIds([]);
+      setChatBlockedUserIds([]);
     } catch (e) {
       console.warn('clearAllData failed', e?.message || e);
     }
@@ -953,6 +975,23 @@ export function DataProvider({ children: reactChildren }) {
       AsyncStorage.setItem(BLOCKED_KEY, JSON.stringify((blockedUserIds || []).filter((id) => `${id}` !== `${userId}`))).catch(() => {});
     } catch (e) {
       console.warn('unblockUser failed', e?.message || e);
+    }
+  }
+
+  function blockChatUser(userId) {
+    try {
+      if (!userId) return;
+      setChatBlockedUserIds((s) => Array.from(new Set([...(s || []), String(userId)])));
+    } catch (e) {
+      console.warn('blockChatUser failed', e?.message || e);
+    }
+  }
+
+  function unblockChatUser(userId) {
+    try {
+      setChatBlockedUserIds((s) => (s || []).filter((id) => `${id}` !== `${userId}`));
+    } catch (e) {
+      console.warn('unblockChatUser failed', e?.message || e);
     }
   }
 
@@ -1017,6 +1056,9 @@ export function DataProvider({ children: reactChildren }) {
       blockedUserIds,
       blockUser,
       unblockUser,
+      chatBlockedUserIds,
+      blockChatUser,
+      unblockChatUser,
       clearAllData,
       // time change proposals
       timeChangeProposals,

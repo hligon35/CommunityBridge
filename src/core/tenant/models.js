@@ -161,6 +161,11 @@ export function isAdminRole(role) {
   return value === USER_ROLES.ADMIN || value === USER_ROLES.CAMPUS_ADMIN || value === USER_ROLES.ORG_ADMIN || value === USER_ROLES.SUPER_ADMIN;
 }
 
+export function isScopedAdminRole(role) {
+  const value = normalizeUserRole(role);
+  return value === USER_ROLES.CAMPUS_ADMIN || value === USER_ROLES.ORG_ADMIN || value === USER_ROLES.SUPER_ADMIN;
+}
+
 export function isStaffRole(role) {
   const value = normalizeUserRole(role);
   return value === USER_ROLES.FACULTY || value === USER_ROLES.THERAPIST || value === USER_ROLES.BCBA;

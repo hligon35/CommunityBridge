@@ -5,6 +5,7 @@ import { ScreenWrapper, CenteredContainer } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { logPress } from '../utils/logger';
+import { isAdminRole } from '../core/tenant/models';
 
 function normalizeName(s) {
   return (s || '').toString().trim();
@@ -79,7 +80,7 @@ export default function NewThreadScreen({ navigation }) {
   const [selected, setSelected] = useState(null);
 
   const role = (user?.role || '').toString().toLowerCase();
-  const isAdmin = role === 'admin' || role === 'administrator' || role === 'admin';
+  const isAdmin = isAdminRole(role);
   const isTherapist = role === 'therapist';
   const isParent = role === 'parent';
 
