@@ -4,96 +4,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Api from './Api';
 import { useAuth } from './AuthContext';
 import { additionalChildren, additionalParents } from './seed/directoryAdditions';
+import { attachTherapistsToChildren, mergeById } from './utils/directoryState';
+import { buildScopedStorageKeys, getStorageScopeId } from './utils/storageScope';
 
 const DataContext = createContext(null);
 
 export function useData() {
   return useContext(DataContext);
-}
-
-const POSTS_KEY = 'bbs_posts_v1';
-const MESSAGES_KEY = 'bbs_messages_v1';
-const MEMOS_KEY = 'bbs_memos_v1';
-const ARCHIVED_KEY = 'bbs_archived_threads_v1';
-const THREAD_READS_KEY = 'bbs_thread_reads_v1';
-const CHILDREN_KEY = 'bbs_children_v1';
-const BLOCKED_KEY = 'bbs_blocked_v1';
-const CHAT_BLOCKED_KEY = 'bbs_chat_blocked_v1';
-
-
-// Helper: attach therapist objects (ABA/BCBA) to children based on assigned ABA ids
-function attachTherapistsToChildren(childrenArr, therapistsArr, abaRel) {
-  const byId = (therapistsArr || []).reduce((acc, t) => {
-    if (t && t.id != null) acc[String(t.id)] = t;
-    return acc;
-  }, {});
-
-  const rel = (abaRel && typeof abaRel === 'object') ? abaRel : null;
-  const relAssignments = rel && Array.isArray(rel.assignments) ? rel.assignments : null;
-  const relSupervision = rel && Array.isArray(rel.supervision) ? rel.supervision : null;
-
-  const assignmentByChildSession = {};
-  if (relAssignments) {
-    relAssignments.forEach((a) => {
-      const childId = a && a.childId != null ? String(a.childId).trim() : '';
-      const session = a && a.session != null ? String(a.session).trim().toUpperCase() : '';
-      const abaId = a && a.abaId != null ? String(a.abaId).trim() : '';
-      if (!childId || (session !== 'AM' && session !== 'PM') || !abaId) return;
-      assignmentByChildSession[`${childId}|${session}`] = abaId;
-    });
-  }
-
-  const supervisionByAbaId = {};
-  if (relSupervision) {
-    relSupervision.forEach((s) => {
-      const abaId = s && s.abaId != null ? String(s.abaId).trim() : '';
-      const bcbaId = s && s.bcbaId != null ? String(s.bcbaId).trim() : '';
-      if (abaId && bcbaId) supervisionByAbaId[abaId] = bcbaId;
-    });
-  }
-
-  return (childrenArr || []).map((c) => {
-    const childId = c && c.id != null ? String(c.id) : '';
-
-    // Preferred path: use server-normalized session assignments when present.
-    const amAbaId = childId ? assignmentByChildSession[`${childId}|AM`] : null;
-    const pmAbaId = childId ? assignmentByChildSession[`${childId}|PM`] : null;
-    if (amAbaId || pmAbaId) {
-      const amTherapist = amAbaId ? (byId[amAbaId] || null) : null;
-      const pmTherapist = pmAbaId ? (byId[pmAbaId] || null) : null;
-      const bcbaId = (amAbaId && supervisionByAbaId[amAbaId]) || (pmAbaId && supervisionByAbaId[pmAbaId]) || null;
-      const bcaTherapist = bcbaId ? (byId[bcbaId] || null) : null;
-      return { ...c, bcaTherapist, amTherapist, pmTherapist };
-    }
-
-    // Fallback path: infer from child's assignedABA and session.
-    const assigned = c.assignedABA || c.assigned_ABA || c.assigned || [];
-    const primaryId = Array.isArray(assigned) && assigned.length ? String(assigned[0]) : null;
-    const aba = primaryId ? (byId[primaryId] || null) : null;
-
-    let amTherapist = null;
-    let pmTherapist = null;
-    if (c.session === 'AM') amTherapist = aba;
-    else if (c.session === 'PM') pmTherapist = aba;
-    else { amTherapist = aba; pmTherapist = aba; }
-
-    let bcaTherapist = null;
-    if (aba && aba.supervisedBy) bcaTherapist = byId[aba.supervisedBy] || null;
-    return { ...c, bcaTherapist, amTherapist, pmTherapist };
-  });
-}
-
-function mergeById(existing, additions) {
-  const out = Array.isArray(existing) ? [...existing] : [];
-  const byId = new Set(out.map((x) => String(x && x.id ? x.id : '')).filter(Boolean));
-  (Array.isArray(additions) ? additions : []).forEach((item) => {
-    const id = item && item.id ? String(item.id) : '';
-    if (!id) return;
-    if (byId.has(id)) return;
-    byId.add(id);
-    out.push(item);
-  });
-  return out;
 }
 
 function deriveTherapistsFromChildren(childrenArr) {
@@ -137,9 +54,6 @@ function stripComputedChildFields(child) {
 // no persisted data exists, children/therapists will be empty arrays.
 
 // Seeded directory: 16 students (3-5yo), with 4 siblings (same family), parents and therapists
-const PARENTS_KEY = 'bbs_parents_v1';
-const THERAPISTS_KEY = 'bbs_therapists_v1';
-
 // Directory seed data is provided from `src/seed/directorySeed.js` (imported above)
 
 export function DataProvider({ children: reactChildren }) {
@@ -150,6 +64,8 @@ export function DataProvider({ children: reactChildren }) {
   const fetchInFlightRef = useRef(null);
   const lastFetchAtRef = useRef(0);
   const initialSyncDoneForUserRef = useRef(null);
+  const storageScopeId = useMemo(() => getStorageScopeId(user), [user?.id, user?.uid, user?.email]);
+  const storageKeys = useMemo(() => buildScopedStorageKeys(user), [storageScopeId]);
   useEffect(() => {
     needsMfaRef.current = Boolean(needsMfa);
     if (!needsMfa) mfaEscalatedRef.current = false;
@@ -165,6 +81,20 @@ export function DataProvider({ children: reactChildren }) {
   const [therapists, setTherapists] = useState([]);
   const [blockedUserIds, setBlockedUserIds] = useState([]);
   const [chatBlockedUserIds, setChatBlockedUserIds] = useState([]);
+  const [storageReady, setStorageReady] = useState(false);
+
+  function resetLocalState() {
+    setPosts([]);
+    setMessages([]);
+    setThreadReads({});
+    setUrgentMemos([]);
+    setArchivedThreads([]);
+    setChildren([]);
+    setParents([]);
+    setTherapists([]);
+    setBlockedUserIds([]);
+    setChatBlockedUserIds([]);
+  }
 
   // Hydrate from storage then attempt remote sync.
   //
@@ -176,24 +106,26 @@ export function DataProvider({ children: reactChildren }) {
   const hydratedForUserRef = useRef(null);
   useEffect(() => {
     let mounted = true;
-    const userKey = user?.id || user?.uid || user?.email || '__anon__';
+    const userKey = storageScopeId;
     if (hydratedForUserRef.current === userKey) return undefined;
     hydratedForUserRef.current = userKey;
+    setStorageReady(false);
+    resetLocalState();
     (async () => {
       try {
         const [postsRaw, mRaw, uRaw, cRaw, pRaw, tRaw, aRaw, threadReadsRaw] = await Promise.all([
-          AsyncStorage.getItem(POSTS_KEY),
-          AsyncStorage.getItem(MESSAGES_KEY),
-          AsyncStorage.getItem(MEMOS_KEY),
-          AsyncStorage.getItem(CHILDREN_KEY),
-          AsyncStorage.getItem(PARENTS_KEY),
-          AsyncStorage.getItem(THERAPISTS_KEY),
-          AsyncStorage.getItem(ARCHIVED_KEY),
-          AsyncStorage.getItem(THREAD_READS_KEY),
+          AsyncStorage.getItem(storageKeys.posts),
+          AsyncStorage.getItem(storageKeys.messages),
+          AsyncStorage.getItem(storageKeys.memos),
+          AsyncStorage.getItem(storageKeys.children),
+          AsyncStorage.getItem(storageKeys.parents),
+          AsyncStorage.getItem(storageKeys.therapists),
+          AsyncStorage.getItem(storageKeys.archivedThreads),
+          AsyncStorage.getItem(storageKeys.threadReads),
         ]);
         const [blockedRaw, chatBlockedRaw] = await Promise.all([
-          AsyncStorage.getItem(BLOCKED_KEY),
-          AsyncStorage.getItem(CHAT_BLOCKED_KEY),
+          AsyncStorage.getItem(storageKeys.blocked),
+          AsyncStorage.getItem(storageKeys.chatBlocked),
         ]);
         if (!mounted) return;
 
@@ -275,45 +207,57 @@ export function DataProvider({ children: reactChildren }) {
         }
       } catch (e) {
         console.warn('hydrate failed', e.message);
+      } finally {
+        if (mounted) setStorageReady(true);
       }
       // NOTE: network sync will be triggered by a separate effect
       // after auth finishes loading to ensure requests include auth token.
     })();
     return () => { mounted = false; };
-  }, [user]);
+  }, [storageKeys, storageScopeId]);
 
   useEffect(() => {
-    AsyncStorage.setItem(POSTS_KEY, JSON.stringify(posts)).catch(() => {});
-  }, [posts]);
+    if (!storageReady) return;
+    AsyncStorage.setItem(storageKeys.posts, JSON.stringify(posts)).catch(() => {});
+  }, [posts, storageKeys.posts, storageReady]);
   useEffect(() => {
-    AsyncStorage.setItem(PARENTS_KEY, JSON.stringify(parents)).catch(() => {});
-  }, [parents]);
+    if (!storageReady) return;
+    AsyncStorage.setItem(storageKeys.parents, JSON.stringify(parents)).catch(() => {});
+  }, [parents, storageKeys.parents, storageReady]);
   useEffect(() => {
-    AsyncStorage.setItem(THERAPISTS_KEY, JSON.stringify(therapists)).catch(() => {});
-  }, [therapists]);
+    if (!storageReady) return;
+    AsyncStorage.setItem(storageKeys.therapists, JSON.stringify(therapists)).catch(() => {});
+  }, [therapists, storageKeys.therapists, storageReady]);
   useEffect(() => {
-    AsyncStorage.setItem(MESSAGES_KEY, JSON.stringify(messages)).catch(() => {});
-  }, [messages]);
+    if (!storageReady) return;
+    AsyncStorage.setItem(storageKeys.messages, JSON.stringify(messages)).catch(() => {});
+  }, [messages, storageKeys.messages, storageReady]);
   useEffect(() => {
-    AsyncStorage.setItem(THREAD_READS_KEY, JSON.stringify(threadReads || {})).catch(() => {});
-  }, [threadReads]);
+    if (!storageReady) return;
+    AsyncStorage.setItem(storageKeys.threadReads, JSON.stringify(threadReads || {})).catch(() => {});
+  }, [threadReads, storageKeys.threadReads, storageReady]);
   useEffect(() => {
-    AsyncStorage.setItem(ARCHIVED_KEY, JSON.stringify(archivedThreads)).catch(() => {});
-  }, [archivedThreads]);
+    if (!storageReady) return;
+    AsyncStorage.setItem(storageKeys.archivedThreads, JSON.stringify(archivedThreads)).catch(() => {});
+  }, [archivedThreads, storageKeys.archivedThreads, storageReady]);
   useEffect(() => {
-    AsyncStorage.setItem(CHILDREN_KEY, JSON.stringify(children)).catch(() => {});
-  }, [children]);
+    if (!storageReady) return;
+    AsyncStorage.setItem(storageKeys.children, JSON.stringify(children)).catch(() => {});
+  }, [children, storageKeys.children, storageReady]);
   useEffect(() => {
-    AsyncStorage.setItem(MEMOS_KEY, JSON.stringify(urgentMemos)).catch(() => {});
-  }, [urgentMemos]);
+    if (!storageReady) return;
+    AsyncStorage.setItem(storageKeys.memos, JSON.stringify(urgentMemos)).catch(() => {});
+  }, [urgentMemos, storageKeys.memos, storageReady]);
 
   // Persist blocked user ids
   useEffect(() => {
-    AsyncStorage.setItem(BLOCKED_KEY, JSON.stringify(blockedUserIds)).catch(() => {});
-  }, [blockedUserIds]);
+    if (!storageReady) return;
+    AsyncStorage.setItem(storageKeys.blocked, JSON.stringify(blockedUserIds)).catch(() => {});
+  }, [blockedUserIds, storageKeys.blocked, storageReady]);
   useEffect(() => {
-    AsyncStorage.setItem(CHAT_BLOCKED_KEY, JSON.stringify(chatBlockedUserIds)).catch(() => {});
-  }, [chatBlockedUserIds]);
+    if (!storageReady) return;
+    AsyncStorage.setItem(storageKeys.chatBlocked, JSON.stringify(chatBlockedUserIds)).catch(() => {});
+  }, [chatBlockedUserIds, storageKeys.chatBlocked, storageReady]);
 
   // (Removed) dev-only directory seeding and demo data.
 
@@ -638,7 +582,7 @@ export function DataProvider({ children: reactChildren }) {
     try {
       setPosts((s) => (s || []).filter((p) => p.id !== postId));
       // persist immediately
-      AsyncStorage.setItem(POSTS_KEY, JSON.stringify((posts || []).filter((p) => p.id !== postId))).catch(() => {});
+      AsyncStorage.setItem(storageKeys.posts, JSON.stringify((posts || []).filter((p) => p.id !== postId))).catch(() => {});
     } catch (e) {
       console.warn('deletePost failed', e?.message || e);
     }
@@ -660,7 +604,7 @@ export function DataProvider({ children: reactChildren }) {
         };
       }));
       // best-effort persist
-      AsyncStorage.setItem(POSTS_KEY, JSON.stringify((posts || []).map((p) => p))).catch(() => {});
+      AsyncStorage.setItem(storageKeys.posts, JSON.stringify((posts || []).map((p) => p))).catch(() => {});
     } catch (e) {
       console.warn('deleteComment failed', e?.message || e);
     }
@@ -765,7 +709,7 @@ export function DataProvider({ children: reactChildren }) {
     try {
       setArchivedThreads((s) => {
         const next = Array.from(new Set([...(s || []), threadId]));
-        AsyncStorage.setItem(ARCHIVED_KEY, JSON.stringify(next)).catch(() => {});
+        AsyncStorage.setItem(storageKeys.archivedThreads, JSON.stringify(next)).catch(() => {});
         return next;
       });
     } catch (e) {
@@ -777,7 +721,7 @@ export function DataProvider({ children: reactChildren }) {
     try {
       setArchivedThreads((s) => {
         const next = (s || []).filter((t) => t !== threadId);
-        AsyncStorage.setItem(ARCHIVED_KEY, JSON.stringify(next)).catch(() => {});
+        AsyncStorage.setItem(storageKeys.archivedThreads, JSON.stringify(next)).catch(() => {});
         return next;
       });
     } catch (e) {
@@ -795,8 +739,8 @@ export function DataProvider({ children: reactChildren }) {
         delete next[key];
         return next;
       });
-      AsyncStorage.setItem(MESSAGES_KEY, JSON.stringify((messages || []).filter((m) => String(m.threadId || m.id) !== key))).catch(() => {});
-      AsyncStorage.setItem(ARCHIVED_KEY, JSON.stringify((archivedThreads || []).filter((t) => t !== threadId))).catch(() => {});
+      AsyncStorage.setItem(storageKeys.messages, JSON.stringify((messages || []).filter((m) => String(m.threadId || m.id) !== key))).catch(() => {});
+      AsyncStorage.setItem(storageKeys.archivedThreads, JSON.stringify((archivedThreads || []).filter((t) => t !== threadId))).catch(() => {});
     } catch (e) {
       console.warn('deleteThread failed', e?.message || e);
     }
@@ -917,9 +861,9 @@ export function DataProvider({ children: reactChildren }) {
       setMessages([]);
       setThreadReads({});
       setArchivedThreads([]);
-      AsyncStorage.removeItem(MESSAGES_KEY).catch(() => {});
-      AsyncStorage.removeItem(THREAD_READS_KEY).catch(() => {});
-      AsyncStorage.removeItem(ARCHIVED_KEY).catch(() => {});
+      AsyncStorage.removeItem(storageKeys.messages).catch(() => {});
+      AsyncStorage.removeItem(storageKeys.threadReads).catch(() => {});
+      AsyncStorage.removeItem(storageKeys.archivedThreads).catch(() => {});
     } catch (e) {
       console.warn('clearMessages failed', e?.message || e);
     }
@@ -927,19 +871,9 @@ export function DataProvider({ children: reactChildren }) {
 
   async function clearAllData() {
     try {
-      const keys = [POSTS_KEY, MESSAGES_KEY, MEMOS_KEY, ARCHIVED_KEY, THREAD_READS_KEY, CHILDREN_KEY, PARENTS_KEY, THERAPISTS_KEY, BLOCKED_KEY];
-      keys.push(CHAT_BLOCKED_KEY);
+      const keys = Object.values(storageKeys);
       await AsyncStorage.multiRemove(keys);
-      setPosts([]);
-      setMessages([]);
-      setThreadReads({});
-      setArchivedThreads([]);
-      setUrgentMemos([]);
-      setChildren([]);
-      setParents([]);
-      setTherapists([]);
-      setBlockedUserIds([]);
-      setChatBlockedUserIds([]);
+      resetLocalState();
     } catch (e) {
       console.warn('clearAllData failed', e?.message || e);
     }
@@ -963,7 +897,7 @@ export function DataProvider({ children: reactChildren }) {
         if (toIds.find(t => `${t}` === `${userId}`)) return false;
         return true;
       }));
-      AsyncStorage.setItem(BLOCKED_KEY, JSON.stringify(Array.from(new Set([...(blockedUserIds || []), userId])))).catch(() => {});
+      AsyncStorage.setItem(storageKeys.blocked, JSON.stringify(Array.from(new Set([...(blockedUserIds || []), userId])))).catch(() => {});
     } catch (e) {
       console.warn('blockUser failed', e?.message || e);
     }
@@ -972,7 +906,7 @@ export function DataProvider({ children: reactChildren }) {
   function unblockUser(userId) {
     try {
       setBlockedUserIds((s) => (s || []).filter((id) => `${id}` !== `${userId}`));
-      AsyncStorage.setItem(BLOCKED_KEY, JSON.stringify((blockedUserIds || []).filter((id) => `${id}` !== `${userId}`))).catch(() => {});
+      AsyncStorage.setItem(storageKeys.blocked, JSON.stringify((blockedUserIds || []).filter((id) => `${id}` !== `${userId}`))).catch(() => {});
     } catch (e) {
       console.warn('unblockUser failed', e?.message || e);
     }

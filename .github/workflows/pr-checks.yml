@@ -3,6 +3,7 @@ name: PR checks
 # Lightweight checks that run on every pull request:
 #   - install deps (cached)
 #   - secret scan (scripts/check-secrets.js)
+#   - focused unit tests for extracted app state helpers
 #   - smoke E2E against the in-memory mock API
 #
 # These checks are intentionally fast and self-contained so they don't require
@@ -17,7 +18,7 @@ on:
 
 jobs:
   checks:
-    name: Secrets scan + smoke E2E (mock)
+    name: Secrets scan + unit tests + smoke E2E (mock)
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -34,8 +35,14 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Secrets scan
         run: npm run check:secrets
+
+      - name: Unit tests
+        run: npm run test:unit
 
       - name: Start mock API
         # Run in background; the smoke runner expects 127.0.0.1:3006.

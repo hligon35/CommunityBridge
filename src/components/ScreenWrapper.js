@@ -4,14 +4,7 @@ import ScreenHeader from './ScreenHeader';
 import WebNav from './WebNav';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTenant } from '../core/tenant/TenantContext';
-
-function humanizeScreenLabel(value) {
-  return String(value || '')
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
-    .replace(/[_-]+/g, ' ')
-    .trim();
-}
+import { humanizeScreenLabel } from '../utils/screenLabels';
 
 export function ScreenWrapper({ children, style, hideBanner = false, bannerShowBack, bannerTitle, bannerLeft, bannerRight }) {
   const navigation = useNavigation();

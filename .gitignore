@@ -49,6 +49,8 @@ set*.png
 # Store/CI credential artifacts (generated locally or in CI)
 google-play-service-account.json
 appstore_connect.json
+client_secret_*.json
+tmp-login.json
 
 # Local Expo web export output (generated)
 /dist

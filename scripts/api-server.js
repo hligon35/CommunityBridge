@@ -228,10 +228,38 @@ function getNodemailerLib() {
 }
 
 const PORT = Number(process.env.PORT || 3005);
+const REQUEST_TIMEOUT_MS = Math.max(5_000, Number(process.env.CB_REQUEST_TIMEOUT_MS || process.env.BB_REQUEST_TIMEOUT_MS || 30_000));
+const SHUTDOWN_GRACE_MS = Math.max(1_000, Number(process.env.CB_SHUTDOWN_GRACE_MS || process.env.BB_SHUTDOWN_GRACE_MS || 10_000));
 const DB_PATH = process.env.CB_DB_PATH || process.env.BB_DB_PATH || path.join(process.cwd(), '.communitybridge', 'communitybridge.sqlite');
 const JWT_SECRET = process.env.CB_JWT_SECRET || process.env.BB_JWT_SECRET || '';
 const NODE_ENV = String(process.env.NODE_ENV || '').trim().toLowerCase();
 const PUBLIC_BASE_URL = (process.env.CB_PUBLIC_BASE_URL || process.env.BB_PUBLIC_BASE_URL || '').trim();
+
+let shuttingDown = false;
+let activeServer = null;
+const activeSockets = new Set();
+
+function requestUsesHttps(req) {
+  try {
+    const proto = String(req.headers['x-forwarded-proto'] || req.protocol || '').split(',')[0].trim().toLowerCase();
+    return proto === 'https';
+  } catch (_) {
+    return false;
+  }
+}
+
+function applySecurityHeaders(req, res) {
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (requestUsesHttps(req)) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  if (String(req.path || '').startsWith('/api/')) {
+    res.setHeader('Cache-Control', 'no-store');
+  }
+}
 
 // CORS
 const CORS_ORIGINS = parseCsvEnv(process.env.CB_CORS_ORIGINS || process.env.BB_CORS_ORIGINS);
@@ -624,6 +652,41 @@ try {
       console.warn('  - OR set BB_ALLOW_NO_DB=1 to force this mode explicitly');
     }
   } catch (_) {}
+}
+
+async function shutdownServer(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  try {
+    console.log(`[api] ${signal} received; draining connections...`);
+  } catch (_) {}
+
+  const deadline = setTimeout(() => {
+    for (const socket of activeSockets) {
+      try {
+        socket.destroy();
+      } catch (_) {
+        // ignore
+      }
+    }
+  }, SHUTDOWN_GRACE_MS);
+
+  try {
+    if (activeServer) {
+      await new Promise((resolve) => activeServer.close(resolve));
+    }
+    if (db && typeof db.close === 'function') {
+      db.close();
+    }
+    process.exit(0);
+  } catch (e) {
+    try {
+      console.error('[api] Graceful shutdown failed', e);
+    } catch (_) {}
+    process.exit(1);
+  } finally {
+    clearTimeout(deadline);
+  }
 }
 
 const UPLOAD_DIR = process.env.CB_UPLOAD_DIR || process.env.BB_UPLOAD_DIR
@@ -1218,7 +1281,15 @@ try {
 }
 
 const app = express();
+app.disable('x-powered-by');
 app.use(cors(buildCorsOptions()));
+app.use((req, res, next) => {
+  applySecurityHeaders(req, res);
+  if (shuttingDown && req.path !== '/api/health') {
+    return res.status(503).json({ ok: false, error: 'Server is restarting. Please retry shortly.' });
+  }
+  return next();
+});
 app.use(bodyParser.json({ limit: '2mb' }));
 
 // Firebase-backed MFA endpoints (used by the mobile/web app).
@@ -1345,7 +1416,9 @@ function childHasParentId(child, parentId) {
 }
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, uptime: process.uptime(), db: Boolean(db), dbError: db ? null : (dbInitError ? String(dbInitError.message || dbInitError) : 'unavailable') });
+  const payload = { ok: !shuttingDown, uptime: process.uptime(), shuttingDown, db: Boolean(db), dbError: db ? null : (dbInitError ? String(dbInitError.message || dbInitError) : 'unavailable') };
+  if (shuttingDown) return res.status(503).json(payload);
+  return res.json(payload);
 });
 
 // Directory (SQLite-backed). Admin-only for now.
@@ -2790,11 +2863,28 @@ app.get(/.*/, (req, res, next) => {
   return res.sendFile(p);
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`[api] CommunityBridge API listening on :${PORT}`);
   console.log(`[api] DB: ${DB_PATH}`);
 });
 
+activeServer = server;
+server.keepAliveTimeout = 65_000;
+server.headersTimeout = 66_000;
+server.requestTimeout = REQUEST_TIMEOUT_MS;
+server.on('connection', (socket) => {
+  activeSockets.add(socket);
+  socket.on('close', () => activeSockets.delete(socket));
+});
+
 process.on('uncaughtException', (e) => {
   console.error('[api] Uncaught', e);
+});
+
+process.on('SIGTERM', () => {
+  shutdownServer('SIGTERM').catch(() => process.exit(1));
+});
+
+process.on('SIGINT', () => {
+  shutdownServer('SIGINT').catch(() => process.exit(1));
 });

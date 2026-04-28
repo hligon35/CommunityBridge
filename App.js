@@ -58,6 +58,7 @@ import { initSentry, Sentry } from './src/sentry';
 import { CommonActions } from '@react-navigation/native';
 import { TenantProvider } from './src/core/tenant/TenantContext';
 import { isAdminRole, isStaffRole, normalizeUserRole } from './src/core/tenant/models';
+import { humanizeScreenLabel } from './src/utils/screenLabels';
 
 initSentry();
 
@@ -68,14 +69,6 @@ const HEADER_LOGO_WIDTH = 168;
 const HEADER_LOGO_HEIGHT = 80;
 const HEADER_HEIGHT = 96;
 const SHOW_STACK_HEADERS = Platform.OS !== 'web';
-
-function humanizeScreenLabel(value) {
-  return String(value || '')
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
-    .replace(/[_-]+/g, ' ')
-    .trim();
-}
 
 const MyClassStackNav = createNativeStackNavigator();
 function MyClassStack() {

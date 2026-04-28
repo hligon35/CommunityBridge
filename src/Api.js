@@ -39,6 +39,9 @@ import { httpsCallable } from 'firebase/functions';
 
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 
+const DEFAULT_API_TIMEOUT_MS = 15000;
+const MEDIA_FETCH_TIMEOUT_MS = 45000;
+
 function normalizeEmailInput(email) {
   try {
     if (email == null) return '';
@@ -119,6 +122,38 @@ function isLikelyNetworkError(e) {
     // ignore
   }
   return false;
+}
+
+async function fetchWithTimeout(resource, init = {}, timeoutMs = DEFAULT_API_TIMEOUT_MS) {
+  const hasAbortController = typeof AbortController === 'function';
+  if (!hasAbortController || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return fetch(resource, init);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    try {
+      controller.abort();
+    } catch (_) {
+      // ignore
+    }
+  }, timeoutMs);
+
+  try {
+    return await fetch(resource, {
+      ...init,
+      signal: init?.signal || controller.signal,
+    });
+  } catch (e) {
+    if (e?.name === 'AbortError') {
+      const err = new Error(`Request timed out after ${timeoutMs}ms.`);
+      err.code = 'BB_REQUEST_TIMEOUT';
+      throw err;
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 let unauthorizedHandler = null;
@@ -329,7 +364,7 @@ export async function verify2fa(_) {
   const apiBase = String(BASE_URL || '').replace(/\/$/, '');
   const tryApi = async ({ forceRefresh } = {}) => {
     const token = await u.getIdToken(!!forceRefresh);
-    const resp = await fetch(`${apiBase}/api/mfa/verify`, {
+    const resp = await fetchWithTimeout(`${apiBase}/api/mfa/verify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -411,7 +446,7 @@ export async function resend2fa(_) {
   const apiBase = String(BASE_URL || '').replace(/\/$/, '');
   const tryApi = async ({ forceRefresh } = {}) => {
     const token = await u.getIdToken(!!forceRefresh);
-    const resp = await fetch(`${apiBase}/api/mfa/send`, {
+    const resp = await fetchWithTimeout(`${apiBase}/api/mfa/send`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -717,7 +752,7 @@ export async function uploadMedia(formData) {
 
   let blob;
   try {
-    const response = await fetch(file.uri);
+    const response = await fetchWithTimeout(file.uri, {}, MEDIA_FETCH_TIMEOUT_MS);
     blob = await response.blob();
   } catch (e) {
     throw new Error(`Unable to prepare file upload: ${e?.message || e}`);
@@ -1217,7 +1252,7 @@ export async function registerPushToken(payload) {
   if (apiBase) {
     const tryApi = async ({ forceRefresh } = {}) => {
       const idToken = await u.getIdToken(!!forceRefresh);
-      const resp = await fetch(`${apiBase}/api/push/register`, {
+      const resp = await fetchWithTimeout(`${apiBase}/api/push/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1279,7 +1314,7 @@ export async function unregisterPushToken(payload) {
   if (apiBase) {
     const tryApi = async ({ forceRefresh } = {}) => {
       const idToken = await u.getIdToken(!!forceRefresh);
-      const resp = await fetch(`${apiBase}/api/push/unregister`, {
+      const resp = await fetchWithTimeout(`${apiBase}/api/push/unregister`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -7,6 +7,13 @@ const { execSync } = require('child_process');
 
 const repoRoot = path.resolve(__dirname, '..');
 
+const suspiciousPathRules = [
+  { name: 'APPLE_API_KEY_FILE', severity: 'high', re: /(^|[\\/])AuthKey_[A-Z0-9]+\.p8$/i },
+  { name: 'GOOGLE_OAUTH_CLIENT_FILE', severity: 'high', re: /(^|[\\/])client_secret_.*\.json$/i },
+  { name: 'TEMP_LOGIN_EXPORT', severity: 'high', re: /(^|[\\/])tmp-login\.json$/i },
+  { name: 'GITHUB_ENV_WITH_PRIVATE_KEY', severity: 'high', re: /(^|[\\/])env[\\/]github\.env$/i },
+];
+
 function run(cmd) {
   return execSync(cmd, { cwd: repoRoot, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
 }
@@ -40,6 +47,15 @@ function redact(str) {
 function containsAny(haystack, needles) {
   const h = String(haystack || '').toLowerCase();
   return needles.some((n) => h.includes(String(n).toLowerCase()));
+}
+
+function listGitPaths(args) {
+  try {
+    const out = run(`git ls-files ${args} -z`);
+    return out.split('\0').filter(Boolean);
+  } catch (_) {
+    return [];
+  }
 }
 
 const rules = [
@@ -89,14 +105,31 @@ const rules = [
 function main() {
   let files = [];
   try {
-    const out = run('git ls-files -z');
-    files = out.split('\0').filter(Boolean);
+    files = listGitPaths('');
   } catch (e) {
     console.warn('[check-secrets] Not a git repo (skipping).');
     process.exit(0);
   }
 
   const findings = [];
+  const warnings = [];
+
+  for (const rel of files) {
+    for (const rule of suspiciousPathRules) {
+      if (rule.re.test(rel)) {
+        findings.push({ rule: rule.name, severity: rule.severity, file: rel, line: 1, redacted: null });
+      }
+    }
+  }
+
+  const untrackedFiles = listGitPaths('--others --exclude-standard');
+  for (const rel of untrackedFiles) {
+    for (const rule of suspiciousPathRules) {
+      if (rule.re.test(rel)) {
+        warnings.push({ rule: rule.name, file: rel });
+      }
+    }
+  }
 
   for (const rel of files) {
     const abs = path.resolve(repoRoot, rel);
@@ -140,6 +173,13 @@ function main() {
   }
 
   if (!findings.length) {
+    if (warnings.length) {
+      console.warn('[check-secrets] Warning: sensitive-looking local files detected (currently untracked):');
+      for (const w of warnings) {
+        console.warn(`- WARN ${w.rule} at ${w.file}`);
+      }
+      console.warn('Move them out of the workspace or keep them untracked and in a secure local-only location.');
+    }
     console.log('[check-secrets] OK (no obvious secrets found)');
     process.exit(0);
   }
@@ -148,6 +188,13 @@ function main() {
   for (const f of findings) {
     const extra = f.redacted ? ` value=${f.redacted}` : '';
     console.error(`- ${f.severity.toUpperCase()} ${f.rule} at ${f.file}:${f.line}${extra}`);
+  }
+
+  if (warnings.length) {
+    console.error('\n[check-secrets] Sensitive-looking local files detected (currently untracked):');
+    for (const w of warnings) {
+      console.error(`- WARN ${w.rule} at ${w.file}`);
+    }
   }
 
   console.error('\nRemediation: remove the secret from the repo history, rotate it, and use env/secret manager instead.');

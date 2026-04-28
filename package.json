@@ -9,6 +9,7 @@
   "scripts": {
     "generate:icons": "node ./scripts/generate_icon_sets.js",
     "check:secrets": "node ./scripts/check-secrets.js",
+    "test:unit": "node --test tests/*.test.js",
     "gcp-build": "node ./scripts/build-web.js",
     "build:web": "node ./scripts/build-web.js",
     "start": "node ./scripts/start-server.js",

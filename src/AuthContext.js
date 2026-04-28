@@ -7,33 +7,11 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { resetToLogin, resetToTwoFactor } from './navigationRef';
 import { logger, setDebugContext } from './utils/logger';
 import { reportErrorToSentry } from './utils/reportError';
+import { normalizeRoleOverride, isDevSwitcherUser, getMfaFreshnessWindowMs, DEV_SWITCH_EMAIL } from './utils/authState';
 
 const AuthContext = createContext(null);
 const MFA_VERIFIED_CACHE_KEY = 'bb_mfa_verified_at_cache_v1';
 const DEV_ROLE_OVERRIDE_KEY = 'bb_dev_role_override_v1';
-const DEV_SWITCH_EMAIL = 'dev@communitybridge.app';
-const DEFAULT_MFA_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
-const DEV_MFA_WINDOW_MS = 4 * 60 * 60 * 1000;
-
-function normalizeRoleOverride(role) {
-  const value = String(role || '').trim().toLowerCase();
-  if (value === 'admin' || value === 'administrator') return 'admin';
-  if (value === 'therapist') return 'therapist';
-  if (value === 'parent') return 'parent';
-  return '';
-}
-
-function isDevSwitcherUser(email) {
-  // Gate strictly on the controlled dev account email so the switcher works
-  // for dev@communitybridge.app in any build (not just __DEV__).
-  return String(email || '').trim().toLowerCase() === DEV_SWITCH_EMAIL;
-}
-
-function getMfaFreshnessWindowMs(profile) {
-  const email = String(profile?.email || '').trim().toLowerCase();
-  const isDevUser = profile?.devUser === true || email === DEV_SWITCH_EMAIL;
-  return isDevUser ? DEV_MFA_WINDOW_MS : DEFAULT_MFA_WINDOW_MS;
-}
 
 export function useAuth() {
   return useContext(AuthContext);

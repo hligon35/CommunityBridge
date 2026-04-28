@@ -118,6 +118,8 @@ function getNodemailerLib() {
 }
 
 const PORT = Number(process.env.PORT || 3005);
+const REQUEST_TIMEOUT_MS = Math.max(5_000, Number(process.env.CB_REQUEST_TIMEOUT_MS || process.env.BB_REQUEST_TIMEOUT_MS || 30_000));
+const SHUTDOWN_GRACE_MS = Math.max(1_000, Number(process.env.CB_SHUTDOWN_GRACE_MS || process.env.BB_SHUTDOWN_GRACE_MS || 10_000));
 const DATA_DIR = process.env.CB_DATA_DIR || process.env.BB_DATA_DIR
   ? String(process.env.CB_DATA_DIR || process.env.BB_DATA_DIR)
   : path.join(process.cwd(), '.communitybridge');
@@ -251,6 +253,66 @@ const RETURN_PASSWORD_RESET_CODE = envFlag(process.env.CB_RETURN_PASSWORD_RESET_
 const PASSWORD_RESET_TTL_MINUTES = Math.max(5, Number(process.env.CB_PASSWORD_RESET_TTL_MINUTES || process.env.BB_PASSWORD_RESET_TTL_MINUTES || 30));
 
 const slog = require('./logger');
+
+let shuttingDown = false;
+let activeServer = null;
+const activeSockets = new Set();
+
+function requestUsesHttps(req) {
+  try {
+    const proto = String(req.headers['x-forwarded-proto'] || req.protocol || '').split(',')[0].trim().toLowerCase();
+    return proto === 'https';
+  } catch (_) {
+    return false;
+  }
+}
+
+function applySecurityHeaders(req, res) {
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (requestUsesHttps(req)) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  if (String(req.path || '').startsWith('/api/')) {
+    res.setHeader('Cache-Control', 'no-store');
+  }
+}
+
+async function shutdownServer(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  try {
+    console.log(`[api] ${signal} received; draining connections...`);
+  } catch (_) {}
+
+  const server = activeServer;
+  const deadline = setTimeout(() => {
+    for (const socket of activeSockets) {
+      try {
+        socket.destroy();
+      } catch (_) {
+        // ignore
+      }
+    }
+  }, SHUTDOWN_GRACE_MS);
+
+  try {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
+    await pool.end().catch(() => {});
+    process.exit(0);
+  } catch (e) {
+    try {
+      console.error('[api] Graceful shutdown failed', e);
+    } catch (_) {}
+    process.exit(1);
+  } finally {
+    clearTimeout(deadline);
+  }
+}
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -1030,7 +1092,15 @@ async function sendExpoPush(tokens, { title, body, data } = {}) {
 }
 
 const app = express();
+app.disable('x-powered-by');
 app.use(cors(buildCorsOptions()));
+app.use((req, res, next) => {
+  applySecurityHeaders(req, res);
+  if (shuttingDown && req.path !== '/api/health') {
+    return res.status(503).json({ ok: false, error: 'Server is restarting. Please retry shortly.' });
+  }
+  return next();
+});
 app.use(bodyParser.json({ limit: '2mb' }));
 
 // Firebase-backed MFA endpoints (used by the mobile/web app).
@@ -1163,7 +1233,9 @@ function childHasParentId(child, parentId) {
 }
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, uptime: process.uptime() });
+  const payload = { ok: !shuttingDown, uptime: process.uptime(), shuttingDown };
+  if (shuttingDown) return res.status(503).json(payload);
+  return res.json(payload);
 });
 
 // Directory (Postgres-backed). Admin-only for now.
@@ -2560,13 +2632,22 @@ async function main() {
     // ignore
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     // eslint-disable-next-line no-console
     console.log(`[api] CommunityBridge API listening on :${PORT}`);
     // eslint-disable-next-line no-console
     console.log(`[api] Postgres: ${DATABASE_URL.replace(/:\/\/.*@/, '://***@')}`);
     // eslint-disable-next-line no-console
     console.log(`[api] Data dir: ${DATA_DIR}`);
+  });
+
+  activeServer = server;
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 66_000;
+  server.requestTimeout = REQUEST_TIMEOUT_MS;
+  server.on('connection', (socket) => {
+    activeSockets.add(socket);
+    socket.on('close', () => activeSockets.delete(socket));
   });
 }
 
@@ -2579,4 +2660,12 @@ main().catch((e) => {
 process.on('uncaughtException', (e) => {
   // eslint-disable-next-line no-console
   console.error('[api] Uncaught', e);
+});
+
+process.on('SIGTERM', () => {
+  shutdownServer('SIGTERM').catch(() => process.exit(1));
+});
+
+process.on('SIGINT', () => {
+  shutdownServer('SIGINT').catch(() => process.exit(1));
 });
