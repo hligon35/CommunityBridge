@@ -5,6 +5,14 @@ import WebNav from './WebNav';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTenant } from '../core/tenant/TenantContext';
 
+function humanizeScreenLabel(value) {
+  return String(value || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+}
+
 export function ScreenWrapper({ children, style, hideBanner = false, bannerShowBack, bannerTitle, bannerLeft, bannerRight }) {
   const navigation = useNavigation();
   const route = useRoute();
@@ -31,7 +39,7 @@ export function ScreenWrapper({ children, style, hideBanner = false, bannerShowB
     ExportData: 'Export Data',
   };
 
-  const title = bannerTitle || nameMap[route?.name] || route?.name || '';
+  const title = bannerTitle || nameMap[route?.name] || humanizeScreenLabel(route?.name) || '';
   const computedShowBack = navigation && navigation.canGoBack && navigation.canGoBack() && title !== 'Home';
   const showBack = (typeof bannerShowBack === 'boolean') ? bannerShowBack : computedShowBack;
 

@@ -316,49 +316,168 @@ function buildIntakeLocationHtml(locations) {
     </li>`).join('');
 }
 
+function buildEmailShell({ eyebrow, title, intro, accent, bodyHtml, footerHtml }) {
+  const theme = accent || '#2563eb';
+  return `
+    <div style="margin:0;padding:32px 18px;background:#f8fafc;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a;">
+      <div style="max-width:760px;margin:0 auto;">
+        <div style="margin-bottom:18px;padding:0 6px;">
+          <div style="display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;background:rgba(37,99,235,0.08);color:#2563eb;font-size:12px;font-weight:700;letter-spacing:0.02em;">${htmlEscape(eyebrow || 'CommunityBridge')}</div>
+        </div>
+        <div style="background:#ffffff;border:1px solid rgba(15,23,42,0.1);border-radius:24px;box-shadow:0 18px 44px rgba(15,23,42,0.06);overflow:hidden;">
+          <div style="padding:28px 28px 18px;background:linear-gradient(180deg, rgba(37,99,235,0.08) 0%, rgba(37,99,235,0.02) 100%);border-bottom:1px solid rgba(15,23,42,0.08);">
+            <h1 style="margin:0 0 10px;font-size:30px;line-height:1.08;letter-spacing:-0.03em;color:#0f172a;">${htmlEscape(title)}</h1>
+            ${intro ? `<p style="margin:0;color:#475569;font-size:15px;line-height:1.7;">${intro}</p>` : ''}
+          </div>
+          <div style="padding:24px 28px 28px;">
+            ${bodyHtml || ''}
+          </div>
+        </div>
+        <div style="padding:18px 8px 0;color:#64748b;font-size:12px;line-height:1.7;">
+          ${footerHtml || 'CommunityBridge organization onboarding'}
+        </div>
+      </div>
+      <div style="display:none;max-height:0;overflow:hidden;color:${htmlEscape(theme)};">CommunityBridge</div>
+    </div>`;
+}
+
+function buildEmailInfoTable(rows) {
+  return `
+    <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:0 10px;">
+      ${(rows || []).map((row) => `
+        <tr>
+          <td style="width:170px;padding:0;color:#64748b;font-size:13px;font-weight:700;vertical-align:top;">${htmlEscape(row.label)}</td>
+          <td style="padding:0;color:#0f172a;font-size:14px;line-height:1.7;">${row.value || ''}</td>
+        </tr>`).join('')}
+    </table>`;
+}
+
+function buildEmailSection({ title, body }) {
+  return `
+    <section style="margin-top:20px;padding:18px 20px;border:1px solid rgba(15,23,42,0.08);border-radius:18px;background:#ffffff;">
+      ${title ? `<h2 style="margin:0 0 10px;font-size:16px;line-height:1.3;color:#0f172a;">${htmlEscape(title)}</h2>` : ''}
+      <div style="color:#475569;font-size:14px;line-height:1.7;">${body || ''}</div>
+    </section>`;
+}
+
+function buildEmailActionButton({ href, label, background }) {
+  return `<a href="${htmlEscape(href)}" style="display:inline-block;padding:12px 18px;border-radius:12px;background:${htmlEscape(background)};color:#ffffff;text-decoration:none;font-weight:700;margin-right:10px;margin-bottom:10px;">${htmlEscape(label)}</a>`;
+}
+
 function buildIntakeEmailHtml({ submission, approveUrl, rejectUrl }) {
   const locationItems = buildIntakeLocationHtml(submission.locations || []);
   const organizationAddress = formatIntakeAddress(submission.organization);
 
-  return `
-    <div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;line-height:1.6;">
-      <h2 style="margin-bottom:8px;">New organization intake submission</h2>
-      <p><strong>Organization:</strong> ${htmlEscape(submission.organization.directoryName || submission.organization.name)}</p>
-      ${submission.organization.shortCode ? `<p><strong>Short code:</strong> ${htmlEscape(submission.organization.shortCode)}</p>` : ''}
-      ${submission.organization.website ? `<p><strong>Website:</strong> ${htmlEscape(submission.organization.website)}</p>` : ''}
-      ${submission.organization.email ? `<p><strong>Organization email:</strong> ${htmlEscape(submission.organization.email)}</p>` : ''}
-      ${submission.organization.phone ? `<p><strong>Organization phone:</strong> ${htmlEscape(submission.organization.phone)}</p>` : ''}
-      ${organizationAddress ? `<p><strong>Organization address:</strong> ${htmlEscape(organizationAddress)}</p>` : ''}
-      <p><strong>Primary contact:</strong> ${htmlEscape(submission.contact.name)}${submission.contact.title ? `, ${htmlEscape(submission.contact.title)}` : ''}</p>
-      <p><strong>Contact email:</strong> ${htmlEscape(submission.contact.email)}</p>
-      ${submission.contact.phone ? `<p><strong>Contact phone:</strong> ${htmlEscape(submission.contact.phone)}</p>` : ''}
-      <p><strong>Programs requested:</strong> ${htmlEscape(String((submission.programs || []).length))}</p>
-      <p><strong>Locations requested:</strong> ${htmlEscape(String((submission.locations || []).length))}</p>
-      <p><strong>Requested locations:</strong></p>
-      <ul>${locationItems}</ul>
-      ${submission.notes ? `<p><strong>Notes:</strong> ${htmlEscape(submission.notes)}</p>` : ''}
-      <p style="margin-top:24px;">
-        <a href="${htmlEscape(approveUrl)}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#16a34a;color:#ffffff;text-decoration:none;font-weight:700;margin-right:10px;">Approve</a>
-        <a href="${htmlEscape(rejectUrl)}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#dc2626;color:#ffffff;text-decoration:none;font-weight:700;">Reject</a>
-      </p>
-    </div>`;
+  return buildEmailShell({
+    eyebrow: 'CommunityBridge Organization Intake',
+    title: 'New organization intake submission',
+    intro: `Review ${htmlEscape(submission.organization.directoryName || submission.organization.name)} and choose whether to activate the requested locations.`,
+    accent: '#2563eb',
+    bodyHtml: [
+      buildEmailInfoTable([
+        { label: 'Organization', value: htmlEscape(submission.organization.directoryName || submission.organization.name) },
+        { label: 'Short code', value: htmlEscape(submission.organization.shortCode || 'Not provided') },
+        { label: 'Website', value: htmlEscape(submission.organization.website || 'Not provided') },
+        { label: 'Organization email', value: htmlEscape(submission.organization.email || 'Not provided') },
+        { label: 'Organization phone', value: htmlEscape(submission.organization.phone || 'Not provided') },
+        { label: 'Organization address', value: htmlEscape(organizationAddress || 'Not provided') },
+        { label: 'Primary contact', value: htmlEscape(`${submission.contact.name}${submission.contact.title ? `, ${submission.contact.title}` : ''}`) },
+        { label: 'Contact email', value: htmlEscape(submission.contact.email) },
+        { label: 'Contact phone', value: htmlEscape(submission.contact.phone || 'Not provided') },
+        { label: 'Programs requested', value: htmlEscape(String((submission.programs || []).length)) },
+        { label: 'Locations requested', value: htmlEscape(String((submission.locations || []).length)) },
+      ]),
+      buildEmailSection({
+        title: 'Requested locations',
+        body: `<ul style="margin:0;padding-left:18px;">${locationItems}</ul>`,
+      }),
+      submission.notes ? buildEmailSection({
+        title: 'Notes',
+        body: htmlEscape(submission.notes),
+      }) : '',
+      `<div style="margin-top:24px;">${buildEmailActionButton({ href: approveUrl, label: 'Approve', background: '#16a34a' })}${buildEmailActionButton({ href: rejectUrl, label: 'Reject', background: '#dc2626' })}</div>`,
+    ].join(''),
+    footerHtml: 'Reviewing this email will activate or reject the organization immediately in CommunityBridge.',
+  });
 }
 
 function buildApplicantConfirmationEmailHtml({ submission }) {
   const locationItems = buildIntakeLocationHtml(submission.locations || []);
 
-  return `
-    <div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;line-height:1.6;">
-      <h2 style="margin-bottom:8px;">Your CommunityBridge organization intake was received</h2>
-      <p>Thanks for submitting <strong>${htmlEscape(submission.organization.directoryName || submission.organization.name)}</strong> for review.</p>
-      <p>CommunityBridge operations has received your intake and will review it before activation. When approved, your organization, programs, and campuses will be added directly into the app for enrollment.</p>
-      <p><strong>Primary contact:</strong> ${htmlEscape(submission.contact.name)}${submission.contact.title ? `, ${htmlEscape(submission.contact.title)}` : ''}</p>
-      <p><strong>Contact email:</strong> ${htmlEscape(submission.contact.email)}</p>
-      <p><strong>Locations submitted:</strong></p>
-      <ul>${locationItems}</ul>
-      ${submission.notes ? `<p><strong>Your notes:</strong> ${htmlEscape(submission.notes)}</p>` : ''}
-      <p style="margin-top:24px;">If you need to correct anything before approval, reply to this email and include your organization name.</p>
-    </div>`;
+  return buildEmailShell({
+    eyebrow: 'CommunityBridge Organization Intake',
+    title: 'Your intake was received',
+    intro: `Thanks for submitting ${htmlEscape(submission.organization.directoryName || submission.organization.name)} for onboarding review.`,
+    accent: '#2563eb',
+    bodyHtml: [
+      buildEmailSection({
+        body: 'CommunityBridge operations has received your intake and will review it before activation. When approved, your organization, programs, and campuses will be added directly into the app for enrollment.',
+      }),
+      buildEmailInfoTable([
+        { label: 'Primary contact', value: htmlEscape(`${submission.contact.name}${submission.contact.title ? `, ${submission.contact.title}` : ''}`) },
+        { label: 'Contact email', value: htmlEscape(submission.contact.email) },
+        { label: 'Locations submitted', value: htmlEscape(String((submission.locations || []).length)) },
+      ]),
+      buildEmailSection({
+        title: 'Locations submitted',
+        body: `<ul style="margin:0;padding-left:18px;">${locationItems}</ul>`,
+      }),
+      submission.notes ? buildEmailSection({ title: 'Your notes', body: htmlEscape(submission.notes) }) : '',
+    ].join(''),
+    footerHtml: 'If you need to correct anything before approval, reply to this email and include your organization name.',
+  });
+}
+
+function buildApplicantDecisionEmailHtml({ submission, decision, publicBaseUrl }) {
+  const approved = decision === 'approved';
+  const organizationName = submission.organization?.directoryName || submission.organization?.name || 'Your organization';
+  const locationItems = buildIntakeLocationHtml(submission.locations || []);
+  const dashboardUrl = `${safeString(publicBaseUrl || '').replace(/\/$/, '') || 'https://communitybridge.app'}/organizations`;
+
+  return buildEmailShell({
+    eyebrow: 'CommunityBridge Organization Review',
+    title: approved ? 'Your organization was approved' : 'Your organization was not approved',
+    intro: approved
+      ? `${htmlEscape(organizationName)} has been approved and is ready for enrollment in CommunityBridge.`
+      : `${htmlEscape(organizationName)} was reviewed, but it was not approved for activation at this time.`,
+    accent: approved ? '#16a34a' : '#dc2626',
+    bodyHtml: [
+      buildEmailSection({
+        body: approved
+          ? 'Your organization, programs, and campuses have been added to CommunityBridge. Users can now join using the approved enrollment codes tied to each location.'
+          : 'CommunityBridge reviewed your submission and did not approve it for activation. If you believe details need to be corrected or clarified, reply to this email and include your organization name.',
+      }),
+      buildEmailSection({
+        title: approved ? 'Approved locations' : 'Reviewed locations',
+        body: `<ul style="margin:0;padding-left:18px;">${locationItems}</ul>`,
+      }),
+      approved ? `<div style="margin-top:24px;">${buildEmailActionButton({ href: dashboardUrl, label: 'View intake page', background: '#2563eb' })}</div>` : '',
+    ].join(''),
+    footerHtml: approved
+      ? 'If you need follow-up support after activation, reply to this email and the CommunityBridge team will help.'
+      : 'You can reply to this email if you want help preparing a corrected submission.',
+  });
+}
+
+function buildApplicantDecisionEmailText({ submission, decision, publicBaseUrl }) {
+  const approved = decision === 'approved';
+  const organizationName = submission.organization?.directoryName || submission.organization?.name || 'Your organization';
+  const lines = [
+    approved
+      ? `${organizationName} has been approved and is ready for enrollment in CommunityBridge.`
+      : `${organizationName} was reviewed, but it was not approved for activation at this time.`,
+    '',
+    approved
+      ? 'Your organization, programs, and campuses have been added to CommunityBridge. Users can now join using the approved enrollment codes tied to each location.'
+      : 'CommunityBridge reviewed your submission and did not approve it for activation. Reply to this email if details need to be corrected or clarified.',
+    '',
+    buildIntakeSummaryText(submission),
+  ];
+  if (approved) {
+    lines.push('');
+    lines.push(`Intake page: ${(safeString(publicBaseUrl || '').replace(/\/$/, '') || 'https://communitybridge.app')}/organizations`);
+  }
+  return lines.join('\n');
 }
 
 function buildApplicantConfirmationEmailText({ submission }) {
@@ -428,6 +547,23 @@ async function sendOrganizationIntakeConfirmationEmail({ to, submission }) {
     subject,
     text: buildApplicantConfirmationEmailText({ submission }),
     html: buildApplicantConfirmationEmailHtml({ submission }),
+  });
+}
+
+async function sendOrganizationDecisionEmail({ to, submission, decision, publicBaseUrl }) {
+  if (!to) return;
+  const { from, transporter } = getOrganizationIntakeMailer();
+  const organizationName = submission.organization?.directoryName || submission.organization?.name || 'your organization';
+  const approved = decision === 'approved';
+  const subject = approved
+    ? `CommunityBridge approved ${organizationName}`
+    : `CommunityBridge update for ${organizationName}`;
+  await transporter.sendMail({
+    from,
+    to,
+    subject,
+    text: buildApplicantDecisionEmailText({ submission, decision, publicBaseUrl }),
+    html: buildApplicantDecisionEmailHtml({ submission, decision, publicBaseUrl }),
   });
 }
 
@@ -681,6 +817,38 @@ function registerOrganizationIntakeRoutes(app) {
           rejectedAt: admin.firestore.FieldValue.serverTimestamp(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
+
+        try {
+          await sendOrganizationDecisionEmail({
+            to: data.contact?.email || data.applicantEmail || '',
+            submission: data,
+            decision: 'rejected',
+            publicBaseUrl: getPublicBaseUrl(req),
+          });
+          await submissionRef.set({
+            applicantDecisionEmail: {
+              status: 'sent',
+              decision: 'rejected',
+              email: data.contact?.email || data.applicantEmail || '',
+              sentAt: admin.firestore.FieldValue.serverTimestamp(),
+              error: '',
+            },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        } catch (decisionEmailError) {
+          console.error('organizationIntakeAction rejected decision email failed', decisionEmailError);
+          await submissionRef.set({
+            applicantDecisionEmail: {
+              status: 'failed',
+              decision: 'rejected',
+              email: data.contact?.email || data.applicantEmail || '',
+              failedAt: admin.firestore.FieldValue.serverTimestamp(),
+              error: safeString(decisionEmailError?.code || decisionEmailError?.message || 'unknown_error').slice(0, 200),
+            },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+
         return res.status(200).send(renderIntakeResultPage({
           title: 'Submission rejected',
           body: `<p>${htmlEscape(data.organization?.directoryName || data.organization?.name || 'The organization')} was rejected and will not be activated.</p>`,
@@ -689,6 +857,38 @@ function registerOrganizationIntakeRoutes(app) {
       }
 
       await activateApprovedSubmission(submissionRef, data);
+
+      try {
+        await sendOrganizationDecisionEmail({
+          to: data.contact?.email || data.applicantEmail || '',
+          submission: data,
+          decision: 'approved',
+          publicBaseUrl: getPublicBaseUrl(req),
+        });
+        await submissionRef.set({
+          applicantDecisionEmail: {
+            status: 'sent',
+            decision: 'approved',
+            email: data.contact?.email || data.applicantEmail || '',
+            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+            error: '',
+          },
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      } catch (decisionEmailError) {
+        console.error('organizationIntakeAction approved decision email failed', decisionEmailError);
+        await submissionRef.set({
+          applicantDecisionEmail: {
+            status: 'failed',
+            decision: 'approved',
+            email: data.contact?.email || data.applicantEmail || '',
+            failedAt: admin.firestore.FieldValue.serverTimestamp(),
+            error: safeString(decisionEmailError?.code || decisionEmailError?.message || 'unknown_error').slice(0, 200),
+          },
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+
       return res.status(200).send(renderIntakeResultPage({
         title: 'Organization approved',
         body: `<p>${htmlEscape(data.organization?.directoryName || data.organization?.name || 'The organization')} was approved and activated successfully.</p>`,

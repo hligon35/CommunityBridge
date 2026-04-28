@@ -69,12 +69,21 @@ const HEADER_LOGO_HEIGHT = 80;
 const HEADER_HEIGHT = 96;
 const SHOW_STACK_HEADERS = Platform.OS !== 'web';
 
+function humanizeScreenLabel(value) {
+  return String(value || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+}
+
 const MyClassStackNav = createNativeStackNavigator();
 function MyClassStack() {
   return (
     <MyClassStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
         headerShown: SHOW_STACK_HEADERS,
+        title: humanizeScreenLabel(route?.name),
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
@@ -92,6 +101,7 @@ function ControlsStack() {
     <ControlsStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
         headerShown: SHOW_STACK_HEADERS,
+        title: humanizeScreenLabel(route?.name),
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
@@ -129,6 +139,7 @@ function CommunityStack() {
     <CommunityStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
         headerShown: SHOW_STACK_HEADERS,
+        title: humanizeScreenLabel(route?.name),
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
@@ -149,6 +160,7 @@ function MyChildStack() {
     <MyChildStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
         headerShown: SHOW_STACK_HEADERS,
+        title: humanizeScreenLabel(route?.name),
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
@@ -166,6 +178,7 @@ function ChatsStack() {
     <ChatsStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
         headerShown: SHOW_STACK_HEADERS,
+        title: humanizeScreenLabel(route?.name),
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
@@ -185,6 +198,7 @@ function SettingsStack() {
     <SettingsStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
         headerShown: SHOW_STACK_HEADERS,
+        title: humanizeScreenLabel(route?.name),
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
