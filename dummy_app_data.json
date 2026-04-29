@@ -1,0 +1,560 @@
+{
+  "therapists": [
+    {
+      "id": "bcba-001",
+      "name": "Dr. Marissa Bennett",
+      "role": "therapist",
+      "email": "marissa.bennett@therapycenter.org",
+      "phone": "317-555-4101",
+      "avatar": "",
+      "supervisedBy": ""
+    },
+    {
+      "id": "aba-101",
+      "name": "Jordan Ellis",
+      "role": "therapist",
+      "email": "jordan.ellis@therapycenter.org",
+      "phone": "317-555-4102",
+      "avatar": "",
+      "supervisedBy": "bcba-001"
+    },
+    {
+      "id": "aba-102",
+      "name": "Samantha Reyes",
+      "role": "therapist",
+      "email": "samantha.reyes@therapycenter.org",
+      "phone": "317-555-4103",
+      "avatar": "",
+      "supervisedBy": "bcba-001"
+    },
+    {
+      "id": "aba-103",
+      "name": "Marcus Hill",
+      "role": "therapist",
+      "email": "marcus.hill@therapycenter.org",
+      "phone": "317-555-4104",
+      "avatar": "",
+      "supervisedBy": "bcba-001"
+    }
+  ],
+  "parents": [
+    {
+      "id": "par-001",
+      "name": "Alicia Cook",
+      "phone": "317-555-5101",
+      "email": "alicia.cook@example.com",
+      "avatar": ""
+    },
+    {
+      "id": "par-002",
+      "name": "Brian Thompson",
+      "phone": "317-555-5102",
+      "email": "brian.thompson@example.com",
+      "avatar": ""
+    },
+    {
+      "id": "par-003",
+      "name": "Danielle Moore",
+      "phone": "317-555-5103",
+      "email": "danielle.moore@example.com",
+      "avatar": ""
+    },
+    {
+      "id": "par-004",
+      "name": "Eric Johnson",
+      "phone": "317-555-5104",
+      "email": "eric.johnson@example.com",
+      "avatar": ""
+    },
+    {
+      "id": "par-005",
+      "name": "Felicia Grant",
+      "phone": "317-555-5105",
+      "email": "felicia.grant@example.com",
+      "avatar": ""
+    },
+    {
+      "id": "par-006",
+      "name": "George Ramirez",
+      "phone": "317-555-5106",
+      "email": "george.ramirez@example.com",
+      "avatar": ""
+    }
+  ],
+  "children": [
+    {
+      "id": "child-001",
+      "name": "Aubrey Cook",
+      "age": "7",
+      "room": "Blue-1",
+      "parents": [
+        {
+          "id": "par-001",
+          "name": "Alicia Cook"
+        }
+      ],
+      "assignedABA": [
+        "aba-101",
+        "aba-102"
+      ],
+      "session": "AM",
+      "notes": "Working on communication goals."
+    },
+    {
+      "id": "child-002",
+      "name": "Zahari Cook",
+      "age": "5",
+      "room": "Blue-2",
+      "parents": [
+        {
+          "id": "par-001",
+          "name": "Alicia Cook"
+        }
+      ],
+      "assignedABA": [
+        "aba-103"
+      ],
+      "session": "PM",
+      "notes": "Improving transitions."
+    },
+    {
+      "id": "child-003",
+      "name": "Lakelynn Cook",
+      "age": "4",
+      "room": "Green-1",
+      "parents": [
+        {
+          "id": "par-001",
+          "name": "Alicia Cook"
+        }
+      ],
+      "assignedABA": [
+        "aba-102"
+      ],
+      "session": "AM",
+      "notes": "Sensory integration focus."
+    },
+    {
+      "id": "child-004",
+      "name": "Mason Thompson",
+      "age": "6",
+      "room": "Green-2",
+      "parents": [
+        {
+          "id": "par-002",
+          "name": "Brian Thompson"
+        }
+      ],
+      "assignedABA": [
+        "aba-101"
+      ],
+      "session": "PM"
+    },
+    {
+      "id": "child-005",
+      "name": "Harper Moore",
+      "age": "8",
+      "room": "Yellow-1",
+      "parents": [
+        {
+          "id": "par-003",
+          "name": "Danielle Moore"
+        }
+      ],
+      "assignedABA": [
+        "aba-103"
+      ],
+      "session": "AM"
+    },
+    {
+      "id": "child-006",
+      "name": "Eli Johnson",
+      "age": "5",
+      "room": "Yellow-2",
+      "parents": [
+        {
+          "id": "par-004",
+          "name": "Eric Johnson"
+        }
+      ],
+      "assignedABA": [
+        "aba-102"
+      ],
+      "session": "PM"
+    },
+    {
+      "id": "child-007",
+      "name": "Sofia Grant",
+      "age": "6",
+      "room": "Red-1",
+      "parents": [
+        {
+          "id": "par-005",
+          "name": "Felicia Grant"
+        }
+      ],
+      "assignedABA": [
+        "aba-101"
+      ],
+      "session": "AM"
+    },
+    {
+      "id": "child-008",
+      "name": "Noah Ramirez",
+      "age": "4",
+      "room": "Red-2",
+      "parents": [
+        {
+          "id": "par-006",
+          "name": "George Ramirez"
+        }
+      ],
+      "assignedABA": [
+        "aba-103"
+      ],
+      "session": "PM"
+    }
+  ],
+  "staff": [
+    {
+      "id": "staff-001",
+      "name": "Linda Carter",
+      "role": "Admin",
+      "email": "linda.carter@school.org"
+    },
+    {
+      "id": "staff-002",
+      "name": "Tom Richards",
+      "role": "Front Desk",
+      "email": "tom.richards@school.org"
+    },
+    {
+      "id": "staff-003",
+      "name": "Nina Patel",
+      "role": "Program Director",
+      "email": "nina.patel@school.org"
+    },
+    {
+      "id": "staff-004",
+      "name": "Oscar Lee",
+      "role": "Transportation",
+      "email": "oscar.lee@school.org"
+    },
+    {
+      "id": "staff-005",
+      "name": "Rachel Kim",
+      "role": "Nurse",
+      "email": "rachel.kim@school.org"
+    },
+    {
+      "id": "staff-006",
+      "name": "Victor Shaw",
+      "role": "IT Support",
+      "email": "victor.shaw@school.org"
+    }
+  ],
+  "messageThreads": {
+    "parent": [
+      {
+        "threadId": "pth-001",
+        "participants": [
+          "par-001",
+          "staff-001"
+        ],
+        "messages": [
+          {
+            "from": "par-001",
+            "text": "How did Aubrey do today?",
+            "time": "2026-04-20T09:15"
+          },
+          {
+            "from": "staff-001",
+            "text": "Great day! She completed all tasks.",
+            "time": "2026-04-20T09:18"
+          }
+        ]
+      },
+      {
+        "threadId": "pth-002",
+        "participants": [
+          "par-003",
+          "aba-103"
+        ],
+        "messages": [
+          {
+            "from": "par-003",
+            "text": "Any updates on Harper's progress?",
+            "time": "2026-04-19T14:02"
+          },
+          {
+            "from": "aba-103",
+            "text": "Yes! She improved her focus today.",
+            "time": "2026-04-19T14:05"
+          }
+        ]
+      },
+      {
+        "threadId": "pth-003",
+        "participants": [
+          "par-006",
+          "staff-002"
+        ],
+        "messages": [
+          {
+            "from": "par-006",
+            "text": "Will Noah need extra supplies?",
+            "time": "2026-04-18T11:30"
+          },
+          {
+            "from": "staff-002",
+            "text": "Just a new notebook.",
+            "time": "2026-04-18T11:33"
+          }
+        ]
+      }
+    ],
+    "therapist": [
+      {
+        "threadId": "tth-001",
+        "participants": [
+          "aba-101",
+          "bcba-001"
+        ],
+        "messages": [
+          {
+            "from": "aba-101",
+            "text": "Reviewing Aubrey\u2019s data now.",
+            "time": "2026-04-20T10:00"
+          },
+          {
+            "from": "bcba-001",
+            "text": "Let me know if you need adjustments.",
+            "time": "2026-04-20T10:03"
+          }
+        ]
+      },
+      {
+        "threadId": "tth-002",
+        "participants": [
+          "aba-102",
+          "aba-103"
+        ],
+        "messages": [
+          {
+            "from": "aba-102",
+            "text": "Can you cover my PM session?",
+            "time": "2026-04-19T13:20"
+          },
+          {
+            "from": "aba-103",
+            "text": "Yes, I can take it.",
+            "time": "2026-04-19T13:22"
+          }
+        ]
+      },
+      {
+        "threadId": "tth-003",
+        "participants": [
+          "aba-103",
+          "staff-003"
+        ],
+        "messages": [
+          {
+            "from": "aba-103",
+            "text": "Need new materials for Harper.",
+            "time": "2026-04-18T15:10"
+          },
+          {
+            "from": "staff-003",
+            "text": "Approved. Pick them up tomorrow.",
+            "time": "2026-04-18T15:12"
+          }
+        ]
+      }
+    ],
+    "admin": [
+      {
+        "threadId": "ath-001",
+        "participants": [
+          "staff-001",
+          "staff-003"
+        ],
+        "messages": [
+          {
+            "from": "staff-001",
+            "text": "Enrollment forms ready.",
+            "time": "2026-04-20T08:00"
+          },
+          {
+            "from": "staff-003",
+            "text": "Great, send them to parents.",
+            "time": "2026-04-20T08:05"
+          }
+        ]
+      },
+      {
+        "threadId": "ath-002",
+        "participants": [
+          "staff-002",
+          "staff-004"
+        ],
+        "messages": [
+          {
+            "from": "staff-002",
+            "text": "Bus route change needed.",
+            "time": "2026-04-19T12:10"
+          },
+          {
+            "from": "staff-004",
+            "text": "Updating route now.",
+            "time": "2026-04-19T12:12"
+          }
+        ]
+      },
+      {
+        "threadId": "ath-003",
+        "participants": [
+          "staff-005",
+          "staff-001"
+        ],
+        "messages": [
+          {
+            "from": "staff-005",
+            "text": "Eli needs a health form update.",
+            "time": "2026-04-18T09:40"
+          },
+          {
+            "from": "staff-001",
+            "text": "I'll notify the parent.",
+            "time": "2026-04-18T09:42"
+          }
+        ]
+      }
+    ]
+  },
+  "urgentMemos": [
+    {
+      "id": "memo-001",
+      "title": "Room Change",
+      "message": "Blue-2 temporarily closed for cleaning.",
+      "priority": "urgent",
+      "time": "2026-04-20T07:30"
+    },
+    {
+      "id": "memo-002",
+      "title": "Health Alert",
+      "message": "Stomach bug reported in Yellow wing.",
+      "priority": "urgent",
+      "time": "2026-04-19T16:00"
+    },
+    {
+      "id": "memo-003",
+      "title": "Pickup Delay",
+      "message": "Bus 3 running 20 minutes late.",
+      "priority": "urgent",
+      "time": "2026-04-18T14:45"
+    }
+  ],
+  "progressReports": [
+    {
+      "id": "pr-001",
+      "childId": "child-001",
+      "therapistId": "aba-101",
+      "summary": "Aubrey improved in communication tasks and completed 4/5 goals today.",
+      "date": "2026-04-20"
+    },
+    {
+      "id": "pr-002",
+      "childId": "child-005",
+      "therapistId": "aba-103",
+      "summary": "Harper demonstrated better focus and reduced prompting.",
+      "date": "2026-04-19"
+    },
+    {
+      "id": "pr-003",
+      "childId": "child-007",
+      "therapistId": "aba-101",
+      "summary": "Sofia engaged well and transitioned smoothly between activities.",
+      "date": "2026-04-18"
+    }
+  ],
+  "nextSessions": [
+    {
+      "id": "ns-001",
+      "childId": "child-002",
+      "therapistId": "aba-103",
+      "date": "2026-04-21",
+      "time": "13:00"
+    },
+    {
+      "id": "ns-002",
+      "childId": "child-006",
+      "therapistId": "aba-102",
+      "date": "2026-04-21",
+      "time": "15:00"
+    },
+    {
+      "id": "ns-003",
+      "childId": "child-008",
+      "therapistId": "aba-103",
+      "date": "2026-04-22",
+      "time": "10:00"
+    }
+  ],
+  "moodScores": [
+    {
+      "id": "mh-001",
+      "childId": "child-001",
+      "scores": [
+        {
+          "date": "2026-04-18",
+          "score": 3
+        },
+        {
+          "date": "2026-04-19",
+          "score": 4
+        },
+        {
+          "date": "2026-04-20",
+          "score": 5
+        }
+      ]
+    },
+    {
+      "id": "mh-002",
+      "childId": "child-004",
+      "scores": [
+        {
+          "date": "2026-04-18",
+          "score": 2
+        },
+        {
+          "date": "2026-04-19",
+          "score": 3
+        },
+        {
+          "date": "2026-04-20",
+          "score": 3
+        }
+      ]
+    },
+    {
+      "id": "mh-003",
+      "childId": "child-007",
+      "scores": [
+        {
+          "date": "2026-04-18",
+          "score": 4
+        },
+        {
+          "date": "2026-04-19",
+          "score": 4
+        },
+        {
+          "date": "2026-04-20",
+          "score": 5
+        }
+      ]
+    }
+  ]
+}

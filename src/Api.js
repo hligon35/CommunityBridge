@@ -124,6 +124,15 @@ function isLikelyNetworkError(e) {
   return false;
 }
 
+function shouldFallbackFromWriteApi({ resp, json, error }) {
+  const status = Number(resp?.status || error?.httpStatus || 0);
+  const message = String(json?.error || json?.message || error?.message || '').toLowerCase();
+  if (status === 404) return true;
+  if (status === 401 || status === 403) return true;
+  if (message.includes('invalid token') || message.includes('missing auth token') || message.includes('user not found')) return true;
+  return false;
+}
+
 async function fetchWithTimeout(resource, init = {}, timeoutMs = DEFAULT_API_TIMEOUT_MS) {
   const hasAbortController = typeof AbortController === 'function';
   if (!hasAbortController || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
@@ -992,10 +1001,43 @@ export async function ackUrgentMemo(memoIds) {
 }
 
 export async function sendUrgentMemo(memo) {
-  requireUser();
+  const u = requireUser();
   const clean = { ...(memo || {}) };
   const id = clean.id ? String(clean.id) : null;
   delete clean.id;
+
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (apiBase) {
+    const requestBody = id ? { id, ...clean } : clean;
+    const tryApi = async ({ forceRefresh } = {}) => {
+      const idToken = await u.getIdToken(!!forceRefresh);
+      const resp = await fetchWithTimeout(`${apiBase}/api/urgent-memos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
+      const json = await resp.json().catch(() => null);
+      return { resp, json };
+    };
+
+    try {
+      let { resp, json } = await tryApi({ forceRefresh: false });
+      if (resp.status === 401) {
+        ({ resp, json } = await tryApi({ forceRefresh: true }));
+      }
+      if (resp.ok && json) return json;
+      if (!shouldFallbackFromWriteApi({ resp, json }) && !isLikelyNetworkError({ message: resp.statusText })) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not send urgent memo.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+    } catch (e) {
+      if (!isLikelyNetworkError(e) && !shouldFallbackFromWriteApi({ error: e })) throw e;
+    }
+  }
 
   if (id) {
     await setDoc(doc(db, 'urgentMemos', id), { ...clean, updatedAt: serverTimestamp(), createdAt: clean.createdAt ? clean.createdAt : serverTimestamp() }, { merge: true });
@@ -1103,6 +1145,43 @@ export async function sendMessage(payload) {
 
   const to = Array.isArray(payload?.to) ? payload.to : [];
 
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (apiBase) {
+    const requestBody = {
+      threadId,
+      body,
+      to,
+    };
+    const tryApi = async ({ forceRefresh } = {}) => {
+      const idToken = await u.getIdToken(!!forceRefresh);
+      const resp = await fetchWithTimeout(`${apiBase}/api/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
+      const json = await resp.json().catch(() => null);
+      return { resp, json };
+    };
+
+    try {
+      let { resp, json } = await tryApi({ forceRefresh: false });
+      if (resp.status === 401) {
+        ({ resp, json } = await tryApi({ forceRefresh: true }));
+      }
+      if (resp.ok && json) return json;
+      if (!shouldFallbackFromWriteApi({ resp, json }) && !isLikelyNetworkError({ message: resp.statusText })) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not send message.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+    } catch (e) {
+      if (!isLikelyNetworkError(e) && !shouldFallbackFromWriteApi({ error: e })) throw e;
+    }
+  }
+
   const toRoles = [];
   const participantUids = new Set([u.uid]);
 
@@ -1140,8 +1219,41 @@ export async function sendMessage(payload) {
 }
 
 export async function pingArrival(payload) {
-  requireUser();
+  const u = requireUser();
   const clean = { ...(payload || {}) };
+
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (apiBase) {
+    const tryApi = async ({ forceRefresh } = {}) => {
+      const idToken = await u.getIdToken(!!forceRefresh);
+      const resp = await fetchWithTimeout(`${apiBase}/api/arrival/ping`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(clean),
+      });
+      const json = await resp.json().catch(() => null);
+      return { resp, json };
+    };
+
+    try {
+      let { resp, json } = await tryApi({ forceRefresh: false });
+      if (resp.status === 401) {
+        ({ resp, json } = await tryApi({ forceRefresh: true }));
+      }
+      if (resp.ok && json?.ok !== false) return json || { ok: true, via: 'api' };
+      if (!shouldFallbackFromWriteApi({ resp, json }) && !isLikelyNetworkError({ message: resp.statusText })) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not ping arrival.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+    } catch (e) {
+      if (!isLikelyNetworkError(e) && !shouldFallbackFromWriteApi({ error: e })) throw e;
+    }
+  }
+
   await addDoc(collection(db, 'arrivalPings'), {
     ...clean,
     createdAt: serverTimestamp(),

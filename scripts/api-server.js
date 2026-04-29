@@ -1563,7 +1563,7 @@ const upload = multer({
   limits: { fileSize: 15 * 1024 * 1024 }, // 15MB
 });
 
-function authMiddleware(req, res, next) {
+async function authMiddleware(req, res, next) {
   if (!db) return res.status(503).json({ ok: false, error: 'Database unavailable' });
   const header = req.headers.authorization || req.headers.Authorization || '';
   const token = String(header).startsWith('Bearer ') ? String(header).slice(7) : '';
