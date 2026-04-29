@@ -1,15 +1,15 @@
 import * as Api from '../../Api';
-import { listSeedOrganizations } from '../../seed/tenantSeed';
 
 export async function listActiveOrganizations() {
   try {
     const data = await Api.listOrganizations();
     const items = Array.isArray(data?.items) ? data.items : [];
-    if (items.length) return items;
-  } catch (_) {
-    // fall back to seeded org data when remote tenant data is unavailable
+    return items;
+  } catch (error) {
+    const err = new Error('Organization data is temporarily unavailable. Please try again later.');
+    err.cause = error;
+    throw err;
   }
-  return listSeedOrganizations();
 }
 
 export async function getOrganizationById(organizationId) {

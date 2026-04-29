@@ -3,9 +3,8 @@ import { Alert, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacit
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
 
-const BILLING_PHONE = '+18556842962';
-const BILLING_EMAIL = 'billing@centriahealthcare.com';
-const PAYMENT_URL = 'https://centriahealthcare.com/billing/';
+const BILLING_PHONE = '+18556030370';
+const PAYMENT_URL = 'https://centriahealthcare.com/payment-portal';
 
 function openUrl(url) {
   Linking.openURL(url).catch(() => Alert.alert('Cannot open link', 'Please try again later.'));
@@ -39,16 +38,7 @@ export default function InsuranceBillingScreen() {
   };
 
   const onContact = () => {
-    Alert.alert(
-      'Contact Billing',
-      'How would you like to reach billing?',
-      [
-        { text: 'Call', onPress: () => openUrl(`tel:${BILLING_PHONE}`) },
-        { text: 'Email', onPress: () => openUrl(`mailto:${BILLING_EMAIL}?subject=${encodeURIComponent('Billing Question')}`) },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-      { cancelable: true }
-    );
+    openUrl(`tel:${BILLING_PHONE}`);
   };
 
   return (

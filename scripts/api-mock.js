@@ -106,6 +106,12 @@ let messages = [];
 let urgentMemos = [];
 let timeChangeProposals = [];
 let pushTokens = []; // { token, userId, platform, enabled, preferences, updatedAt }
+let orgSettings = {
+  programDocumentsByProgramId: {},
+  campusDocumentsByCampusId: {},
+};
+let attendanceRecords = [];
+let moodEntries = [];
 
 // Stable mock users keyed by normalized email.
 const usersByEmail = new Map();
@@ -135,11 +141,135 @@ function getOrCreateUserForEmail(email, { name = 'Mock User', role = 'parent' } 
   return user;
 }
 
+function normalizeDateKey(value) {
+  const raw = String(value || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const parsed = new Date(raw || Date.now());
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function normalizeDocumentEntry(doc) {
+  if (!doc || typeof doc !== 'object') return null;
+  const url = String(doc.url || '').trim();
+  if (!url) return null;
+  return {
+    id: String(doc.id || nanoId()).trim(),
+    title: String(doc.title || doc.name || doc.fileName || 'Document').trim(),
+    meta: String(doc.meta || doc.description || '').trim(),
+    url,
+    fileName: String(doc.fileName || doc.name || '').trim(),
+    mimeType: String(doc.mimeType || '').trim(),
+    uploadedAt: String(doc.uploadedAt || doc.createdAt || nowISO()).trim(),
+  };
+}
+
+function normalizeDocumentScopeMap(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const out = {};
+  Object.entries(source).forEach(([scopeId, docs]) => {
+    const key = String(scopeId || '').trim();
+    if (!key) return;
+    const items = (Array.isArray(docs) ? docs : []).map((doc) => normalizeDocumentEntry(doc)).filter(Boolean);
+    if (items.length) out[key] = items;
+  });
+  return out;
+}
+
 function nanoId() {
   return `id_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 app.get('/api/health', (req, res) => res.json({ ok: true, uptime: process.uptime() }));
+
+app.get('/api/org-settings', (req, res) => {
+  return res.json({ ok: true, item: orgSettings });
+});
+
+app.put('/api/org-settings', (req, res) => {
+  const payload = req.body && typeof req.body === 'object' ? req.body : {};
+  orgSettings = {
+    ...orgSettings,
+    ...payload,
+    programDocumentsByProgramId: normalizeDocumentScopeMap(payload.programDocumentsByProgramId != null ? payload.programDocumentsByProgramId : orgSettings.programDocumentsByProgramId),
+    campusDocumentsByCampusId: normalizeDocumentScopeMap(payload.campusDocumentsByCampusId != null ? payload.campusDocumentsByCampusId : orgSettings.campusDocumentsByCampusId),
+  };
+  return res.json({ ok: true, item: orgSettings });
+});
+
+app.get('/api/children/attendance', (req, res) => {
+  const dateKey = normalizeDateKey(req.query && req.query.date);
+  if (!dateKey) return res.status(400).json({ ok: false, error: 'Invalid date' });
+  return res.json({
+    ok: true,
+    dateKey,
+    items: attendanceRecords.filter((entry) => entry.recordedFor === dateKey),
+  });
+});
+
+app.put('/api/children/attendance', (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const dateKey = normalizeDateKey(body.date || body.recordedFor);
+  if (!dateKey) return res.status(400).json({ ok: false, error: 'Invalid date' });
+  const entries = (Array.isArray(body.entries) ? body.entries : [])
+    .map((entry) => ({
+      id: nanoId(),
+      childId: String(entry?.childId || '').trim(),
+      recordedFor: dateKey,
+      status: String(entry?.status || '').trim().toLowerCase(),
+      note: String(entry?.note || '').trim(),
+      createdAt: nowISO(),
+      updatedAt: nowISO(),
+    }))
+    .filter((entry) => entry.childId && ['present', 'absent', 'tardy'].includes(entry.status));
+  if (!entries.length) return res.status(400).json({ ok: false, error: 'No valid attendance entries' });
+  entries.forEach((entry) => {
+    const existingIndex = attendanceRecords.findIndex((item) => item.childId === entry.childId && item.recordedFor === dateKey);
+    if (existingIndex >= 0) {
+      attendanceRecords[existingIndex] = { ...attendanceRecords[existingIndex], ...entry, id: attendanceRecords[existingIndex].id, createdAt: attendanceRecords[existingIndex].createdAt };
+    } else {
+      attendanceRecords.unshift(entry);
+    }
+  });
+  return res.json({ ok: true, dateKey, saved: entries.length });
+});
+
+app.get('/api/children/:childId/attendance', (req, res) => {
+  const childId = String(req.params?.childId || '').trim();
+  if (!childId) return res.status(400).json({ ok: false, error: 'Missing childId' });
+  return res.json({
+    ok: true,
+    childId,
+    items: attendanceRecords.filter((entry) => entry.childId === childId).sort((left, right) => String(right.recordedFor).localeCompare(String(left.recordedFor))),
+  });
+});
+
+app.get('/api/children/:childId/mood', (req, res) => {
+  const childId = String(req.params?.childId || '').trim();
+  if (!childId) return res.status(400).json({ ok: false, error: 'Missing childId' });
+  return res.json({
+    ok: true,
+    childId,
+    items: moodEntries.filter((entry) => entry.childId === childId).sort((left, right) => String(right.recordedAt).localeCompare(String(left.recordedAt))),
+  });
+});
+
+app.post('/api/children/:childId/mood', (req, res) => {
+  const childId = String(req.params?.childId || '').trim();
+  const score = Number(req.body?.score);
+  if (!childId) return res.status(400).json({ ok: false, error: 'Missing childId' });
+  if (!Number.isInteger(score) || score < 1 || score > 15) return res.status(400).json({ ok: false, error: 'Mood score must be an integer between 1 and 15' });
+  const item = {
+    id: nanoId(),
+    childId,
+    score,
+    note: String(req.body?.note || '').trim(),
+    recordedAt: String(req.body?.recordedAt || nowISO()).trim(),
+    createdAt: nowISO(),
+  };
+  moodEntries.unshift(item);
+  return res.json({ ok: true, item });
+});
 
 app.post('/api/arrival/ping', (req, res) => {
   // Best-effort stub for arrival detector.

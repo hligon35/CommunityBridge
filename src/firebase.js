@@ -140,33 +140,6 @@ function getFirebaseConfigFromGoogleServices() {
 
 const fromGoogleServices = getFirebaseConfigFromGoogleServices();
 
-// IMPORTANT (Web Auth persistence):
-// The web build must use the Firebase *WEB* app's apiKey/appId.
-// If we fall back to android google-services.json on web, Firebase Auth will
-// persist under a different storage key, causing "double login" between
-// static pages (app-login) and the Expo SPA (/dashboard).
-const WEB_SDKCONFIG_FALLBACK = {
-  apiKey: 'AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ',
-  authDomain: 'communitybridge-26apr.firebaseapp.com',
-  projectId: 'communitybridge-26apr',
-  storageBucket: 'communitybridge-26apr.firebasestorage.app',
-  messagingSenderId: '752508556236',
-  appId: '1:752508556236:web:dc183f4851108dd8c14369',
-  measurementId: 'G-HYK2C00ZRK',
-};
-
-const IOS_SDKCONFIG_FALLBACK = {
-  apiKey: 'AIzaSyDP9ZCQ3MSzo5ugidAbdqw7f20ZUU2gf68',
-  authDomain: 'communitybridge-26apr.firebaseapp.com',
-  projectId: 'communitybridge-26apr',
-  storageBucket: 'communitybridge-26apr.firebasestorage.app',
-  messagingSenderId: '752508556236',
-  appId: '1:752508556236:ios:e328734571597e42c14369',
-};
-
-const webFallback = Platform.OS === 'web' ? WEB_SDKCONFIG_FALLBACK : null;
-const JS_SDK_FALLBACK = WEB_SDKCONFIG_FALLBACK;
-
 function isWebFirebaseAppId(value) {
   return String(value || '').includes(':web:');
 }
@@ -180,100 +153,36 @@ function getFirebaseConfigValue(key) {
 
   if (Platform.OS === 'web') {
     if (key === 'EXPO_PUBLIC_FIREBASE_APP_ID') {
-      if (isWebFirebaseAppId(envValue)) return envValue;
-      return webFallback?.appId || envValue || fromGoogleServices?.appId || '';
+      return isWebFirebaseAppId(envValue) ? envValue : '';
     }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_API_KEY') {
-      return webFallback?.apiKey || envValue || fromGoogleServices?.apiKey || '';
-    }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN') {
-      return webFallback?.authDomain || envValue || fromGoogleServices?.authDomain || '';
-    }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_PROJECT_ID') {
-      return webFallback?.projectId || envValue || fromGoogleServices?.projectId || '';
-    }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET') {
-      return webFallback?.storageBucket || envValue || fromGoogleServices?.storageBucket || '';
-    }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') {
-      return webFallback?.messagingSenderId || envValue || fromGoogleServices?.messagingSenderId || '';
-    }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID') {
-      return webFallback?.measurementId || envValue || '';
-    }
+    return envValue;
   }
 
   if (Platform.OS === 'ios') {
     if (key === 'EXPO_PUBLIC_FIREBASE_APP_ID') {
-      if (isJsSdkFirebaseAppId(envValue)) return envValue;
-      return JS_SDK_FALLBACK?.appId || envValue || '';
+      return isJsSdkFirebaseAppId(envValue) ? envValue : '';
     }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_API_KEY') {
-      return JS_SDK_FALLBACK?.apiKey || envValue || '';
-    }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN') {
-      return JS_SDK_FALLBACK?.authDomain || envValue || '';
-    }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_PROJECT_ID') {
-      return JS_SDK_FALLBACK?.projectId || envValue || '';
-    }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET') {
-      return JS_SDK_FALLBACK?.storageBucket || envValue || '';
-    }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') {
-      return JS_SDK_FALLBACK?.messagingSenderId || envValue || '';
-    }
+    return envValue;
   }
 
   if (Platform.OS === 'android') {
     if (key === 'EXPO_PUBLIC_FIREBASE_APP_ID') {
-      if (isJsSdkFirebaseAppId(envValue)) return envValue;
-      return JS_SDK_FALLBACK?.appId || envValue || '';
+      return isJsSdkFirebaseAppId(envValue) ? envValue : '';
     }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_API_KEY') {
-      return JS_SDK_FALLBACK?.apiKey || envValue || '';
-    }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN') {
-      return JS_SDK_FALLBACK?.authDomain || envValue || '';
-    }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_PROJECT_ID') {
-      return JS_SDK_FALLBACK?.projectId || envValue || '';
-    }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET') {
-      return JS_SDK_FALLBACK?.storageBucket || envValue || '';
-    }
-
-    if (key === 'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') {
-      return JS_SDK_FALLBACK?.messagingSenderId || envValue || '';
-    }
+    return envValue;
   }
 
   return envValue;
 }
 
 const firebaseConfig = {
-  apiKey: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_API_KEY') || fromGoogleServices?.apiKey || '',
-  authDomain: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN') || fromGoogleServices?.authDomain || '',
-  projectId: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_PROJECT_ID') || fromGoogleServices?.projectId || '',
-  storageBucket: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET') || fromGoogleServices?.storageBucket || '',
-  messagingSenderId: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') || fromGoogleServices?.messagingSenderId || '',
-  appId: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_APP_ID') || fromGoogleServices?.appId || '',
-  measurementId: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID') || webFallback?.measurementId,
+  apiKey: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_API_KEY') || '',
+  authDomain: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN') || '',
+  projectId: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_PROJECT_ID') || '',
+  storageBucket: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET') || '',
+  messagingSenderId: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') || '',
+  appId: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_APP_ID') || '',
+  measurementId: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID') || '',
 };
 
 function maskValue(value, keepStart = 6, keepEnd = 4) {
@@ -301,7 +210,7 @@ export function getFirebaseConfigDebugInfo() {
     apiKeyHint: maskValue(firebaseConfig.apiKey, 10, 4),
     storageBucket: String(firebaseConfig.storageBucket || ''),
     messagingSenderId: String(firebaseConfig.messagingSenderId || ''),
-    usingJsSdkFallback: Platform.OS !== 'web',
+    usingJsSdkFallback: false,
   };
 }
 

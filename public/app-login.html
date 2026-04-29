@@ -125,22 +125,21 @@
       async function loadFirebaseConfig() {
         try {
           const res = await fetch('/__/firebase/init.json', { cache: 'no-store' });
-          if (res.ok) return await res.json();
+          if (!res.ok) throw new Error('Firebase init config is unavailable.');
+          const json = await res.json();
+          if (!json || !json.apiKey || !json.projectId || !json.appId) {
+            throw new Error('Firebase init config is incomplete.');
+          }
+          return json;
         } catch (_) {
-          // ignore
+          throw new Error('Sign-in is temporarily unavailable. Please try again later.');
         }
-        return {
-          apiKey: 'AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ',
-          authDomain: 'communitybridge-26apr.firebaseapp.com',
-          projectId: 'communitybridge-26apr',
-          storageBucket: 'communitybridge-26apr.firebasestorage.app',
-          messagingSenderId: '752508556236',
-          appId: '1:752508556236:web:dc183f4851108dd8c14369',
-          measurementId: 'G-HYK2C00ZRK'
-        };
       }
 
-      const firebaseConfig = await loadFirebaseConfig();
+      const firebaseConfig = await loadFirebaseConfig().catch((error) => {
+        setMsg(error?.message || 'Sign-in is temporarily unavailable.', true);
+        throw error;
+      });
 
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
@@ -153,15 +152,12 @@
       const signedIn = $('signedIn');
       const who = $('who');
 
-      // Prefer the new scheme, but keep legacy buddyboard:// working during migration.
+      // Open the current production app scheme directly.
       const btnOpenApp = $('btnOpenApp');
       if (btnOpenApp) {
         btnOpenApp.addEventListener('click', (e) => {
           e.preventDefault();
           try { window.location.href = 'communitybridge://'; } catch (_) {}
-          setTimeout(() => {
-            try { window.location.href = 'buddyboard://'; } catch (_) {}
-          }, 600);
         });
       }
       const btnWebApp = $('btnWebApp');

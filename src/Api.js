@@ -4,7 +4,6 @@ import { getAuthInstance, getAuthInitError, getFirebaseConfigDebugInfo, probeFir
 import { BASE_URL } from './config';
 import { DEFAULT_AVATAR_TOKEN } from './utils/idVisibility';
 import { isAdminRole } from './core/tenant/models';
-import { resolveSeedEnrollmentContext } from './seed/tenantSeed';
 
 import {
   GoogleAuthProvider,
@@ -349,8 +348,10 @@ export async function signup(payload) {
     }
     try {
       enrollmentContext = await resolveEnrollmentContext({ organizationId, programId, campusId, enrollmentCode });
-    } catch (_) {
-      enrollmentContext = resolveSeedEnrollmentContext({ organizationId, programId, campusId, enrollmentCode });
+    } catch (error) {
+      const err = new Error('We could not verify your enrollment details right now. Please try again in a moment.');
+      err.code = error?.code || 'BB_ENROLLMENT_LOOKUP_FAILED';
+      throw err;
     }
     if (!enrollmentContext?.organization?.id || !enrollmentContext?.program?.id || !enrollmentContext?.campus?.id) {
       const err = new Error('The enrollment code did not match the selected organization and program.');
@@ -975,30 +976,30 @@ export async function deleteMyAccount(payload) {
     throw err;
   }
 
-  if (!db) {
-    const err = new Error('Firebase is not initialized (missing Firestore instance).');
-    err.code = 'BB_FIREBASE_INIT_FAILED';
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Account deletion is unavailable because the API server is not configured.');
+    err.code = 'BB_API_BASE_URL_REQUIRED';
     throw err;
   }
 
-  // Best-effort cleanup of Firestore docs owned by this user.
-  // These deletes rely on Firestore rules allowing self-deletion.
-  try {
-    const tokensQ = query(collection(db, 'pushTokens'), where('userUid', '==', uid), limit(200));
-    const tokensSnap = await getDocs(tokensQ);
-    const batch = writeBatch(db);
-    tokensSnap.docs.forEach((d) => batch.delete(d.ref));
-
-    batch.delete(doc(db, 'directoryLinks', uid));
-    batch.delete(doc(db, 'parents', uid));
-    batch.delete(doc(db, 'users', uid));
-    await batch.commit();
-  } catch (e) {
-    logger.warn('[deleteMyAccount] Firestore cleanup failed', { message: e?.message || String(e) });
+  const idToken = await user.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/account/delete`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ confirm: true }),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || json?.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not delete account.'));
+    err.httpStatus = resp.status;
+    throw err;
   }
 
-  // Finally delete the Firebase Auth user.
-  await deleteUser(user);
+  await user.reload().catch(() => {});
   return { ok: true };
 }
 
@@ -1722,6 +1723,134 @@ export async function updateOrgSettings(payload) {
   return { ok: true, item: json.item || null };
 }
 
+export async function getAttendanceForDate(date) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Attendance requires the API server.');
+    err.code = 'BB_ATTENDANCE_API_REQUIRED';
+    throw err;
+  }
+  const dateKey = String(date || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/children/attendance?date=${encodeURIComponent(dateKey)}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load attendance.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, dateKey: json.dateKey || dateKey, items: Array.isArray(json.items) ? json.items : [] };
+}
+
+export async function saveAttendance(payload) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Attendance requires the API server.');
+    err.code = 'BB_ATTENDANCE_API_REQUIRED';
+    throw err;
+  }
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/children/attendance`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not save attendance.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, dateKey: json.dateKey || '', saved: Number(json.saved) || 0 };
+}
+
+export async function getAttendanceHistory(childId, limit = 365) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Attendance history requires the API server.');
+    err.code = 'BB_ATTENDANCE_API_REQUIRED';
+    throw err;
+  }
+  const resolvedChildId = String(childId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/children/${encodeURIComponent(resolvedChildId)}/attendance?limit=${encodeURIComponent(String(limit))}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load attendance history.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, childId: json.childId || resolvedChildId, items: Array.isArray(json.items) ? json.items : [] };
+}
+
+export async function getMoodHistory(childId, limit = 60) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Mood tracking requires the API server.');
+    err.code = 'BB_MOOD_API_REQUIRED';
+    throw err;
+  }
+  const resolvedChildId = String(childId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/children/${encodeURIComponent(resolvedChildId)}/mood?limit=${encodeURIComponent(String(limit))}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load mood history.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, childId: json.childId || resolvedChildId, items: Array.isArray(json.items) ? json.items : [] };
+}
+
+export async function saveMoodEntry(childId, payload) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Mood tracking requires the API server.');
+    err.code = 'BB_MOOD_API_REQUIRED';
+    throw err;
+  }
+  const resolvedChildId = String(childId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/children/${encodeURIComponent(resolvedChildId)}/mood`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not save mood entry.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, item: json.item || null };
+}
+
 export async function getPermissionsConfig() {
   const u = requireUser();
   const apiBase = String(BASE_URL || '').replace(/\/$/, '');
@@ -2007,6 +2136,11 @@ export default {
   mergeDirectory,
   getOrgSettings,
   updateOrgSettings,
+  getAttendanceForDate,
+  saveAttendance,
+  getAttendanceHistory,
+  getMoodHistory,
+  saveMoodEntry,
   getPermissionsConfig,
   updatePermissionsConfig,
   getAuditLogs,

@@ -898,6 +898,30 @@ CREATE TABLE IF NOT EXISTS password_resets (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS attendance_records (
+  id TEXT PRIMARY KEY,
+  child_id TEXT NOT NULL,
+  recorded_for TEXT NOT NULL,
+  status TEXT NOT NULL,
+  note TEXT,
+  actor_id TEXT,
+  actor_role TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(child_id, recorded_for)
+);
+
+CREATE TABLE IF NOT EXISTS mood_entries (
+  id TEXT PRIMARY KEY,
+  child_id TEXT NOT NULL,
+  score INTEGER NOT NULL,
+  note TEXT,
+  actor_id TEXT,
+  actor_role TEXT,
+  recorded_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
   id TEXT PRIMARY KEY,
   actor_id TEXT,
@@ -915,6 +939,10 @@ try {
   db.exec('CREATE INDEX IF NOT EXISTS aba_supervision_bcba_idx ON aba_supervision (bcba_id)');
   db.exec('CREATE INDEX IF NOT EXISTS child_aba_assignments_aba_idx ON child_aba_assignments (aba_id)');
   db.exec('CREATE INDEX IF NOT EXISTS password_resets_user_id_idx ON password_resets (user_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS attendance_records_child_id_idx ON attendance_records (child_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS attendance_records_recorded_for_idx ON attendance_records (recorded_for)');
+  db.exec('CREATE INDEX IF NOT EXISTS mood_entries_child_id_idx ON mood_entries (child_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS mood_entries_recorded_at_idx ON mood_entries (recorded_at DESC)');
 } catch (_) {
   // ignore
 }
@@ -1745,6 +1773,200 @@ function childHasParentId(child, parentId) {
   });
 }
 
+function canWriteChildCareData(user) {
+  const role = safeString(user && user.role);
+  const normalizedRole = role.trim().toLowerCase();
+  return isAdminRole(role)
+    || isTherapistRole(role)
+    || isBcbaRole(role)
+    || normalizedRole === 'faculty'
+    || normalizedRole === 'staff'
+    || normalizedRole === 'teacher';
+}
+
+function requireChildCareWriteAccess(req, res, next) {
+  if (canWriteChildCareData(req.user)) return next();
+  return res.status(403).json({ ok: false, error: 'Forbidden' });
+}
+
+function normalizeDateKey(value) {
+  const raw = safeString(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const parsed = new Date(raw || Date.now());
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function normalizeMoodScore(value) {
+  const score = Number(value);
+  if (!Number.isInteger(score) || score < 1 || score > 15) return null;
+  return score;
+}
+
+function normalizeDocumentEntry(doc) {
+  if (!doc || typeof doc !== 'object') return null;
+  const url = safeString(doc.url).trim();
+  if (!url) return null;
+  return {
+    id: safeString(doc.id).trim() || nanoId(),
+    title: safeString(doc.title || doc.name || doc.fileName).trim() || 'Document',
+    meta: safeString(doc.meta || doc.description).trim(),
+    url,
+    fileName: safeString(doc.fileName || doc.name).trim(),
+    mimeType: safeString(doc.mimeType).trim(),
+    uploadedAt: safeString(doc.uploadedAt || doc.createdAt).trim() || nowISO(),
+  };
+}
+
+function normalizeDocumentScopeMap(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const out = {};
+  Object.entries(source).forEach(([scopeId, docs]) => {
+    const normalizedScopeId = safeString(scopeId).trim();
+    if (!normalizedScopeId) return;
+    const normalizedDocs = (Array.isArray(docs) ? docs : []).map((doc) => normalizeDocumentEntry(doc)).filter(Boolean);
+    if (!normalizedDocs.length) return;
+    out[normalizedScopeId] = normalizedDocs;
+  });
+  return out;
+}
+
+function readOrgSettingsItemSqlite() {
+  try {
+    const row = db.prepare('SELECT data_json FROM org_settings WHERE id = ?').get('default');
+    return row && row.data_json ? safeJsonParse(String(row.data_json), null) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function getScopedDocumentsFromSettings(orgSettings, scopeKey, scopeId) {
+  const normalizedScopeId = safeString(scopeId).trim();
+  if (!normalizedScopeId) return [];
+  const map = orgSettings && typeof orgSettings === 'object' && orgSettings[scopeKey] && typeof orgSettings[scopeKey] === 'object'
+    ? orgSettings[scopeKey]
+    : {};
+  return (Array.isArray(map[normalizedScopeId]) ? map[normalizedScopeId] : [])
+    .map((doc) => normalizeDocumentEntry(doc))
+    .filter(Boolean);
+}
+
+function getLatestMoodEntriesByChildIdSqlite() {
+  const rows = db.prepare('SELECT child_id, score, note, actor_id, actor_role, recorded_at, created_at FROM mood_entries ORDER BY child_id ASC, recorded_at DESC, created_at DESC').all();
+  const out = new Map();
+  for (const row of rows || []) {
+    const childId = safeString(row && row.child_id).trim();
+    if (!childId || out.has(childId)) continue;
+    out.set(childId, {
+      childId,
+      score: Number(row.score),
+      note: safeString(row.note).trim(),
+      actorId: safeString(row.actor_id).trim(),
+      actorRole: safeString(row.actor_role).trim(),
+      recordedAt: safeString(row.recorded_at).trim(),
+      createdAt: safeString(row.created_at).trim(),
+    });
+  }
+  return out;
+}
+
+function enrichChildrenWithCareData(children, orgSettings, latestMoodEntriesByChildId) {
+  return (Array.isArray(children) ? children : []).map((child) => {
+    const childId = safeString(child && child.id).trim();
+    const latestMoodEntry = childId ? latestMoodEntriesByChildId.get(childId) || null : null;
+    const moodScore = latestMoodEntry ? Number(latestMoodEntry.score) : null;
+    const programId = safeString((child && (child.programId || child.branchId)) || '').trim();
+    const campusId = safeString(child && child.campusId).trim();
+    return {
+      ...child,
+      programDocs: Array.isArray(child && child.programDocs) && child.programDocs.length
+        ? child.programDocs
+        : getScopedDocumentsFromSettings(orgSettings, 'programDocumentsByProgramId', programId),
+      campusDocs: Array.isArray(child && child.campusDocs) && child.campusDocs.length
+        ? child.campusDocs
+        : getScopedDocumentsFromSettings(orgSettings, 'campusDocumentsByCampusId', campusId),
+      moodScore: moodScore != null ? moodScore : child?.moodScore ?? null,
+      mood: moodScore != null ? moodScore : child?.mood ?? null,
+      latestMoodEntry: latestMoodEntry || child?.latestMoodEntry || null,
+    };
+  });
+}
+
+function getVisibleChildIdsForUser(user) {
+  const childRows = db.prepare('SELECT data_json FROM directory_children ORDER BY updated_at DESC').all();
+  const parentRows = db.prepare('SELECT data_json FROM directory_parents ORDER BY updated_at DESC').all();
+  const therapistRows = db.prepare('SELECT data_json FROM directory_therapists ORDER BY updated_at DESC').all();
+  const assignRows = db.prepare('SELECT child_id, session, aba_id FROM child_aba_assignments ORDER BY child_id ASC').all();
+  const supervisionRows = db.prepare('SELECT aba_id, bcba_id FROM aba_supervision ORDER BY aba_id ASC').all();
+
+  const allChildren = (childRows || []).map((row) => safeJsonParse(String(row && row.data_json ? row.data_json : ''), null)).filter(Boolean);
+  const allParents = (parentRows || []).map((row) => safeJsonParse(String(row && row.data_json ? row.data_json : ''), null)).filter(Boolean);
+  const allTherapists = (therapistRows || []).map((row) => safeJsonParse(String(row && row.data_json ? row.data_json : ''), null)).filter(Boolean);
+  const allAssignments = (assignRows || []).map((row) => ({ childId: row.child_id, session: row.session, abaId: row.aba_id }));
+  const allSupervision = (supervisionRows || []).map((row) => ({ abaId: row.aba_id, bcbaId: row.bcba_id }));
+
+  if (user && isAdminRole(user.role)) {
+    return allChildren.map((child) => safeString(child && child.id).trim()).filter(Boolean);
+  }
+
+  const role = safeString(user && user.role);
+  const wantParent = isParentRole(role);
+  const wantTherapist = isTherapistRole(role);
+  const wantBcba = isBcbaRole(role);
+  const outChildIds = new Set();
+  const outTherapistIds = new Set();
+
+  const supervisionByAba = new Map();
+  (allSupervision || []).forEach((entry) => {
+    const abaId = safeString(entry && entry.abaId).trim();
+    const bcbaId = safeString(entry && entry.bcbaId).trim();
+    if (abaId && bcbaId) supervisionByAba.set(abaId, bcbaId);
+  });
+
+  if (wantParent) {
+    const meParent = pickDirectoryRecordForUser(user, allParents);
+    if (!meParent) return [];
+    const meParentId = safeString(meParent && meParent.id).trim();
+    (allChildren || []).forEach((child) => {
+      const childId = safeString(child && child.id).trim();
+      if (childId && childHasParentId(child, meParentId)) outChildIds.add(childId);
+    });
+    return Array.from(outChildIds);
+  }
+
+  if (!(wantTherapist || wantBcba)) return [];
+
+  const meTherapist = pickDirectoryRecordForUser(user, allTherapists);
+  const meTherapistId = safeString(meTherapist && meTherapist.id).trim();
+  if (!meTherapistId) return [];
+  outTherapistIds.add(meTherapistId);
+
+  if (wantBcba) {
+    (allSupervision || []).forEach((entry) => {
+      if (safeString(entry && entry.bcbaId).trim() === meTherapistId) {
+        const abaId = safeString(entry && entry.abaId).trim();
+        if (abaId) outTherapistIds.add(abaId);
+      }
+    });
+  } else {
+    const bcbaId = supervisionByAba.get(meTherapistId) || safeString(meTherapist && (meTherapist.supervisedBy || meTherapist.supervised_by)).trim();
+    if (bcbaId) outTherapistIds.add(bcbaId);
+  }
+
+  (allAssignments || []).forEach((assignment) => {
+    const childId = safeString(assignment && assignment.childId).trim();
+    const abaId = safeString(assignment && assignment.abaId).trim();
+    if (!childId || !abaId) return;
+    if (wantBcba) {
+      if (outTherapistIds.has(abaId) && abaId !== meTherapistId) outChildIds.add(childId);
+      return;
+    }
+    if (abaId === meTherapistId) outChildIds.add(childId);
+  });
+
+  return Array.from(outChildIds);
+}
+
 app.get('/api/health', (req, res) => {
   const payload = { ok: !shuttingDown, uptime: process.uptime(), shuttingDown, db: Boolean(db), dbError: db ? null : (dbInitError ? String(dbInitError.message || dbInitError) : 'unavailable') };
   if (shuttingDown) return res.status(503).json(payload);
@@ -1754,10 +1976,16 @@ app.get('/api/health', (req, res) => {
 // Directory (SQLite-backed). Admin-only for now.
 app.get('/api/directory', authMiddleware, requireAdmin, (req, res) => {
   try {
-    const children = db.prepare('SELECT data_json FROM directory_children ORDER BY updated_at DESC').all()
-      .map((r) => {
-        try { return JSON.parse(String(r.data_json || '')); } catch (e) { return null; }
-      }).filter(Boolean);
+    const orgSettings = readOrgSettingsItemSqlite();
+    const latestMoodEntriesByChildId = getLatestMoodEntriesByChildIdSqlite();
+    const children = enrichChildrenWithCareData(
+      db.prepare('SELECT data_json FROM directory_children ORDER BY updated_at DESC').all()
+        .map((r) => {
+          try { return JSON.parse(String(r.data_json || '')); } catch (e) { return null; }
+        }).filter(Boolean),
+      orgSettings,
+      latestMoodEntriesByChildId,
+    );
     const parents = db.prepare('SELECT data_json FROM directory_parents ORDER BY updated_at DESC').all()
       .map((r) => {
         try { return JSON.parse(String(r.data_json || '')); } catch (e) { return null; }
@@ -1781,10 +2009,16 @@ app.get('/api/directory', authMiddleware, requireAdmin, (req, res) => {
 // Directory scope for the current user (safe for non-admins).
 app.get('/api/directory/me', authMiddleware, (req, res) => {
   try {
-    const allChildren = db.prepare('SELECT data_json FROM directory_children ORDER BY updated_at DESC').all()
-      .map((r) => {
-        try { return JSON.parse(String(r.data_json || '')); } catch (e) { return null; }
-      }).filter(Boolean);
+    const orgSettings = readOrgSettingsItemSqlite();
+    const latestMoodEntriesByChildId = getLatestMoodEntriesByChildIdSqlite();
+    const allChildren = enrichChildrenWithCareData(
+      db.prepare('SELECT data_json FROM directory_children ORDER BY updated_at DESC').all()
+        .map((r) => {
+          try { return JSON.parse(String(r.data_json || '')); } catch (e) { return null; }
+        }).filter(Boolean),
+      orgSettings,
+      latestMoodEntriesByChildId,
+    );
     const allParents = db.prepare('SELECT data_json FROM directory_parents ORDER BY updated_at DESC').all()
       .map((r) => {
         try { return JSON.parse(String(r.data_json || '')); } catch (e) { return null; }
@@ -2031,6 +2265,7 @@ app.get('/api/org-settings', authMiddleware, (req, res) => {
 
 app.put('/api/org-settings', authMiddleware, requireAdmin, requireCapability('settings:system'), (req, res) => {
   const payload = req.body && typeof req.body === 'object' ? req.body : {};
+  const currentItem = readOrgSettingsItemSqlite() || {};
   const address = payload.address != null ? String(payload.address) : '';
   const lat = payload.lat != null ? Number(payload.lat) : null;
   const lng = payload.lng != null ? Number(payload.lng) : null;
@@ -2038,11 +2273,14 @@ app.put('/api/org-settings', authMiddleware, requireAdmin, requireCapability('se
   const orgArrivalEnabled = (typeof payload.orgArrivalEnabled === 'boolean') ? payload.orgArrivalEnabled : null;
 
   const item = {
+    ...currentItem,
     address,
     lat: Number.isFinite(lat) ? lat : null,
     lng: Number.isFinite(lng) ? lng : null,
     dropZoneMiles: Number.isFinite(dropZoneMiles) ? dropZoneMiles : null,
     orgArrivalEnabled: orgArrivalEnabled,
+    programDocumentsByProgramId: normalizeDocumentScopeMap(payload.programDocumentsByProgramId != null ? payload.programDocumentsByProgramId : currentItem.programDocumentsByProgramId),
+    campusDocumentsByCampusId: normalizeDocumentScopeMap(payload.campusDocumentsByCampusId != null ? payload.campusDocumentsByCampusId : currentItem.campusDocumentsByCampusId),
   };
   const now = nowISO();
 
@@ -2058,6 +2296,178 @@ app.put('/api/org-settings', authMiddleware, requireAdmin, requireCapability('se
       targetId: 'default',
       details: { orgArrivalEnabled: item.orgArrivalEnabled, hasLocation: Number.isFinite(item.lat) && Number.isFinite(item.lng) },
     });
+    return res.json({ ok: true, item });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.get('/api/children/attendance', authMiddleware, (req, res) => {
+  try {
+    const dateKey = normalizeDateKey(req.query && req.query.date);
+    if (!dateKey) return res.status(400).json({ ok: false, error: 'Invalid date' });
+
+    const visibleChildIds = getVisibleChildIdsForUser(req.user);
+    if (!visibleChildIds.length) return res.json({ ok: true, dateKey, items: [] });
+
+    const placeholders = visibleChildIds.map(() => '?').join(',');
+    const rows = db.prepare(
+      `SELECT id, child_id, recorded_for, status, note, actor_id, actor_role, created_at, updated_at
+       FROM attendance_records
+       WHERE recorded_for = ? AND child_id IN (${placeholders})
+       ORDER BY child_id ASC`
+    ).all(dateKey, ...visibleChildIds);
+
+    return res.json({
+      ok: true,
+      dateKey,
+      items: (rows || []).map((row) => ({
+        id: row.id,
+        childId: row.child_id,
+        recordedFor: row.recorded_for,
+        status: row.status,
+        note: safeString(row.note).trim(),
+        actorId: safeString(row.actor_id).trim(),
+        actorRole: safeString(row.actor_role).trim(),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      })),
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.put('/api/children/attendance', authMiddleware, requireChildCareWriteAccess, (req, res) => {
+  try {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const dateKey = normalizeDateKey(body.date || body.recordedFor);
+    if (!dateKey) return res.status(400).json({ ok: false, error: 'Invalid date' });
+
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    const entries = (Array.isArray(body.entries) ? body.entries : [])
+      .map((entry) => ({
+        childId: safeString(entry && entry.childId).trim(),
+        status: safeString(entry && entry.status).trim().toLowerCase(),
+        note: safeString(entry && entry.note).trim(),
+      }))
+      .filter((entry) => entry.childId && ['present', 'absent', 'tardy'].includes(entry.status) && visibleChildIds.has(entry.childId));
+
+    if (!entries.length) return res.status(400).json({ ok: false, error: 'No valid attendance entries' });
+
+    const now = nowISO();
+    const actorId = safeString(req.user && (req.user.id || req.user.uid)).trim() || null;
+    const actorRole = safeString(req.user && req.user.role).trim() || null;
+    const upsert = db.prepare(
+      'INSERT INTO attendance_records (id, child_id, recorded_for, status, note, actor_id, actor_role, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)\n' +
+      'ON CONFLICT(child_id, recorded_for) DO UPDATE SET status=excluded.status, note=excluded.note, actor_id=excluded.actor_id, actor_role=excluded.actor_role, updated_at=excluded.updated_at'
+    );
+
+    const tx = db.transaction(() => {
+      entries.forEach((entry) => {
+        upsert.run(nanoId(), entry.childId, dateKey, entry.status, entry.note || null, actorId, actorRole, now, now);
+      });
+    });
+    tx();
+
+    return res.json({ ok: true, dateKey, saved: entries.length });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.get('/api/children/:childId/attendance', authMiddleware, (req, res) => {
+  try {
+    const childId = safeString(req.params && req.params.childId).trim();
+    if (!childId) return res.status(400).json({ ok: false, error: 'Missing childId' });
+
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(childId)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+
+    const limit = Math.max(1, Math.min(Number(req.query && req.query.limit) || 365, 1000));
+    const rows = db.prepare(
+      'SELECT id, child_id, recorded_for, status, note, actor_id, actor_role, created_at, updated_at FROM attendance_records WHERE child_id = ? ORDER BY recorded_for DESC, updated_at DESC LIMIT ?'
+    ).all(childId, limit);
+
+    return res.json({
+      ok: true,
+      childId,
+      items: (rows || []).map((row) => ({
+        id: row.id,
+        childId: row.child_id,
+        recordedFor: row.recorded_for,
+        status: row.status,
+        note: safeString(row.note).trim(),
+        actorId: safeString(row.actor_id).trim(),
+        actorRole: safeString(row.actor_role).trim(),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      })),
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.get('/api/children/:childId/mood', authMiddleware, (req, res) => {
+  try {
+    const childId = safeString(req.params && req.params.childId).trim();
+    if (!childId) return res.status(400).json({ ok: false, error: 'Missing childId' });
+
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(childId)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+
+    const limit = Math.max(1, Math.min(Number(req.query && req.query.limit) || 60, 200));
+    const rows = db.prepare(
+      'SELECT id, child_id, score, note, actor_id, actor_role, recorded_at, created_at FROM mood_entries WHERE child_id = ? ORDER BY recorded_at DESC, created_at DESC LIMIT ?'
+    ).all(childId, limit);
+
+    return res.json({
+      ok: true,
+      childId,
+      items: (rows || []).map((row) => ({
+        id: row.id,
+        childId: row.child_id,
+        score: Number(row.score),
+        note: safeString(row.note).trim(),
+        actorId: safeString(row.actor_id).trim(),
+        actorRole: safeString(row.actor_role).trim(),
+        recordedAt: row.recorded_at,
+        createdAt: row.created_at,
+      })),
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.post('/api/children/:childId/mood', authMiddleware, requireChildCareWriteAccess, (req, res) => {
+  try {
+    const childId = safeString(req.params && req.params.childId).trim();
+    if (!childId) return res.status(400).json({ ok: false, error: 'Missing childId' });
+
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(childId)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const score = normalizeMoodScore(body.score);
+    if (score == null) return res.status(400).json({ ok: false, error: 'Mood score must be an integer between 1 and 15' });
+
+    const item = {
+      id: nanoId(),
+      childId,
+      score,
+      note: safeString(body.note).trim(),
+      actorId: safeString(req.user && (req.user.id || req.user.uid)).trim(),
+      actorRole: safeString(req.user && req.user.role).trim(),
+      recordedAt: safeString(body.recordedAt).trim() || nowISO(),
+      createdAt: nowISO(),
+    };
+
+    db.prepare(
+      'INSERT INTO mood_entries (id, child_id, score, note, actor_id, actor_role, recorded_at, created_at) VALUES (?,?,?,?,?,?,?,?)'
+    ).run(item.id, item.childId, item.score, item.note || null, item.actorId || null, item.actorRole || null, item.recordedAt, item.createdAt);
+
     return res.json({ ok: true, item });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || String(e) });
@@ -2263,6 +2673,41 @@ app.post('/api/auth/google', authRateLimit, async (req, res) => {
 
 app.get('/api/auth/me', authMiddleware, (req, res) => {
   res.json({ ok: true, user: req.user });
+});
+
+app.post('/api/account/delete', authMiddleware, async (req, res) => {
+  const userId = safeString(req.user?.id).trim();
+  const confirmed = req.body?.confirm === true;
+  if (!userId) return res.status(401).json({ ok: false, error: 'not authenticated' });
+  if (!confirmed) return res.status(400).json({ ok: false, error: 'confirmation required' });
+
+  try {
+    const existingUser = db.prepare('SELECT id,role,email FROM users WHERE id = ?').get(userId);
+    if (!existingUser) return res.status(404).json({ ok: false, error: 'user not found' });
+
+    recordAuditLog({
+      actorId: userId,
+      action: 'account.deleted_self',
+      targetType: 'user',
+      targetId: userId,
+      details: { role: existingUser.role, email: existingUser.email },
+    });
+
+    try {
+      await deleteFirebaseManagedUser(userId);
+    } catch (e) {
+      const code = String(e?.code || '');
+      const message = String(e?.message || '');
+      if (!code.includes('auth/user-not-found') && !message.toLowerCase().includes('user-not-found')) {
+        return res.status(500).json({ ok: false, error: e?.message || 'firebase delete failed' });
+      }
+    }
+
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || 'account delete failed' });
+  }
 });
 
 app.put('/api/auth/me', authMiddleware, (req, res) => {

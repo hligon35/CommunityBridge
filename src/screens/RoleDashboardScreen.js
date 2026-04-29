@@ -33,6 +33,26 @@ function formatSessionLabel(dateValue) {
   });
 }
 
+function getNextTherapistSession(children) {
+  const now = new Date();
+  const candidates = (Array.isArray(children) ? children : []).flatMap((child) => {
+    const base = child?.dropoffTimeISO ? new Date(child.dropoffTimeISO) : null;
+    if (!base || Number.isNaN(base.getTime())) return [];
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), base.getHours(), base.getMinutes());
+    const scheduledAt = today.getTime() >= now.getTime()
+      ? today
+      : new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, base.getHours(), base.getMinutes());
+    return [{
+      childId: child?.id || null,
+      childName: child?.name || 'Child',
+      session: child?.session || 'Session',
+      scheduledAt,
+    }];
+  });
+  candidates.sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime());
+  return candidates[0] || null;
+}
+
 function findRelevantChildren(role, userId, children) {
   const allChildren = Array.isArray(children) ? children : [];
   if (!userId) return [];
@@ -106,6 +126,7 @@ export default function RoleDashboardScreen({ navigation }) {
   }, [isTherapist, relevantChildren, selectedChild]);
 
   const firstRelevantChild = relevantChildren[0] || null;
+  const nextTherapistSession = useMemo(() => getNextTherapistSession(relevantChildren), [relevantChildren]);
 
   const careTeamCount = useMemo(() => {
     if (isTherapist) return Math.max(1, activeChildren.length);
@@ -148,7 +169,7 @@ export default function RoleDashboardScreen({ navigation }) {
     if (!scores.length) {
       return {
         value: 'Not logged',
-        hint: 'Mood tracking is temporarily unavailable.',
+        hint: 'No mood check-ins logged yet.',
         imageSource: moodGoodIcon,
       };
     }
@@ -179,11 +200,13 @@ export default function RoleDashboardScreen({ navigation }) {
     'next-session': {
       key: 'next-session',
       title: 'Next Session',
-      value: nextSession,
-      hint: isTherapist ? 'Based on your assigned learners.' : 'Based on your family schedule.',
+      value: isTherapist ? (nextTherapistSession?.childName || nextSession) : nextSession,
+      hint: isTherapist
+        ? (nextTherapistSession ? `${formatSessionLabel(nextTherapistSession.scheduledAt)} • ${nextTherapistSession.session}` : 'Based on your assigned learners.')
+        : 'Based on your family schedule.',
       imageSource: nextSessionIcon,
       onPress: isTherapist
-        ? (firstRelevantChild ? () => navigation.navigate('ChildDetail', { childId: firstRelevantChild.id }) : undefined)
+        ? (() => navigation.navigate('ScheduleCalendar', { therapistSchedule: true }))
         : () => navigation.navigate('ScheduleCalendar', { childId: selectedChild?.id || null }),
     },
     'mood-score': {
@@ -209,6 +232,9 @@ export default function RoleDashboardScreen({ navigation }) {
       value: pendingItems ? `${pendingItems} pending` : 'None right now',
       hint: 'Check with your center for updates.',
       imageSource: itemsNeededIcon,
+      onPress: isTherapist
+        ? () => navigation.navigate('TherapistItemsNeeded', { childId: firstRelevantChild?.id || null })
+        : undefined,
     },
     'care-team': {
       key: 'care-team',

@@ -6,15 +6,16 @@ import { useRoute } from '@react-navigation/native';
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import MoodTrackerCard from '../components/MoodTrackerCard';
 import ImageToggle from '../components/ImageToggle';
 import { childHasParent, findLinkedParentId } from '../utils/directoryLinking';
 import { avatarSourceFor } from '../utils/idVisibility';
 import { useTenant } from '../core/tenant/TenantContext';
-import { isAdminRole } from '../core/tenant/models';
+import { isAdminRole, isStaffRole } from '../core/tenant/models';
 
 export default function MyChildScreen() {
   const route = useRoute();
-  const { children, parents, urgentMemos, timeChangeProposals, proposeTimeChange, respondToProposal, respondToUrgentMemo } = useData();
+  const { children, parents, urgentMemos, timeChangeProposals, proposeTimeChange, respondToProposal, respondToUrgentMemo, fetchAndSync } = useData();
   const { user } = useAuth();
   const tenant = useTenant() || {};
   const childProfileMode = tenant.childProfileMode || { mode: 'family', entityLabel: 'child', collectionLabel: 'children', profileTitle: 'My Child', profileSummaryTitle: 'Family Overview' };
@@ -25,6 +26,7 @@ export default function MyChildScreen() {
 
   const role = (user?.role || '').toString().toLowerCase();
   const isParent = role.includes('parent');
+  const canRecordMood = isAdminRole(user?.role) || isStaffRole(user?.role);
   const linkedParentId = isParent ? (findLinkedParentId(user, parents) || null) : null;
 
   // Only show linked children for parents; keep existing behavior for other roles.
@@ -416,6 +418,13 @@ export default function MyChildScreen() {
             </>
           ) : null}
         </View>
+
+        <MoodTrackerCard
+          childId={child?.id}
+          latestEntry={child?.latestMoodEntry}
+          editable={canRecordMood}
+          onRecorded={() => fetchAndSync({ force: true })}
+        />
       </View>
 
       {/* Care team */}

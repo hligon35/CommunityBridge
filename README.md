@@ -106,7 +106,8 @@ Configuration
 	- `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`
 	- `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
 	- `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
-	- For EAS builds: set them in the EAS dashboard (recommended) or in `eas.json` under the build profile `env`, then rebuild the binary.
+	- For EAS builds: set them in the Expo dashboard environment variables or secrets. They are no longer stored in `eas.json`.
+- The repo includes [env/expo.env.example](env/expo.env.example) as a safe reference list only. For local development, use `.env.local` instead of committing real values.
 - By default in dev (including Expo Go), the app auto-logs in with a dev token. To test the real login flow in Expo Go, set `EXPO_PUBLIC_DISABLE_DEV_AUTOLOGIN=1`.
 
 Notes
@@ -308,16 +309,43 @@ eas build -p ios --profile internal
 eas build -p ios --profile testflight-internal
 ```
 
-Submit (TestFlight):
+Submit:
 
 ```sh
 # Submit the latest TestFlight internal build to App Store Connect
 eas submit -p ios --profile testflight-internal --latest
+
+# Submit the latest Android internal build to Google Play internal testing
+eas submit -p android --profile internal --latest
+
+# Submit the latest Android production build to Google Play production
+eas submit -p android --profile production --latest
 ```
 
 Notes:
-- The app reads the API host from `EXPO_PUBLIC_API_BASE_URL` (see `eas.json`).
+- The app reads the API host from `EXPO_PUBLIC_API_BASE_URL`.
 - For web builds, if `EXPO_PUBLIC_API_BASE_URL` is not set, the app falls back to the current browser origin (so accessing the site via an IP/alternate hostname still works when `/api/*` is reverse-proxied).
+- Android submit profiles expect a Google Play service-account JSON at `./google-play-service-account.json`. Do not point `serviceAccountKeyPath` at `google-services.json`; that Firebase client file cannot submit builds.
+- Build profiles intentionally no longer store Firebase, Google OAuth, API base URL, or Sentry DSN values in `eas.json`. Configure those through Expo dashboard environment variables / secrets before running store builds.
+
+## Mobile store review checklist
+
+Before App Store / Play Store submission, verify the permission disclosures that match the current mobile config:
+
+- Background location:
+	- `app.json` enables background location for arrival detection on iOS and Android.
+	- In store review notes, explain that location is used only for arrival detection / location-based program features, not for ads or cross-app tracking.
+	- Be ready to show where the feature is user-triggered, where it is explained in-app, and how a user can disable it.
+	- App Store review should be given a short test path for reaching the arrival-detection flow.
+
+- Notifications:
+	- The app includes `expo-notifications` and should only request notification permission in a user-understandable context.
+	- In store disclosures, describe notifications as operational messages such as urgent memos, messages, reminders, or schedule updates.
+	- Confirm screenshots and review notes do not imply marketing or advertising notifications unless that behavior actually exists.
+
+- Submission metadata sanity check:
+	- Ensure privacy answers in App Store Connect and Google Play Data safety match the live app behavior for location, notifications, uploaded media, and account data.
+	- Ensure reviewer notes mention any test account, OTP / 2FA expectations, and anything needed to exercise background-location behavior.
 
 Firebase Hosting (marketing + app SPA)
 ------------------------------------
@@ -462,9 +490,9 @@ Add these repository secrets:
 - `DEPLOY_SSH_KEY` (private key for SSH)
 - `DEPLOY_PATH` (example: `/srv/apps/BuddyBoard`)
 - `DEPLOY_PORT` (optional; default is 22)
-# CommunityBridge (React Native scaffold)
+# CommunityBridge (Expo App)
 
-This folder contains a scaffolded React Native (Expo) version of the CommunityBridge web app. It's an approximate, hybrid-native shell with placeholder screens and navigation mirroring the web app structure. This scaffold is not installed — run the included `setup.sh` or `setup.ps1` scripts after moving the directory to your target machine to install dependencies and initialize the project.
+This repository contains the active Expo React Native and React Native Web application for CommunityBridge. It includes the production app shell, feature modules, and deployment assets used for the current product.
 
 Files included:
 - `App.js` — entry point with navigation
@@ -474,7 +502,7 @@ Files included:
 
 Backend integration
 -------------------
-This scaffold can be wired to your CommunityBridge backend. Prefer setting `EXPO_PUBLIC_API_BASE_URL` to the base URL for your API (example: `https://communitybridge.example.com` or `http://10.0.0.5:3000`) rather than editing code. The mobile app expects the following endpoints (examples):
+Set `EXPO_PUBLIC_API_BASE_URL` to the base URL for your API (example: `https://communitybridge.example.com` or `http://10.0.0.5:3000`) rather than editing code. The mobile app expects the following endpoints (examples):
 
 - `GET  /api/messages` -> returns an array of messages: [{id,title,body,date,sender,read}]
 - `POST /api/messages` -> accepts {title,body,sender}, returns the created message with `id` and `date`.
@@ -483,7 +511,7 @@ This scaffold can be wired to your CommunityBridge backend. Prefer setting `EXPO
 - `POST /api/urgent-memos/:id/ack` -> acknowledge an urgent memo.
 - `POST /api/auth/login` -> accepts {email,password}, returns user/session info (optional for demo).
 
-The client implementation is in `src/Api.js`. The `DataContext` uses these methods to hydrate data on startup and to forward created messages/memos to the backend. If the backend is unreachable the app will continue to run using its in-memory seed data.
+The client implementation is in `src/Api.js`. The `DataContext` uses these methods to hydrate data on startup and to forward created messages and memos to the backend.
 
 Run the app
 ----------

@@ -1,5 +1,4 @@
 import * as Api from '../../Api';
-import { resolveSeedEnrollmentContext } from '../../seed/tenantSeed';
 
 export async function resolveSelection({ organizationId, programId, enrollmentCode, campusId }) {
   const payload = {
@@ -25,11 +24,7 @@ export async function resolveSelection({ organizationId, programId, enrollmentCo
       return result;
     }
   } catch (_) {
-    // fall back to seeded data below
+    // handled below with a consistent user-facing error
   }
-  const seeded = resolveSeedEnrollmentContext(payload);
-  if (!seeded?.organization?.id || !seeded?.program?.id || !seeded?.campus?.id) {
-    throw new Error('The enrollment code did not match an active campus for the selected organization and program.');
-  }
-  return seeded;
+  throw new Error('The enrollment code did not match an active campus for the selected organization and program.');
 }

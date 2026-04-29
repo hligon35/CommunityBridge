@@ -86,7 +86,8 @@
         "EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION": "us-central1",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "752508556236-91cfpo8cgeo8vt80ee49vgsojf9m19e5.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "development",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",
+        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "development",
         "SENTRY_ORG": "azlabsllc",
         "SENTRY_PROJECT": "communitybridge",
         "SENTRY_ALLOW_FAILURE": "true",
@@ -115,7 +116,8 @@
         "EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION": "us-central1",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "752508556236-91cfpo8cgeo8vt80ee49vgsojf9m19e5.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "preview",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",
+        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "preview",
         "SENTRY_ORG": "azlabsllc",
         "SENTRY_PROJECT": "communitybridge",
         "SENTRY_ALLOW_FAILURE": "true",
@@ -144,7 +146,8 @@
         "EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION": "us-central1",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "752508556236-91cfpo8cgeo8vt80ee49vgsojf9m19e5.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "752508556236-s1s08vjbnsk6n8uieb0l1p5me96sqgpa.apps.googleusercontent.com",
+        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "production",
         "SENTRY_ORG": "azlabsllc",
         "SENTRY_PROJECT": "communitybridge",
         "SENTRY_ALLOW_FAILURE": "true",
@@ -156,7 +159,7 @@
   "submit": {
     "internal": {
       "android": {
-        "serviceAccountKeyPath": "./google-services.json",
+        "serviceAccountKeyPath": "./google-play-service-account.json",
         "track": "internal"
       }
     },
@@ -166,7 +169,17 @@
         "appleId": "ligon88harold@gmail.com"
       }
     },
+    "preview": {
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "internal"
+      }
+    },
     "production": {
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "production"
+      },
       "ios": {
         "ascAppId": "6762587863",
         "appleId": "ligon88harold@gmail.com"

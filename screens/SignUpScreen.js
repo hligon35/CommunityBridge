@@ -23,7 +23,6 @@ import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportEr
 import { getAuthInitError, getFirebaseAppInitError } from '../src/firebase';
 import { MaterialIcons } from '@expo/vector-icons';
 import { USER_ROLES } from '../src/core/tenant/models';
-import { listSeedOrganizations, listSeedProgramsByOrganization } from '../src/seed/tenantSeed';
 
 const signupLogoImage = require('../assets/titlelogo.png');
 
@@ -55,19 +54,15 @@ export default function SignUpScreen({ onDone, onCancel }) {
     (async () => {
       try {
         const result = await Api.listOrganizations();
-        const nextItems = Array.isArray(result?.items) && result.items.length ? result.items : listSeedOrganizations();
+        const nextItems = Array.isArray(result?.items) ? result.items : [];
         if (!mounted) return;
         setOrganizations(nextItems);
         if (!organizationId && nextItems[0]?.id) {
           setOrganizationId(nextItems[0].id);
         }
       } catch (_) {
-        const fallbackItems = listSeedOrganizations();
         if (!mounted) return;
-        setOrganizations(fallbackItems);
-        if (!organizationId && fallbackItems[0]?.id) {
-          setOrganizationId(fallbackItems[0].id);
-        }
+        setOrganizations([]);
       }
     })();
     return () => { mounted = false; };
@@ -83,19 +78,16 @@ export default function SignUpScreen({ onDone, onCancel }) {
     (async () => {
       try {
         const result = await Api.listPrograms(organizationId);
-        const nextItems = Array.isArray(result?.items) && result.items.length ? result.items : listSeedProgramsByOrganization(organizationId);
+        const nextItems = Array.isArray(result?.items) ? result.items : [];
         if (!mounted) return;
         setPrograms(nextItems);
         if (!nextItems.some((item) => item.id === programId)) {
           setProgramId(nextItems[0]?.id || '');
         }
       } catch (_) {
-        const fallbackItems = listSeedProgramsByOrganization(organizationId);
         if (!mounted) return;
-        setPrograms(fallbackItems);
-        if (!fallbackItems.some((item) => item.id === programId)) {
-          setProgramId(fallbackItems[0]?.id || '');
-        }
+        setPrograms([]);
+        setProgramId('');
       }
     })();
     return () => { mounted = false; };

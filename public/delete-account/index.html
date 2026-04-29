@@ -19,6 +19,7 @@
       code { background: #0b1220; padding: 2px 6px; border-radius: 6px; }
       .status { margin-top: 10px; font-size: 13px; color: #93c5fd; }
       .err { color: #fca5a5; }
+      .hidden { display: none; }
     </style>
   </head>
   <body>
@@ -30,7 +31,7 @@
         </p>
         <p id="who"></p>
         <div class="row">
-          <a id="loginLink" class="btn secondary" href="/app-login?next=/delete-account" style="display:none;">Sign in to continue</a>
+          <a id="loginLink" class="btn secondary hidden" href="/app-login?next=/delete-account">Sign in to continue</a>
           <button id="deleteBtn" class="primary" disabled>Delete my account</button>
           <a class="btn secondary" href="/dashboard">Back to dashboard</a>
         </div>
@@ -53,31 +54,29 @@
       async function loadFirebaseConfig() {
         try {
           const res = await fetch('/__/firebase/init.json', { cache: 'no-store' });
-          if (res.ok) return await res.json();
-        } catch (_) {}
-        // Fallback (kept in sync with communitybridge-26apr)
-        return {
-          apiKey: 'AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ',
-          authDomain: 'communitybridge-26apr.firebaseapp.com',
-          projectId: 'communitybridge-26apr',
-          storageBucket: 'communitybridge-26apr.firebasestorage.app',
-          messagingSenderId: '752508556236',
-          appId: '1:752508556236:web:dc183f4851108dd8c14369',
-          measurementId: 'G-HYK2C00ZRK'
-        };
+          if (!res.ok) throw new Error('Firebase init config is unavailable.');
+          const json = await res.json();
+          if (!json || !json.apiKey || !json.projectId || !json.appId) {
+            throw new Error('Firebase init config is incomplete.');
+          }
+          return json;
+        } catch (_) {
+          throw new Error('Account deletion is temporarily unavailable. Please try again later.');
+        }
       }
 
-      const firebaseConfig = await loadFirebaseConfig();
+      const firebaseConfig = await loadFirebaseConfig().catch((error) => {
+        setStatus(error?.message || 'Account deletion is temporarily unavailable.', 'err');
+        throw error;
+      });
 
-      const [{ initializeApp }, { getAuth, onAuthStateChanged, deleteUser }, { getFirestore, collection, query, where, limit, getDocs, writeBatch, doc }] = await Promise.all([
+      const [{ initializeApp }, { getAuth, onAuthStateChanged }] = await Promise.all([
         import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js'),
         import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js'),
-        import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js'),
       ]);
 
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
-      const db = getFirestore(app);
 
       let currentUser = null;
       onAuthStateChanged(auth, (u) => {
@@ -106,21 +105,20 @@
         try {
           deleteBtn.disabled = true;
           setStatus('Deleting your account…');
-          // Best-effort Firestore cleanup (requires self-delete rules).
-          try {
-            const tokensQ = query(collection(db, 'pushTokens'), where('userUid', '==', currentUser.uid), limit(200));
-            const tokensSnap = await getDocs(tokensQ);
-            const batch = writeBatch(db);
-            tokensSnap.docs.forEach((d) => batch.delete(d.ref));
-            batch.delete(doc(db, 'directoryLinks', currentUser.uid));
-            batch.delete(doc(db, 'parents', currentUser.uid));
-            batch.delete(doc(db, 'users', currentUser.uid));
-            await batch.commit();
-          } catch (_) {
-            // ignore cleanup failures
+          const idToken = await currentUser.getIdToken(true);
+          const resp = await fetch('/api/account/delete', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({ confirm: true }),
+          });
+          const json = await resp.json().catch(() => null);
+          if (!resp.ok || json?.ok !== true) {
+            throw new Error((json && (json.error || json.message)) || 'Could not delete account.');
           }
 
-          await deleteUser(currentUser);
           setStatus('Account deleted. Redirecting to home…');
           window.location.replace('/');
         } catch (e) {

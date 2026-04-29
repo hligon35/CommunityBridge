@@ -1,8 +1,11 @@
-import React, { useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { ScreenWrapper } from '../../components/ScreenWrapper';
+import { useAuth } from '../../AuthContext';
+import * as Api from '../../Api';
 import { useTenant } from '../../core/tenant/TenantContext';
 import { useData } from '../../DataContext';
+import { isAdminRole, isStaffRole } from '../../core/tenant/models';
 import { logPress } from '../../utils/logger';
 import moduleStyles from './ModuleStyles';
 
@@ -13,22 +16,86 @@ function todayKey() {
 
 export default function AttendanceScreen() {
   const tenant = useTenant() || {};
+  const { user } = useAuth();
   const { children = [] } = useData() || {};
   const { labels = {}, currentProgram, currentCampus, featureFlags = {} } = tenant;
   const enabled = featureFlags.attendanceModule !== false;
 
-  const [marks, setMarks] = React.useState({}); // { childId: 'present'|'absent'|'tardy' }
+  const [marks, setMarks] = useState({});
+  const [selectedChildId, setSelectedChildId] = useState(null);
+  const [historyItems, setHistoryItems] = useState([]);
+  const [loadingToday, setLoadingToday] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const dateKey = todayKey();
+  const canWrite = isAdminRole(user?.role) || isStaffRole(user?.role);
 
   const roster = useMemo(() => {
     if (!Array.isArray(children)) return [];
-    if (!currentProgram?.id) return children;
-    return children.filter((c) => !c.programId || c.programId === currentProgram.id);
-  }, [children, currentProgram?.id]);
+    return children.filter((child) => {
+      if (currentProgram?.id && child?.programId && child.programId !== currentProgram.id) return false;
+      if (currentCampus?.id && child?.campusId && child.campusId !== currentCampus.id) return false;
+      return true;
+    });
+  }, [children, currentCampus?.id, currentProgram?.id]);
+
+  useEffect(() => {
+    if (!roster.length) {
+      setSelectedChildId(null);
+      return;
+    }
+    const stillExists = roster.some((child) => child?.id === selectedChildId);
+    if (!stillExists) setSelectedChildId(roster[0]?.id || null);
+  }, [roster, selectedChildId]);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let mounted = true;
+    (async () => {
+      setLoadingToday(true);
+      setError('');
+      try {
+        const result = await Api.getAttendanceForDate(dateKey);
+        if (!mounted) return;
+        const nextMarks = {};
+        (Array.isArray(result?.items) ? result.items : []).forEach((entry) => {
+          if (entry?.childId && entry?.status) nextMarks[entry.childId] = entry.status;
+        });
+        setMarks(nextMarks);
+      } catch (e) {
+        if (mounted) setError(String(e?.message || e || 'Could not load attendance.'));
+      } finally {
+        if (mounted) setLoadingToday(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [dateKey, enabled]);
+
+  useEffect(() => {
+    if (!enabled || !selectedChildId) {
+      setHistoryItems([]);
+      return undefined;
+    }
+    let mounted = true;
+    (async () => {
+      setHistoryLoading(true);
+      try {
+        const result = await Api.getAttendanceHistory(selectedChildId, 365);
+        if (mounted) setHistoryItems(Array.isArray(result?.items) ? result.items : []);
+      } catch (e) {
+        if (mounted) setHistoryItems([]);
+      } finally {
+        if (mounted) setHistoryLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [enabled, selectedChildId]);
 
   function setMark(childId, status) {
     logPress('Attendance:Mark', { childId, status });
     setMarks((prev) => ({ ...prev, [childId]: status }));
+    setSelectedChildId(childId);
   }
 
   const counts = useMemo(() => {
@@ -43,9 +110,32 @@ export default function AttendanceScreen() {
     return out;
   }, [roster, marks]);
 
-  function submit() {
+  async function submit() {
     logPress('Attendance:Submit', { dateKey, counts });
-    Alert.alert('Attendance saved (preview)', `Present: ${counts.present}\nAbsent: ${counts.absent}\nTardy: ${counts.tardy}\nUnmarked: ${counts.unmarked}`);
+    if (!canWrite) {
+      Alert.alert('Read only', 'Your role can view attendance but cannot save updates.');
+      return;
+    }
+    const entries = roster
+      .map((child) => ({ childId: child?.id, status: marks[child?.id] }))
+      .filter((entry) => entry.childId && entry.status);
+    if (!entries.length) {
+      Alert.alert('Nothing to save', 'Mark at least one student before saving attendance.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await Api.saveAttendance({ date: dateKey, entries });
+      if (selectedChildId) {
+        const result = await Api.getAttendanceHistory(selectedChildId, 365);
+        setHistoryItems(Array.isArray(result?.items) ? result.items : []);
+      }
+      Alert.alert('Attendance saved', `Present: ${counts.present}\nAbsent: ${counts.absent}\nTardy: ${counts.tardy}\nUnmarked: ${counts.unmarked}`);
+    } catch (e) {
+      Alert.alert('Save failed', String(e?.message || e || 'Could not save attendance.'));
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (!enabled) {
@@ -85,6 +175,19 @@ export default function AttendanceScreen() {
           </View>
         </View>
 
+        {error ? (
+          <View style={moduleStyles.empty}>
+            <Text style={moduleStyles.emptyText}>{error}</Text>
+          </View>
+        ) : null}
+
+        {loadingToday ? (
+          <View style={moduleStyles.empty}>
+            <ActivityIndicator color="#2563eb" />
+            <Text style={[moduleStyles.emptyText, { marginTop: 8 }]}>Loading attendance…</Text>
+          </View>
+        ) : null}
+
         {roster.length === 0 ? (
           <View style={moduleStyles.empty}>
             <Text style={moduleStyles.emptyText}>No students on the roster yet.</Text>
@@ -92,12 +195,14 @@ export default function AttendanceScreen() {
         ) : (
           roster.map((c) => {
             const status = marks[c.id];
+            const isSelected = selectedChildId === c.id;
             return (
-              <View key={c.id} style={moduleStyles.card}>
+              <TouchableOpacity key={c.id} onPress={() => setSelectedChildId(c.id)} style={[moduleStyles.card, isSelected ? { borderColor: '#2563eb' } : null]} accessibilityLabel={`Select ${c.name || 'student'} attendance history`}>
                 <View style={[moduleStyles.cardRow, { justifyContent: 'space-between' }]}>
                   <View style={{ flex: 1, paddingRight: 8 }}>
                     <Text style={moduleStyles.cardTitle}>{c.name || c.firstName || 'Student'}</Text>
                     <Text style={moduleStyles.cardMeta}>{c.age ? `Age ${c.age}` : '—'}</Text>
+                    {isSelected ? <Text style={[moduleStyles.cardMeta, { color: '#2563eb', marginTop: 6 }]}>Showing full attendance history below</Text> : null}
                   </View>
                   <View style={{ flexDirection: 'row' }}>
                     {[
@@ -125,13 +230,35 @@ export default function AttendanceScreen() {
                     ))}
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })
         )}
 
-        <TouchableOpacity onPress={submit} style={moduleStyles.primaryBtn} accessibilityLabel="Save attendance">
-          <Text style={moduleStyles.primaryBtnText}>Save attendance</Text>
+        {selectedChildId ? (
+          <View style={moduleStyles.card}>
+            <Text style={moduleStyles.cardTitle}>Attendance History</Text>
+            <Text style={moduleStyles.cardMeta}>Full history for {(roster.find((child) => child?.id === selectedChildId)?.name) || 'selected child'}</Text>
+            {historyLoading ? (
+              <View style={{ marginTop: 12 }}>
+                <ActivityIndicator color="#2563eb" />
+              </View>
+            ) : historyItems.length ? (
+              historyItems.map((entry) => (
+                <View key={entry.id || `${entry.childId}-${entry.recordedFor}`} style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#e2e8f0' }}>
+                  <Text style={moduleStyles.cardTitle}>{entry.recordedFor}</Text>
+                  <Text style={moduleStyles.cardMeta}>Status: {entry.status}</Text>
+                  {entry.note ? <Text style={moduleStyles.cardMeta}>{entry.note}</Text> : null}
+                </View>
+              ))
+            ) : (
+              <Text style={[moduleStyles.cardMeta, { marginTop: 12 }]}>No attendance history has been recorded for this child yet.</Text>
+            )}
+          </View>
+        ) : null}
+
+        <TouchableOpacity onPress={submit} style={[moduleStyles.primaryBtn, saving ? { opacity: 0.7 } : null]} accessibilityLabel="Save attendance" disabled={saving}>
+          <Text style={moduleStyles.primaryBtnText}>{saving ? 'Saving attendance...' : 'Save attendance'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </ScreenWrapper>

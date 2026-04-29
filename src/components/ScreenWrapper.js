@@ -6,7 +6,17 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTenant } from '../core/tenant/TenantContext';
 import { humanizeScreenLabel } from '../utils/screenLabels';
 
-export function ScreenWrapper({ children, style, hideBanner = false, bannerShowBack, bannerTitle, bannerLeft, bannerRight }) {
+export function ScreenWrapper({
+  children,
+  style,
+  hideBanner = false,
+  bannerShowBack,
+  bannerTitle,
+  bannerLeft,
+  bannerRight,
+  bottomSpacerHeight,
+  webBottomSpacerHeight,
+}) {
   const navigation = useNavigation();
   const route = useRoute();
   const tenant = useTenant();
@@ -37,6 +47,8 @@ export function ScreenWrapper({ children, style, hideBanner = false, bannerShowB
   const showBack = (typeof bannerShowBack === 'boolean') ? bannerShowBack : computedShowBack;
 
   const isWeb = Platform.OS === 'web';
+  const resolvedWebBottomSpacerHeight = typeof webBottomSpacerHeight === 'number' ? webBottomSpacerHeight : 24;
+  const resolvedBottomSpacerHeight = typeof bottomSpacerHeight === 'number' ? bottomSpacerHeight : 72;
 
   return (
     <View style={[{ flex: 1, width: '100%', backgroundColor: isWeb ? '#f0f2f5' : '#fff' }, style]}>
@@ -49,14 +61,14 @@ export function ScreenWrapper({ children, style, hideBanner = false, bannerShowB
         <View style={{ flex: 1, width: '100%', alignItems: 'center', paddingHorizontal: 16, paddingTop: 20 }}>
           <View style={{ flex: 1, width: '100%', maxWidth: 1120 }}>
             {children}
-            <View style={{ height: 24 }} accessibilityElementsHidden importantForAccessibility="no" />
+            {resolvedWebBottomSpacerHeight > 0 ? <View style={{ height: resolvedWebBottomSpacerHeight }} accessibilityElementsHidden importantForAccessibility="no" /> : null}
           </View>
         </View>
       ) : (
         <>
           {children}
           {/* spacer to prevent bottom nav from overlapping content */}
-          <View style={{ height: 72 }} accessibilityElementsHidden importantForAccessibility="no" />
+          {resolvedBottomSpacerHeight > 0 ? <View style={{ height: resolvedBottomSpacerHeight }} accessibilityElementsHidden importantForAccessibility="no" /> : null}
         </>
       )}
     </View>

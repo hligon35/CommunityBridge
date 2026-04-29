@@ -90,17 +90,39 @@ function monthLabel(date) {
   return date.toLocaleDateString([], { month: 'long', year: 'numeric' });
 }
 
+function getNextUpcomingEntry(children, now = new Date()) {
+  const allChildren = Array.isArray(children) ? children : [];
+  const entries = allChildren.flatMap((child) => {
+    const base = child?.dropoffTimeISO ? new Date(child.dropoffTimeISO) : null;
+    if (!base || Number.isNaN(base.getTime())) return [];
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), base.getHours(), base.getMinutes());
+    const scheduledAt = today.getTime() >= now.getTime()
+      ? today
+      : new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, base.getHours(), base.getMinutes());
+    return [{
+      childName: child?.name || 'Child',
+      session: child?.session || 'Session',
+      scheduledAt,
+      room: child?.room || '',
+    }];
+  });
+  entries.sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime());
+  return entries[0] || null;
+}
+
 export default function ScheduleCalendarScreen() {
   const route = useRoute();
   const { user } = useAuth();
   const { children = [] } = useData();
   const role = String(user?.role || 'parent').trim().toLowerCase();
+  const isTherapistSchedule = role === 'therapist' && route?.params?.therapistSchedule;
   const relevantChildren = useMemo(() => {
     const linkedChildren = findRelevantChildren(role, user?.id, children);
     const requestedChildId = route?.params?.childId;
+    if (isTherapistSchedule) return linkedChildren;
     if (!requestedChildId) return linkedChildren;
     return linkedChildren.filter((child) => child?.id === requestedChildId);
-  }, [children, role, route?.params?.childId, user?.id]);
+  }, [children, isTherapistSchedule, role, route?.params?.childId, user?.id]);
   const initialDate = useMemo(() => {
     const firstChild = relevantChildren[0];
     const base = firstChild?.dropoffTimeISO || firstChild?.pickupTimeISO || Date.now();
@@ -112,10 +134,33 @@ export default function ScheduleCalendarScreen() {
   const calendarDays = useMemo(() => buildCalendarDays(displayMonth), [displayMonth]);
   const selectedDayKey = formatDayKey(selectedDate);
   const entries = useMemo(() => getScheduleEntries(relevantChildren, selectedDate), [relevantChildren, selectedDate]);
+  const nextUpcomingEntry = useMemo(() => getNextUpcomingEntry(relevantChildren), [relevantChildren]);
 
   return (
-    <ScreenWrapper bannerTitle="Schedule" style={styles.container}>
+    <ScreenWrapper
+      bannerTitle={isTherapistSchedule ? 'Work Schedule' : 'Schedule'}
+      style={styles.container}
+      bottomSpacerHeight={0}
+      webBottomSpacerHeight={0}
+    >
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {isTherapistSchedule ? (
+          <View style={styles.nextSessionCard}>
+            <Text style={styles.nextSessionEyebrow}>Next Scheduled Session</Text>
+            {nextUpcomingEntry ? (
+              <>
+                <Text style={styles.nextSessionChild}>{nextUpcomingEntry.childName}</Text>
+                <Text style={styles.nextSessionMeta}>
+                  {nextUpcomingEntry.session} • {nextUpcomingEntry.scheduledAt.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                </Text>
+                {nextUpcomingEntry.room ? <Text style={styles.nextSessionMeta}>Room {nextUpcomingEntry.room}</Text> : null}
+              </>
+            ) : (
+              <Text style={styles.nextSessionMeta}>No upcoming sessions found.</Text>
+            )}
+          </View>
+        ) : null}
+
         <View style={styles.calendarCard}>
           <View style={styles.calendarHeader}>
             <TouchableOpacity
@@ -161,7 +206,7 @@ export default function ScheduleCalendarScreen() {
 
         <View style={styles.scheduleSection}>
           <Text style={styles.scheduleTitle}>
-            Schedule for {selectedDate.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
+            {isTherapistSchedule ? 'Work schedule' : 'Schedule for'} {selectedDate.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
           </Text>
 
           {entries.length ? entries.map((entry) => (
@@ -202,6 +247,30 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     paddingBottom: 16,
+  },
+  nextSessionCard: {
+    backgroundColor: '#0f172a',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 14,
+  },
+  nextSessionEyebrow: {
+    color: '#93c5fd',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  nextSessionChild: {
+    marginTop: 8,
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  nextSessionMeta: {
+    marginTop: 6,
+    color: '#cbd5e1',
+    fontSize: 14,
   },
   calendarCard: {
     backgroundColor: '#ffffff',
@@ -252,11 +321,11 @@ const styles = StyleSheet.create({
   },
   dayButton: {
     width: '14.28%',
-    aspectRatio: 1,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   dayButtonSelected: {
     backgroundColor: '#1d4ed8',

@@ -5,7 +5,8 @@ import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
 import { avatarSourceFor } from '../utils/idVisibility';
 import { MaterialIcons } from '@expo/vector-icons';
-import { isAdminRole } from '../core/tenant/models';
+import MoodTrackerCard from '../components/MoodTrackerCard';
+import { isAdminRole, isStaffRole } from '../core/tenant/models';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
 
@@ -14,8 +15,9 @@ export default function ChildDetailScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
   const { childId } = route.params || {};
-  const { children = [] } = useData();
+  const { children = [], fetchAndSync } = useData();
   const canOpenRelatedChats = isAdminRole(user?.role);
+  const canRecordMood = isAdminRole(user?.role) || isStaffRole(user?.role);
 
   const child = (children || []).find((c) => c.id === childId) || null;
 
@@ -45,6 +47,13 @@ export default function ChildDetailScreen() {
           <Text style={styles.sectionText}>{child.carePlan}</Text>
         </View>
       ) : null}
+
+      <MoodTrackerCard
+        childId={child?.id}
+        latestEntry={child?.latestMoodEntry}
+        editable={canRecordMood}
+        onRecorded={() => fetchAndSync({ force: true })}
+      />
 
       {canOpenRelatedChats ? (
         <View style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'flex-end' }}>
