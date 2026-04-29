@@ -133,6 +133,26 @@ function shouldFallbackFromWriteApi({ resp, json, error }) {
   return false;
 }
 
+function shouldFallbackFromReadApi({ resp, json, error }) {
+  const status = Number(resp?.status || error?.httpStatus || 0);
+  const message = String(json?.error || json?.message || error?.message || '').toLowerCase();
+  if (status === 404) return true;
+  if (message.includes('not found')) return true;
+  return false;
+}
+
+function normalizeRecipientIds(input) {
+  if (!Array.isArray(input)) return [];
+  const ids = [];
+  input.forEach((item) => {
+    if (!item) return;
+    const id = typeof item === 'object' ? item.id : item;
+    const normalized = String(id || '').trim();
+    if (normalized) ids.push(normalized);
+  });
+  return Array.from(new Set(ids));
+}
+
 async function fetchWithTimeout(resource, init = {}, timeoutMs = DEFAULT_API_TIMEOUT_MS) {
   const hasAbortController = typeof AbortController === 'function';
   if (!hasAbortController || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
@@ -719,27 +739,40 @@ async function getPostComments(postId, max = 50) {
   return roots;
 }
 
+function requireBoardApiBase() {
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Board activity requires the API server.');
+    err.code = 'BB_BOARD_API_REQUIRED';
+    throw err;
+  }
+  return apiBase;
+}
+
 export async function getPosts() {
-  const postsRef = collection(db, 'posts');
-  const q = query(postsRef, orderBy('createdAt', 'desc'), limit(50));
-  const snap = await getDocs(q);
-
-  const items = await Promise.all(
-    snap.docs.map(async (d) => {
-      const data = d.data() || {};
-      const comments = await getPostComments(d.id, 75).catch(() => []);
-      return {
-        id: d.id,
-        ...data,
-        createdAt: isoFromMaybeTimestamp(data.createdAt) || new Date().toISOString(),
-        likes: typeof data.likes === 'number' ? data.likes : (Number(data.likes) || 0),
-        shares: typeof data.shares === 'number' ? data.shares : (Number(data.shares) || 0),
-        comments,
-      };
-    })
-  );
-
-  return items;
+  const u = requireUser();
+  const apiBase = requireBoardApiBase();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/board`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load posts.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  if (!Array.isArray(json)) return [];
+  return json.map((item) => ({
+    ...item,
+    createdAt: isoFromMaybeTimestamp(item?.createdAt) || new Date().toISOString(),
+    likes: typeof item?.likes === 'number' ? item.likes : (Number(item?.likes) || 0),
+    shares: typeof item?.shares === 'number' ? item.shares : (Number(item?.shares) || 0),
+    comments: Array.isArray(item?.comments) ? item.comments : [],
+  }));
 }
 
 export async function createPost(payload) {
@@ -756,45 +789,51 @@ export async function createPost(payload) {
     avatar: profile?.avatar || u.photoURL || null,
   };
 
-  const docRef = await addDoc(collection(db, 'posts'), {
-    title,
-    body,
-    text: body,
-    image,
-    author,
-    likes: 0,
-    shares: 0,
-    createdAt: serverTimestamp(),
+  const apiBase = requireBoardApiBase();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/board`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ title, body, image }),
   });
-
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not create post.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
   return {
-    id: docRef.id,
-    title,
-    body,
-    text: body,
-    image,
-    author,
-    likes: 0,
-    shares: 0,
-    comments: [],
-    createdAt: new Date().toISOString(),
+    ...json,
+    author: json.author || author,
+    comments: Array.isArray(json.comments) ? json.comments : [],
+    likes: typeof json.likes === 'number' ? json.likes : (Number(json.likes) || 0),
+    shares: typeof json.shares === 'number' ? json.shares : (Number(json.shares) || 0),
+    createdAt: isoFromMaybeTimestamp(json.createdAt) || new Date().toISOString(),
   };
 }
 
 export async function likePost(postId) {
   const u = requireUser();
-  try {
-    await updateDoc(doc(db, 'posts', String(postId)), { likes: increment(1) });
-    const snap = await getDoc(doc(db, 'posts', String(postId)));
-    const data = snap.exists() ? snap.data() : {};
-    return { id: String(postId), likes: typeof data?.likes === 'number' ? data.likes : (Number(data?.likes) || 0) };
-  } catch (e) {
-    // Treat permission errors as unauthorized, for parity with the old 401 flow.
-    if (unauthorizedHandler && String(e?.code || '').includes('permission-denied')) {
-      unauthorizedHandler({ method: 'FIRESTORE', url: `posts/${postId}`, status: 401 });
-    }
-    throw e;
+  const apiBase = requireBoardApiBase();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/board/like`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ postId }),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not update post likes.'));
+    err.httpStatus = resp.status;
+    throw err;
   }
+  return { id: String(postId), likes: typeof json.likes === 'number' ? json.likes : (Number(json.likes) || 0), shares: typeof json.shares === 'number' ? json.shares : (Number(json.shares) || 0) };
 }
 
 export async function commentPost(postId, comment) {
@@ -811,24 +850,30 @@ export async function commentPost(postId, comment) {
   const body = (typeof comment === 'string') ? comment : (comment?.body || comment?.text || comment?.comment || '');
   const parentId = comment?.parentId != null ? String(comment.parentId) : null;
 
-  const createdAtIso = new Date().toISOString();
-  const refDoc = await addDoc(collection(db, 'posts', String(postId), 'comments'), {
-    body: String(body || '').trim(),
-    author,
-    parentId,
-    reactions: {},
-    userReactions: {},
-    createdAt: serverTimestamp(),
+  const apiBase = requireBoardApiBase();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/board/comments`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ postId, comment: { body: String(body || '').trim(), parentId } }),
   });
-
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not create comment.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
   return {
-    id: refDoc.id,
-    body: String(body || '').trim(),
-    author,
+    ...json,
+    author: json.author || author,
     parentId,
-    reactions: {},
-    userReactions: {},
-    createdAt: createdAtIso,
+    reactions: json?.reactions && typeof json.reactions === 'object' ? json.reactions : {},
+    userReactions: json?.userReactions && typeof json.userReactions === 'object' ? json.userReactions : {},
+    replies: Array.isArray(json?.replies) ? json.replies : undefined,
+    createdAt: isoFromMaybeTimestamp(json?.createdAt) || new Date().toISOString(),
   };
 }
 
@@ -838,25 +883,23 @@ export async function reactComment(postId, commentId, emoji) {
   const value = String(normalizedEmoji || '').trim();
   if (!value) return { ok: false };
 
-  const cRef = doc(db, 'posts', String(postId), 'comments', String(commentId));
-  const snap = await getDoc(cRef);
-  if (!snap.exists()) return { ok: false };
-  const data = snap.data() || {};
-  const reactions = { ...(data.reactions || {}) };
-  const userReactions = { ...(data.userReactions || {}) };
-  const prev = userReactions[u.uid];
-
-  if (prev === value) {
-    reactions[value] = Math.max(0, (reactions[value] || 1) - 1);
-    delete userReactions[u.uid];
-  } else {
-    if (prev) reactions[prev] = Math.max(0, (reactions[prev] || 1) - 1);
-    reactions[value] = (reactions[value] || 0) + 1;
-    userReactions[u.uid] = value;
+  const apiBase = requireBoardApiBase();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/board/comments/react`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ postId, commentId, emoji: value }),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not update comment reaction.'));
+    err.httpStatus = resp.status;
+    throw err;
   }
-
-  await updateDoc(cRef, { reactions, userReactions });
-  return { ok: true };
+  return { ...json, ok: true };
 }
 
 function extractFirstFileFromFormData(formData) {
@@ -962,6 +1005,28 @@ export async function deleteMyAccount(payload) {
 export async function getUrgentMemos() {
   const u = requireUser();
   const role = (await getUserProfile(u.uid))?.role || 'parent';
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+
+  if (apiBase) {
+    try {
+      const idToken = await u.getIdToken(true);
+      const resp = await fetchWithTimeout(`${apiBase}/api/urgent-memos`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+      const json = await resp.json().catch(() => null);
+      if (resp.ok && Array.isArray(json)) return json;
+      if (!shouldFallbackFromReadApi({ resp, json }) && !isLikelyNetworkError({ message: resp.statusText })) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load urgent memos.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+    } catch (e) {
+      if (!isLikelyNetworkError(e) && !shouldFallbackFromReadApi({ error: e })) throw e;
+    }
+  }
 
   const memosRef = collection(db, 'urgentMemos');
   // Note: This assumes memos are tagged by audienceRole. If you want per-user targeting,
@@ -992,6 +1057,30 @@ export async function health() {
 export async function ackUrgentMemo(memoIds) {
   const u = requireUser();
   const ids = Array.isArray(memoIds) ? memoIds : [memoIds];
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (apiBase) {
+    try {
+      const idToken = await u.getIdToken(true);
+      const resp = await fetchWithTimeout(`${apiBase}/api/urgent-memos/read`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ memoIds: ids.filter(Boolean).map(String) }),
+      });
+      const json = await resp.json().catch(() => null);
+      if (resp.ok && json?.ok !== false) return json || { ok: true };
+      if (!shouldFallbackFromWriteApi({ resp, json }) && !isLikelyNetworkError({ message: resp.statusText })) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not acknowledge urgent memos.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+    } catch (e) {
+      if (!isLikelyNetworkError(e) && !shouldFallbackFromWriteApi({ error: e })) throw e;
+    }
+  }
+
   const batch = writeBatch(db);
   ids.filter(Boolean).forEach((id) => {
     batch.set(doc(db, 'urgentMemos', String(id), 'reads', u.uid), { readAt: serverTimestamp() }, { merge: true });
@@ -1040,18 +1129,47 @@ export async function sendUrgentMemo(memo) {
   }
 
   if (id) {
-    await setDoc(doc(db, 'urgentMemos', id), { ...clean, updatedAt: serverTimestamp(), createdAt: clean.createdAt ? clean.createdAt : serverTimestamp() }, { merge: true });
+    await setDoc(doc(db, 'urgentMemos', id), {
+      ...clean,
+      recipientIds: normalizeRecipientIds(clean.recipients),
+      updatedAt: serverTimestamp(),
+      createdAt: clean.createdAt ? clean.createdAt : serverTimestamp(),
+    }, { merge: true });
     const snap = await getDoc(doc(db, 'urgentMemos', id));
     const data = snap.data() || {};
     return { id, ...data, createdAt: isoFromMaybeTimestamp(data.createdAt) || new Date().toISOString() };
   }
 
-  const refDoc = await addDoc(collection(db, 'urgentMemos'), { ...clean, createdAt: serverTimestamp() });
+  const refDoc = await addDoc(collection(db, 'urgentMemos'), { ...clean, recipientIds: normalizeRecipientIds(clean.recipients), createdAt: serverTimestamp() });
   return { id: refDoc.id, ...clean, createdAt: new Date().toISOString() };
 }
 
 export async function respondUrgentMemo(memoId, action) {
-  requireUser();
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (apiBase) {
+    try {
+      const idToken = await u.getIdToken(true);
+      const resp = await fetchWithTimeout(`${apiBase}/api/urgent-memos/respond`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ memoId, action }),
+      });
+      const json = await resp.json().catch(() => null);
+      if (resp.ok && json?.ok !== false) return json || { ok: true };
+      if (!shouldFallbackFromWriteApi({ resp, json }) && !isLikelyNetworkError({ message: resp.statusText })) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not update urgent memo.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+    } catch (e) {
+      if (!isLikelyNetworkError(e) && !shouldFallbackFromWriteApi({ error: e })) throw e;
+    }
+  }
+
   await updateDoc(doc(db, 'urgentMemos', String(memoId)), { status: String(action || ''), respondedAt: serverTimestamp() });
   return { ok: true };
 }
@@ -1103,6 +1221,28 @@ export async function getMessages() {
   const u = requireUser();
   const profile = await getUserProfile(u.uid);
   const role = String(profile?.role || '').toLowerCase();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+
+  if (apiBase) {
+    try {
+      const idToken = await u.getIdToken(true);
+      const resp = await fetchWithTimeout(`${apiBase}/api/messages`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+      const json = await resp.json().catch(() => null);
+      if (resp.ok && Array.isArray(json)) return json;
+      if (!shouldFallbackFromReadApi({ resp, json }) && !isLikelyNetworkError({ message: resp.statusText })) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load messages.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+    } catch (e) {
+      if (!isLikelyNetworkError(e) && !shouldFallbackFromReadApi({ error: e })) throw e;
+    }
+  }
 
   const messagesRef = collection(db, 'messages');
 
@@ -1265,6 +1405,30 @@ export async function proposeTimeChange(payload) {
   const u = requireUser();
   const clean = { ...(payload || {}) };
 
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (apiBase) {
+    try {
+      const idToken = await u.getIdToken(true);
+      const resp = await fetchWithTimeout(`${apiBase}/api/children/propose-time-change`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(clean),
+      });
+      const json = await resp.json().catch(() => null);
+      if (resp.ok && json) return json;
+      if (!shouldFallbackFromWriteApi({ resp, json }) && !isLikelyNetworkError({ message: resp.statusText })) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not propose time change.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+    } catch (e) {
+      if (!isLikelyNetworkError(e) && !shouldFallbackFromWriteApi({ error: e })) throw e;
+    }
+  }
+
   const toWrite = {
     ...clean,
     proposerUid: u.uid,
@@ -1279,6 +1443,28 @@ export async function proposeTimeChange(payload) {
 export async function getTimeChangeProposals() {
   const u = requireUser();
   const role = String((await getUserProfile(u.uid))?.role || 'parent').toLowerCase();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+
+  if (apiBase) {
+    try {
+      const idToken = await u.getIdToken(true);
+      const resp = await fetchWithTimeout(`${apiBase}/api/children/time-change-proposals`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+      const json = await resp.json().catch(() => null);
+      if (resp.ok && Array.isArray(json)) return json;
+      if (!shouldFallbackFromReadApi({ resp, json }) && !isLikelyNetworkError({ message: resp.statusText })) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load time change proposals.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+    } catch (e) {
+      if (!isLikelyNetworkError(e) && !shouldFallbackFromReadApi({ error: e })) throw e;
+    }
+  }
 
   const col = collection(db, 'timeChangeProposals');
   const q = isAdminRole(role)
@@ -1315,7 +1501,29 @@ function indexChildRecord(child) {
 }
 
 export async function getDirectory() {
-  requireUser();
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (apiBase) {
+    try {
+      const idToken = await u.getIdToken(true);
+      const resp = await fetchWithTimeout(`${apiBase}/api/directory`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+      const json = await resp.json().catch(() => null);
+      if (resp.ok && json?.ok === true) return json;
+      if (!shouldFallbackFromReadApi({ resp, json }) && !isLikelyNetworkError({ message: resp.statusText })) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load directory.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+    } catch (e) {
+      if (!isLikelyNetworkError(e) && !shouldFallbackFromReadApi({ error: e })) throw e;
+    }
+  }
+
   const [childrenSnap, parentsSnap, therapistsSnap] = await Promise.all([
     getDocs(collection(db, 'children')),
     getDocs(collection(db, 'parents')),
@@ -1331,6 +1539,28 @@ export async function getDirectory() {
 
 export async function getDirectoryMe() {
   const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (apiBase) {
+    try {
+      const idToken = await u.getIdToken(true);
+      const resp = await fetchWithTimeout(`${apiBase}/api/directory/me`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+      const json = await resp.json().catch(() => null);
+      if (resp.ok && json?.ok === true) return json;
+      if (!shouldFallbackFromReadApi({ resp, json }) && !isLikelyNetworkError({ message: resp.statusText })) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load directory.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+    } catch (e) {
+      if (!isLikelyNetworkError(e) && !shouldFallbackFromReadApi({ error: e })) throw e;
+    }
+  }
+
   const profile = await getUserProfile(u.uid);
 
   const linkSnap = await getDoc(doc(db, 'directoryLinks', u.uid)).catch(() => null);
@@ -1445,60 +1675,51 @@ export async function mergeDirectory(payload) {
 export async function getOrgSettings() {
   const u = requireUser();
   const apiBase = String(BASE_URL || '').replace(/\/$/, '');
-  if (apiBase) {
-    try {
-      const idToken = await u.getIdToken(true);
-      const resp = await fetchWithTimeout(`${apiBase}/api/org-settings`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-        },
-      });
-      const json = await resp.json().catch(() => null);
-      if (!resp.ok || !json || json.ok !== true) {
-        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load organization settings.'));
-        err.httpStatus = resp.status;
-        throw err;
-      }
-      return { ok: true, item: json.item || null };
-    } catch (err) {
-      const status = Number(err?.httpStatus || 0);
-      if (!isLikelyNetworkError(err) && status !== 404 && status < 500) throw err;
-    }
+  if (!apiBase) {
+    const err = new Error('Organization settings require the API server.');
+    err.code = 'BB_ORG_SETTINGS_API_REQUIRED';
+    throw err;
   }
-  const snap = await getDoc(doc(db, 'orgSettings', 'main'));
-  if (!snap.exists()) return null;
-  return { ok: true, item: { id: snap.id, ...(snap.data() || {}) } };
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/org-settings`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load organization settings.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, item: json.item || null };
 }
 
 export async function updateOrgSettings(payload) {
   const u = requireUser();
   const apiBase = String(BASE_URL || '').replace(/\/$/, '');
-  if (apiBase) {
-    try {
-      const idToken = await u.getIdToken(true);
-      const resp = await fetchWithTimeout(`${apiBase}/api/org-settings`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify(payload || {}),
-      });
-      const json = await resp.json().catch(() => null);
-      if (!resp.ok || !json || json.ok !== true) {
-        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not save organization settings.'));
-        err.httpStatus = resp.status;
-        throw err;
-      }
-      return { ok: true, item: json.item || null };
-    } catch (err) {
-      const status = Number(err?.httpStatus || 0);
-      if (!isLikelyNetworkError(err) && status !== 404 && status < 500) throw err;
-    }
+  if (!apiBase) {
+    const err = new Error('Organization settings require the API server.');
+    err.code = 'BB_ORG_SETTINGS_API_REQUIRED';
+    throw err;
   }
-  await setDoc(doc(db, 'orgSettings', 'main'), { ...(payload || {}), updatedAt: serverTimestamp() }, { merge: true });
-  return { ok: true };
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/org-settings`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not save organization settings.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, item: json.item || null };
 }
 
 export async function getPermissionsConfig() {
@@ -1553,6 +1774,32 @@ export async function updatePermissionsConfig(payload) {
   return { ok: true, item: json.item || {} };
 }
 
+export async function getAuditLogs(limit = 25) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Audit log review requires the API server.');
+    err.code = 'BB_AUDIT_LOGS_API_REQUIRED';
+    throw err;
+  }
+
+  const idToken = await u.getIdToken(true);
+  const safeLimit = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(100, Math.floor(Number(limit)))) : 25;
+  const resp = await fetchWithTimeout(`${apiBase}/api/audit-logs?limit=${encodeURIComponent(String(safeLimit))}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load audit logs.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, items: Array.isArray(json.items) ? json.items : [] };
+}
+
 export async function respondTimeChange(proposalId, action) {
   requireUser();
   await updateDoc(doc(db, 'timeChangeProposals', String(proposalId)), { status: String(action || ''), respondedAt: serverTimestamp() });
@@ -1560,9 +1807,24 @@ export async function respondTimeChange(proposalId, action) {
 }
 
 export async function sharePost(postId) {
-  requireUser();
-  await updateDoc(doc(db, 'posts', String(postId)), { shares: increment(1) });
-  return { ok: true };
+  const u = requireUser();
+  const apiBase = requireBoardApiBase();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/board/share`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ postId }),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not update post shares.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { id: String(postId), likes: typeof json.likes === 'number' ? json.likes : (Number(json.likes) || 0), shares: typeof json.shares === 'number' ? json.shares : (Number(json.shares) || 0), ok: true };
 }
 
 export async function registerPushToken(payload) {
@@ -1747,6 +2009,7 @@ export default {
   updateOrgSettings,
   getPermissionsConfig,
   updatePermissionsConfig,
+  getAuditLogs,
   respondTimeChange,
   sharePost,
   registerPushToken,

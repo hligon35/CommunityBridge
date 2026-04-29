@@ -1,10 +1,7 @@
 const { isSpecialAccessUser } = require('./authState');
+const { seededDemoRoleIdentities } = require('../seed/demoModeSeed');
 
-const DEMO_ROLE_IDENTITIES = Object.freeze({
-  admin: { id: 'admin-demo', name: 'Jordan Admin', email: 'admin-demo@communitybridge.app', role: 'admin' },
-  therapist: { id: 'ABA-001', name: 'Daniel Lopez', email: 'daniel.lopez@communitybridge.app', role: 'therapist' },
-  parent: { id: 'PT-001', name: 'Carlos Garcia', email: 'carlos.garcia@communitybridge.app', role: 'parent' },
-});
+const DEMO_ROLE_IDENTITIES = Object.freeze(seededDemoRoleIdentities);
 
 function normalizeRole(role) {
   return String(role || '').trim().toLowerCase();

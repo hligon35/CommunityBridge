@@ -51,9 +51,12 @@ function sha256Hex(input) {
 
 function getMfaSecret() {
   const fromEnv = safeString(process.env.CB_MFA_CODE_SECRET || process.env.BB_MFA_CODE_SECRET).trim();
-  if (fromEnv) return fromEnv;
-  const fromProject = safeString(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT).trim();
-  return fromProject || 'bb_mfa_default_secret';
+  if (!fromEnv) {
+    const err = new Error('MFA code secret is not configured.');
+    err.code = 'BB_MFA_SECRET_MISSING';
+    throw err;
+  }
+  return fromEnv;
 }
 
 function normalizeMethod(method) {
@@ -70,23 +73,9 @@ function getDisplayEmail(email) {
   return safeString(email).trim();
 }
 
-function isDevOtpFallbackEnabled() {
-  const env = safeString(process.env.NODE_ENV).trim().toLowerCase();
-  // Default-on for non-production to keep local dev unblocked.
-  return env !== 'production';
-}
-
 async function sendEmailOtp({ to, code }) {
   const smtpUrl = safeString(process.env.CB_SMTP_URL || process.env.BB_SMTP_URL).trim();
   if (!smtpUrl) {
-    if (isDevOtpFallbackEnabled()) {
-      // Local dev fallback: print the code to server logs.
-      // Do NOT enable in production.
-      // eslint-disable-next-line no-console
-      console.log(`[mfa][dev] Email OTP for ${to}: ${code}`);
-      return;
-    }
-
     const err = new Error('Email 2FA is not configured (missing CB_SMTP_URL/BB_SMTP_URL).');
     err.code = 'BB_MFA_EMAIL_NOT_CONFIGURED';
     throw err;
@@ -97,12 +86,6 @@ async function sendEmailOtp({ to, code }) {
     // eslint-disable-next-line global-require
     nodemailer = require('nodemailer');
   } catch (_) {
-    if (isDevOtpFallbackEnabled()) {
-      // eslint-disable-next-line no-console
-      console.log(`[mfa][dev] Email OTP for ${to}: ${code}`);
-      return;
-    }
-
     const err = new Error('Email 2FA dependency missing (nodemailer).');
     err.code = 'BB_MFA_EMAIL_DEP_MISSING';
     throw err;
@@ -127,12 +110,6 @@ async function sendSmsOtp({ to, code }) {
   const sid = safeString(process.env.CB_TWILIO_ACCOUNT_SID || process.env.BB_TWILIO_ACCOUNT_SID).trim();
   const token = safeString(process.env.CB_TWILIO_AUTH_TOKEN || process.env.BB_TWILIO_AUTH_TOKEN).trim();
   if (!sid || !token) {
-    if (isDevOtpFallbackEnabled()) {
-      // eslint-disable-next-line no-console
-      console.log(`[mfa][dev] SMS OTP for ${to}: ${code}`);
-      return;
-    }
-
     const err = new Error('SMS 2FA is not configured (missing CB_TWILIO_ACCOUNT_SID/CB_TWILIO_AUTH_TOKEN or BB_TWILIO_ACCOUNT_SID/BB_TWILIO_AUTH_TOKEN).');
     err.code = 'BB_MFA_SMS_NOT_CONFIGURED';
     throw err;
@@ -143,12 +120,6 @@ async function sendSmsOtp({ to, code }) {
     // eslint-disable-next-line global-require
     twilioFactory = require('twilio');
   } catch (_) {
-    if (isDevOtpFallbackEnabled()) {
-      // eslint-disable-next-line no-console
-      console.log(`[mfa][dev] SMS OTP for ${to}: ${code}`);
-      return;
-    }
-
     const err = new Error('SMS 2FA dependency missing (twilio).');
     err.code = 'BB_MFA_SMS_DEP_MISSING';
     throw err;
@@ -157,12 +128,6 @@ async function sendSmsOtp({ to, code }) {
   const from = safeString(process.env.CB_TWILIO_FROM || process.env.BB_TWILIO_FROM).trim();
   const messagingServiceSid = safeString(process.env.CB_TWILIO_MESSAGING_SERVICE_SID || process.env.BB_TWILIO_MESSAGING_SERVICE_SID).trim();
   if (!from && !messagingServiceSid) {
-    if (isDevOtpFallbackEnabled()) {
-      // eslint-disable-next-line no-console
-      console.log(`[mfa][dev] SMS OTP for ${to}: ${code}`);
-      return;
-    }
-
     const err = new Error('SMS 2FA missing CB_TWILIO_FROM/CB_TWILIO_MESSAGING_SERVICE_SID or BB_TWILIO_FROM/BB_TWILIO_MESSAGING_SERVICE_SID.');
     err.code = 'BB_MFA_SMS_FROM_MISSING';
     throw err;

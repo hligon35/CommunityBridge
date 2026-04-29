@@ -376,16 +376,16 @@ function envFlag(value, defaultValue = false) {
   return defaultValue;
 }
 
-const ALLOW_SIGNUP = envFlag(process.env.CB_ALLOW_SIGNUP || process.env.BB_ALLOW_SIGNUP, true);
+const ALLOW_SIGNUP = envFlag(process.env.CB_ALLOW_SIGNUP || process.env.BB_ALLOW_SIGNUP, false);
 // IMPORTANT:
 // Requiring 2FA on signup by default will hard-fail account creation when email/SMS delivery
 // isn't configured (e.g. missing BB_SMTP_URL/BB_EMAIL_FROM). Default to OFF unless explicitly enabled.
-const REQUIRE_2FA_ON_SIGNUP = envFlag(process.env.CB_REQUIRE_2FA_ON_SIGNUP || process.env.BB_REQUIRE_2FA_ON_SIGNUP, false);
+const REQUIRE_2FA_ON_SIGNUP = envFlag(process.env.CB_REQUIRE_2FA_ON_SIGNUP || process.env.BB_REQUIRE_2FA_ON_SIGNUP, true);
 const DEBUG_2FA_RETURN_CODE = envFlag(process.env.CB_DEBUG_2FA_RETURN_CODE || process.env.BB_DEBUG_2FA_RETURN_CODE, false);
 // When enabled, include the underlying delivery failure message in API responses.
 // Keep disabled in production by default to avoid leaking implementation details.
 const DEBUG_2FA_DELIVERY_ERRORS = envFlag(process.env.CB_DEBUG_2FA_DELIVERY_ERRORS || process.env.BB_DEBUG_2FA_DELIVERY_ERRORS, false);
-const LOG_REQUESTS = envFlag(process.env.CB_DEBUG_REQUESTS || process.env.BB_DEBUG_REQUESTS, true);
+const LOG_REQUESTS = envFlag(process.env.CB_DEBUG_REQUESTS || process.env.BB_DEBUG_REQUESTS, false);
 // When enabled, allow the server to start without a DB (static hosting only).
 // This is intended for local debugging and should not be used for real app traffic.
 const ALLOW_NO_DB = envFlag(process.env.CB_ALLOW_NO_DB || process.env.BB_ALLOW_NO_DB, false);
@@ -414,7 +414,7 @@ const EMAIL_FROM = (process.env.CB_EMAIL_FROM || process.env.BB_EMAIL_FROM || ''
 const EMAIL_2FA_SUBJECT = (process.env.CB_EMAIL_2FA_SUBJECT || process.env.BB_EMAIL_2FA_SUBJECT || 'CommunityBridge verification code').trim();
 const EMAIL_PASSWORD_RESET_SUBJECT = (process.env.CB_EMAIL_PASSWORD_RESET_SUBJECT || process.env.BB_EMAIL_PASSWORD_RESET_SUBJECT || 'CommunityBridge password reset').trim();
 
-const RETURN_PASSWORD_RESET_CODE = envFlag(process.env.CB_RETURN_PASSWORD_RESET_CODE || process.env.BB_RETURN_PASSWORD_RESET_CODE, NODE_ENV !== 'production');
+const RETURN_PASSWORD_RESET_CODE = envFlag(process.env.CB_RETURN_PASSWORD_RESET_CODE || process.env.BB_RETURN_PASSWORD_RESET_CODE, false);
 const PASSWORD_RESET_TTL_MINUTES = Math.max(5, Number(process.env.CB_PASSWORD_RESET_TTL_MINUTES || process.env.BB_PASSWORD_RESET_TTL_MINUTES || 30));
 
 const slog = require('./logger');
@@ -680,6 +680,35 @@ try {
 }
 
 async function shutdownServer(signal) {
+
+app.get('/api/audit-logs', authMiddleware, requireAdmin, (req, res) => {
+  const rawLimit = Number(req.query?.limit);
+  const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(100, Math.floor(rawLimit))) : 25;
+  try {
+    const rows = db.prepare(
+      'SELECT id, actor_id, action, target_type, target_id, status, details_json, created_at FROM audit_logs ORDER BY created_at DESC LIMIT ?'
+    ).all(limit);
+    const items = (rows || []).map((row) => {
+      let details = {};
+      if (row.details_json) {
+        try { details = JSON.parse(String(row.details_json)); } catch (_) { details = {}; }
+      }
+      return {
+        id: row.id,
+        actorId: row.actor_id || '',
+        action: row.action || '',
+        targetType: row.target_type || '',
+        targetId: row.target_id || '',
+        status: row.status || 'success',
+        details,
+        createdAt: row.created_at || nowISO(),
+      };
+    });
+    return res.json({ ok: true, items });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
   if (shuttingDown) return;
   shuttingDown = true;
   try {
@@ -866,6 +895,17 @@ CREATE TABLE IF NOT EXISTS password_resets (
   token_hash TEXT NOT NULL,
   expires_at TEXT NOT NULL,
   used_at TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id TEXT PRIMARY KEY,
+  actor_id TEXT,
+  action TEXT NOT NULL,
+  target_type TEXT,
+  target_id TEXT,
+  status TEXT NOT NULL,
+  details_json TEXT,
   created_at TEXT NOT NULL
 );
 `);
@@ -1390,6 +1430,16 @@ function getAdminUserIds() {
   }
 }
 
+function recordAuditLog({ actorId, action, targetType, targetId, status = 'success', details = {} } = {}) {
+  try {
+    db.prepare(
+      'INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, status, details_json, created_at) VALUES (?,?,?,?,?,?,?,?)'
+    ).run(nanoId(), actorId ? String(actorId) : null, String(action || 'unknown'), targetType ? String(targetType) : null, targetId ? String(targetId) : null, String(status || 'success'), JSON.stringify(details || {}), nowISO());
+  } catch (_) {
+    // ignore audit failures
+  }
+}
+
 function getPushTokensForUsers(userIds, { kind } = {}) {
   try {
     if (!Array.isArray(userIds) || !userIds.length) return [];
@@ -1447,6 +1497,55 @@ function normalizeRecipients(input) {
     else if (typeof item === 'object' && item.id != null) ids.push(String(item.id));
   }
   return Array.from(new Set(ids.filter(Boolean)));
+}
+
+function normalizeRoleTargets(input) {
+  if (!Array.isArray(input)) return [];
+  const roles = [];
+  for (const item of input) {
+    if (!item) continue;
+    roles.push(String(item).trim().toLowerCase());
+  }
+  return Array.from(new Set(roles.filter(Boolean)));
+}
+
+function messageVisibleToUser(user, message) {
+  if (!user || !message) return false;
+  if (isAdminRole(user.role)) return true;
+
+  const userId = safeString(user.id).trim();
+  if (!userId) return false;
+
+  const senderId = safeString(message.sender_json?.id || message.sender?.id).trim();
+  if (senderId && senderId === userId) return true;
+
+  const recipientIds = normalizeRecipients(message.to_json || message.to || []);
+  if (recipientIds.includes(userId)) return true;
+
+  const roles = normalizeRoleTargets(message.to_roles || message.toRoles || []);
+  return roles.includes(roleLower(user));
+}
+
+function memoVisibleToUser(user, row) {
+  if (!user || !row) return false;
+  if (isAdminRole(user.role)) return true;
+
+  const userId = safeString(user.id).trim();
+  if (!userId) return false;
+
+  const memo = safeJsonParse(row.memo_json, {});
+  const proposerId = safeString(row.proposer_id || memo.proposerId || memo.proposerUid).trim();
+  if (proposerId && proposerId === userId) return true;
+
+  const recipientIds = normalizeRecipients(memo.recipients);
+  return recipientIds.includes(userId);
+}
+
+function proposalVisibleToUser(user, row) {
+  if (!user || !row) return false;
+  if (isAdminRole(user.role)) return true;
+  const userId = safeString(user.id).trim();
+  return !!userId && userId === safeString(row.proposer_id || row.proposerId || row.proposerUid).trim();
 }
 
 function userToClient(row) {
@@ -1952,6 +2051,13 @@ app.put('/api/org-settings', authMiddleware, requireAdmin, requireCapability('se
       'INSERT INTO org_settings (id, data_json, created_at, updated_at) VALUES (?,?,?,?)\n' +
       'ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json, updated_at=excluded.updated_at'
     ).run('default', JSON.stringify(item), now, now);
+    recordAuditLog({
+      actorId: req.user?.id,
+      action: 'org_settings.updated',
+      targetType: 'org_settings',
+      targetId: 'default',
+      details: { orgArrivalEnabled: item.orgArrivalEnabled, hasLocation: Number.isFinite(item.lat) && Number.isFinite(item.lng) },
+    });
     return res.json({ ok: true, item });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || String(e) });
@@ -1975,6 +2081,13 @@ app.put('/api/permissions-config', authMiddleware, requireSuperAdmin, (req, res)
     db.prepare(
       'INSERT INTO permissions_config (id, data_json, created_at, updated_at) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json, updated_at=excluded.updated_at'
     ).run('default', JSON.stringify(item), now, now);
+    recordAuditLog({
+      actorId: req.user?.id,
+      action: 'permissions_config.updated',
+      targetType: 'permissions_config',
+      targetId: 'default',
+      details: { roleCount: Object.keys(item || {}).length },
+    });
     return res.json({ ok: true, item });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || String(e) });
@@ -2026,6 +2139,9 @@ app.post('/api/auth/forgot-password', authRateLimit, async (req, res) => {
   const email = (req.body && req.body.email) ? String(req.body.email).trim().toLowerCase() : '';
   if (!email) return res.status(400).json({ ok: false, error: 'email required' });
   if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'server missing BB_JWT_SECRET' });
+  if (!passwordResetEmailConfigured()) {
+    return res.status(503).json({ ok: false, error: 'Password reset delivery is not configured.' });
+  }
 
   // Always return ok to avoid account enumeration.
   try {
@@ -2259,7 +2375,6 @@ app.get('/api/admin/users', authMiddleware, requireAdmin, requireCapability('use
 
 app.put('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapability('users:manage'), async (req, res) => {
   const userId = safeString(req.params && req.params.userId).trim();
-  if (!userId) return res.status(400).json({ ok: false, error: 'userId required' });
 
   const name = (req.body && req.body.name != null) ? String(req.body.name).trim() : undefined;
   const email = (req.body && req.body.email != null) ? String(req.body.email).trim().toLowerCase() : undefined;
@@ -2376,6 +2491,17 @@ app.put('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapabil
       roleChanged: role !== undefined,
       scopeChanged: organizationId !== undefined || programIds !== undefined || campusIds !== undefined || memberships !== undefined,
     });
+    recordAuditLog({
+      actorId: req.user?.id,
+      action: 'admin_user.updated',
+      targetType: 'user',
+      targetId: userId,
+      details: {
+        roleChanged: role !== undefined,
+        scopeChanged: organizationId !== undefined || programIds !== undefined || campusIds !== undefined || memberships !== undefined,
+        passwordChanged: newPassword !== undefined,
+      },
+    });
     return res.json({ ok: true, user: {
       id: row.id,
       email: row.email,
@@ -2428,6 +2554,13 @@ app.delete('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapa
 
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);
   slog.info('admin', 'Managed user deleted', { actorId: req.user?.id, targetUserId: userId, targetRole: existingUser.role });
+    recordAuditLog({
+      actorId: req.user?.id,
+      action: 'admin_user.deleted',
+      targetType: 'user',
+      targetId: userId,
+      details: { targetRole: existingUser.role },
+    });
     return res.json({ ok: true });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || 'admin delete failed' });
@@ -2465,7 +2598,7 @@ app.post('/api/auth/signup', authRateLimit, async (req, res) => {
       }
     } else {
       if (!ENABLE_EMAIL_2FA) return res.status(400).json({ ok: false, error: 'Email 2FA is currently disabled' });
-      if (!emailEnabled() && !DEBUG_2FA_RETURN_CODE) {
+      if (!emailEnabled()) {
         return res.status(503).json({
           ok: false,
           error: '2FA email delivery is not configured (set BB_SMTP_URL and BB_EMAIL_FROM, and ensure BB_ENABLE_EMAIL_2FA=1)',
@@ -2798,7 +2931,7 @@ app.post('/api/board/comments/react', authMiddleware, (req, res) => {
 // Messages / Chats
 app.get('/api/messages', authMiddleware, (req, res) => {
   const rows = db.prepare('SELECT * FROM messages ORDER BY datetime(created_at) ASC').all();
-  const parsed = rows.map((r) => {
+  const parsed = rows.filter((r) => messageVisibleToUser(req.user, r)).map((r) => {
     const sender = safeJsonParse(r.sender_json, null);
     const to = safeJsonParse(r.to_json, []);
     return {
@@ -2866,8 +2999,8 @@ app.post('/api/messages', authMiddleware, (req, res) => {
     const tokens = getPushTokensForUsers(recipientIds, { kind: 'chats' });
     setTimeout(() => {
       sendExpoPush(tokens, {
-        title: safeString(sender?.name || 'New message'),
-        body,
+        title: 'New message',
+        body: 'Open Chats to view it.',
         data: { kind: 'chat_message', messageId: id, threadId: threadId || id },
       }).catch(() => {});
     }, 0);
@@ -2881,7 +3014,7 @@ app.post('/api/messages', authMiddleware, (req, res) => {
 // Urgent memos
 app.get('/api/urgent-memos', authMiddleware, (req, res) => {
   const rows = db.prepare('SELECT * FROM urgent_memos ORDER BY datetime(created_at) DESC').all();
-  res.json(rows.map((r) => {
+  res.json(rows.filter((r) => memoVisibleToUser(req.user, r)).map((r) => {
     const memo = safeJsonParse(r.memo_json, null);
     const base = (memo && typeof memo === 'object') ? memo : {};
     const createdAt = r.created_at;
@@ -2921,8 +3054,8 @@ app.post('/api/urgent-memos', authMiddleware, (req, res) => {
     const tokens = getPushTokensForUsers(recipientIds, { kind: 'updates' });
     setTimeout(() => {
       sendExpoPush(tokens, {
-        title,
-        body: body || 'Open the app for details.',
+        title: memoObj.type === 'admin_memo' ? 'New memo' : 'New alert',
+        body: 'Open the app for details.',
         data: { kind: memoObj.type || 'urgent_memo', memoId: id, childId: memoObj.childId || null },
       }).catch(() => {});
     }, 0);
@@ -2940,6 +3073,7 @@ app.post('/api/urgent-memos/respond', authMiddleware, (req, res) => {
 
   const row = db.prepare('SELECT * FROM urgent_memos WHERE id = ?').get(memoId);
   if (!row) return res.status(404).json({ ok: false, error: 'memo not found' });
+  if (!memoVisibleToUser(req.user, row)) return res.status(403).json({ ok: false, error: 'forbidden' });
 
   const t = nowISO();
   const memo = safeJsonParse(row.memo_json, null);
@@ -2957,8 +3091,11 @@ app.post('/api/urgent-memos/read', authMiddleware, (req, res) => {
   if (!ids.length) return res.json({ ok: true });
   const t = nowISO();
   const stmt = db.prepare('UPDATE urgent_memos SET ack = 1 WHERE id = ?');
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = db.prepare(`SELECT * FROM urgent_memos WHERE id IN (${placeholders})`).all(...ids);
+  const visibleIds = rows.filter((row) => memoVisibleToUser(req.user, row)).map((row) => String(row.id));
   const tx = db.transaction((arr) => { arr.forEach((id) => stmt.run(id)); });
-  tx(ids);
+  tx(visibleIds);
   res.json({ ok: true, updatedAt: t });
 });
 
@@ -2967,11 +3104,13 @@ app.post('/api/arrival/ping', authMiddleware, (req, res) => {
   const payload = req.body || {};
   const id = nanoId();
   const createdAt = nowISO();
+  const actorId = req.user ? safeString(req.user.id).trim() : '';
+  const actorRole = req.user ? safeString(req.user.role).trim() : '';
   db.prepare('INSERT INTO arrival_pings (id, user_id, role, child_id, lat, lng, event_id, when_iso, created_at) VALUES (?,?,?,?,?,?,?,?,?)')
     .run(
       id,
-      payload.userId ? String(payload.userId) : (req.user ? String(req.user.id) : null),
-      payload.role ? String(payload.role) : (req.user ? String(req.user.role) : null),
+      actorId || null,
+      actorRole || null,
       payload.childId ? String(payload.childId) : null,
       Number.isFinite(Number(payload.lat)) ? Number(payload.lat) : null,
       Number.isFinite(Number(payload.lng)) ? Number(payload.lng) : null,
@@ -2984,9 +3123,8 @@ app.post('/api/arrival/ping', authMiddleware, (req, res) => {
   // Client already enforces schedule window and drop-zone check; the server stores a single alert
   // per user/child/shift within a short window to avoid spamming.
   try {
-    const r = String(payload.role || (req.user ? req.user.role : '') || '').trim().toLowerCase();
+    const r = String(actorRole || '').trim().toLowerCase();
     if (r === 'parent' || r === 'therapist') {
-      const actorId = payload.userId ? String(payload.userId) : (req.user ? String(req.user.id) : '');
       const childId = payload.childId != null ? String(payload.childId) : null;
       const shiftId = payload.shiftId != null ? String(payload.shiftId) : null;
       const withinMins = 10;
@@ -3066,7 +3204,7 @@ app.post('/api/arrival/ping', authMiddleware, (req, res) => {
 // Time change proposals
 app.get('/api/children/time-change-proposals', authMiddleware, (req, res) => {
   const rows = db.prepare('SELECT * FROM time_change_proposals ORDER BY datetime(created_at) DESC').all();
-  res.json(rows.map((r) => ({
+  res.json(rows.filter((r) => proposalVisibleToUser(req.user, r)).map((r) => ({
     id: r.id,
     childId: r.child_id,
     type: r.type,
@@ -3100,9 +3238,10 @@ app.post('/api/children/respond-time-change', authMiddleware, (req, res) => {
   const proposalId = (req.body && req.body.proposalId) ? String(req.body.proposalId) : '';
   const action = (req.body && req.body.action) ? String(req.body.action) : '';
   if (!proposalId || !action) return res.status(400).json({ ok: false, error: 'proposalId and action required' });
-  db.prepare('UPDATE time_change_proposals SET action = ? WHERE id = ?').run(action, proposalId);
   const row = db.prepare('SELECT * FROM time_change_proposals WHERE id = ?').get(proposalId);
   if (!row) return res.status(404).json({ ok: false, error: 'not found' });
+  if (!proposalVisibleToUser(req.user, row)) return res.status(403).json({ ok: false, error: 'forbidden' });
+  db.prepare('UPDATE time_change_proposals SET action = ? WHERE id = ?').run(action, proposalId);
   res.json({
     ok: true,
     item: {

@@ -77,6 +77,10 @@ export default function AdminControlsScreen() {
     return () => { mounted = false; };
   }, [user?.role]);
 
+  useEffect(() => {
+    loadAuditLogs().catch(() => {});
+  }, [user?.role]);
+
   function hasCapability(capability) {
     if (canManagePermissions) return true;
     return Boolean(adminCapabilities[capability]);
@@ -182,55 +186,17 @@ export default function AdminControlsScreen() {
   }
 
   function buildExportPayload() {
-    // Do not include internal ID fields in exports for privacy.
-    const messagesCsv = toCSV((messages || []).map(m => ({ threadId: m.threadId || '', body: m.body, sender: m.sender?.name, createdAt: m.createdAt })));
-    const childrenCsv = toCSV((children || []).map(c => ({ name: c.name, age: c.age, room: c.room, notes: c.notes })));
-    return `--- Messages ---\n${messagesCsv}\n\n--- Children ---\n${childrenCsv}`;
+    return '';
   }
 
   async function doExportShare() {
-    try {
-      if (!hasCapability('export:data')) {
-        Alert.alert('Permission required', 'Your account cannot export data.');
-        return;
-      }
-      const payload = buildExportPayload();
-      await Share.share({ message: payload, title: 'CommunityBridge export' });
-      setExportModalVisible(false);
-    } catch (e) {
-      Alert.alert('Export failed', e?.message || String(e));
-    }
+    setExportModalVisible(false);
+    Alert.alert('Export unavailable', 'Sensitive data export is disabled in this build.');
   }
 
   async function doExportSaveToFolderAndroid() {
-    try {
-      if (!hasCapability('export:data')) {
-        Alert.alert('Permission required', 'Your account cannot export data.');
-        return;
-      }
-      if (Platform.OS !== 'android' || !FileSystem?.StorageAccessFramework) {
-        return doExportShare();
-      }
-
-      const payload = buildExportPayload();
-      const ts = new Date().toISOString().replace(/[:.]/g, '-');
-      const fileName = `communitybridge_export_${ts}.txt`;
-
-      const perm = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-      if (!perm.granted || !perm.directoryUri) return;
-
-      const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
-        perm.directoryUri,
-        fileName,
-        'text/plain'
-      );
-      await FileSystem.writeAsStringAsync(fileUri, payload, { encoding: FileSystem.EncodingType.UTF8 });
-
-      setExportModalVisible(false);
-      Alert.alert('Export saved', `Saved to selected folder as ${fileName}`);
-    } catch (e) {
-      Alert.alert('Export failed', e?.message || String(e));
-    }
+    setExportModalVisible(false);
+    Alert.alert('Export unavailable', 'Sensitive data export is disabled in this build.');
   }
 
   async function pickImportFile() {
@@ -350,9 +316,57 @@ export default function AdminControlsScreen() {
   const [addressSuggestions, setAddressSuggestions] = useState([]);
   const [addressLoading, setAddressLoading] = useState(false);
   const [addressError, setAddressError] = useState('');
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState('');
   const placesSessionTokenRef = useRef(String(Math.random()).slice(2));
   const addressRequestIdRef = useRef(0);
   const suppressAutocompleteRef = useRef(0);
+
+  function formatAuditAction(action) {
+    const normalized = String(action || '').trim();
+    if (!normalized) return 'Unknown action';
+    return normalized
+      .split('.')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
+  function formatAuditTimestamp(value) {
+    const when = new Date(value || '');
+    if (Number.isNaN(when.getTime())) return 'Unknown time';
+    try {
+      return when.toLocaleString();
+    } catch (_) {
+      return when.toISOString();
+    }
+  }
+
+  function buildAuditSummary(entry) {
+    const details = entry?.details && typeof entry.details === 'object' ? entry.details : {};
+    if (typeof details.targetRole === 'string' && details.targetRole) return `Role: ${details.targetRole}`;
+    if (typeof details.roleCount === 'number') return `${details.roleCount} role mappings updated`;
+    if (details.scopeChanged) return 'Role or scope changed';
+    if (details.passwordChanged) return 'Password changed';
+    if (details.hasLocation) return 'Location values updated';
+    if (typeof details.orgArrivalEnabled === 'boolean') return details.orgArrivalEnabled ? 'Arrival detection enabled' : 'Arrival detection disabled';
+    return '';
+  }
+
+  async function loadAuditLogs() {
+    if (!isAdminRole(user?.role)) return;
+    try {
+      setAuditLoading(true);
+      setAuditError('');
+      const res = await Api.getAuditLogs(8);
+      setAuditLogs(Array.isArray(res?.items) ? res.items : []);
+    } catch (e) {
+      setAuditError(String(e?.message || 'Could not load recent admin activity.'));
+      setAuditLogs([]);
+    } finally {
+      setAuditLoading(false);
+    }
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -1216,6 +1230,44 @@ export default function AdminControlsScreen() {
           </View>
         </View>
 
+        {isAdminRole(user?.role) ? (
+          <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
+            <View style={styles.auditHeaderRow}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 4 }}>Recent Admin Activity</Text>
+                <Text style={{ fontSize: 12, color: '#6b7280' }}>Privileged settings and managed-user changes recorded by the API.</Text>
+              </View>
+              <TouchableOpacity onPress={loadAuditLogs} style={styles.auditRefreshBtn} disabled={auditLoading}>
+                <MaterialIcons name="refresh" size={16} color="#2563eb" />
+                <Text style={styles.auditRefreshText}>{auditLoading ? 'Loading...' : 'Refresh'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.formCard}>
+              {auditError ? <Text style={styles.auditErrorText}>{auditError}</Text> : null}
+              {!auditError && !auditLogs.length && !auditLoading ? (
+                <Text style={styles.auditEmptyText}>No audit entries recorded yet.</Text>
+              ) : null}
+              {(auditLogs || []).map((entry) => {
+                const summary = buildAuditSummary(entry);
+                return (
+                  <View key={entry.id || `${entry.action}-${entry.createdAt}`} style={styles.auditRow}>
+                    <View style={styles.auditRowTop}>
+                      <Text style={styles.auditActionText}>{formatAuditAction(entry.action)}</Text>
+                      <Text style={[styles.auditStatusPill, entry.status === 'success' ? styles.auditStatusSuccess : styles.auditStatusError]}>
+                        {String(entry.status || 'success').toUpperCase()}
+                      </Text>
+                    </View>
+                    <Text style={styles.auditMetaText}>{formatAuditTimestamp(entry.createdAt)}</Text>
+                    <Text style={styles.auditMetaText}>Actor: {entry.actorId || 'Unknown'}{entry.targetId ? ` • Target: ${entry.targetId}` : ''}</Text>
+                    {summary ? <Text style={styles.auditSummaryText}>{summary}</Text> : null}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
         {/* Permissions & Privacy section removed per request */}
 
           <View style={{ height: 32 }} />
@@ -1364,4 +1416,17 @@ const styles = StyleSheet.create({
   suggestionsBox: { marginTop: 6, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#fff', overflow: 'hidden' },
   suggestionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#eef2f7' },
   suggestionText: { marginLeft: 8, flex: 1, color: '#111827' },
+  auditHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  auditRefreshBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: '#dbeafe', backgroundColor: '#eff6ff' },
+  auditRefreshText: { marginLeft: 6, color: '#2563eb', fontWeight: '700', fontSize: 12 },
+  auditRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eef2f7' },
+  auditRowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  auditActionText: { flex: 1, paddingRight: 8, fontWeight: '700', color: '#111827' },
+  auditStatusPill: { overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, fontSize: 10, fontWeight: '800' },
+  auditStatusSuccess: { color: '#166534', backgroundColor: '#dcfce7' },
+  auditStatusError: { color: '#991b1b', backgroundColor: '#fee2e2' },
+  auditMetaText: { marginTop: 4, fontSize: 12, color: '#6b7280' },
+  auditSummaryText: { marginTop: 6, fontSize: 12, color: '#1f2937' },
+  auditEmptyText: { fontSize: 12, color: '#6b7280' },
+  auditErrorText: { fontSize: 12, color: '#b91c1c' },
 });

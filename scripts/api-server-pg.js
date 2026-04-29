@@ -252,11 +252,11 @@ function envFlag(value, defaultValue = false) {
   return defaultValue;
 }
 
-const ALLOW_SIGNUP = envFlag(process.env.CB_ALLOW_SIGNUP || process.env.BB_ALLOW_SIGNUP, true);
-const REQUIRE_2FA_ON_SIGNUP = envFlag(process.env.CB_REQUIRE_2FA_ON_SIGNUP || process.env.BB_REQUIRE_2FA_ON_SIGNUP, false);
+const ALLOW_SIGNUP = envFlag(process.env.CB_ALLOW_SIGNUP || process.env.BB_ALLOW_SIGNUP, false);
+const REQUIRE_2FA_ON_SIGNUP = envFlag(process.env.CB_REQUIRE_2FA_ON_SIGNUP || process.env.BB_REQUIRE_2FA_ON_SIGNUP, true);
 const DEBUG_2FA_RETURN_CODE = envFlag(process.env.CB_DEBUG_2FA_RETURN_CODE || process.env.BB_DEBUG_2FA_RETURN_CODE, false);
 const DEBUG_2FA_DELIVERY_ERRORS = envFlag(process.env.CB_DEBUG_2FA_DELIVERY_ERRORS || process.env.BB_DEBUG_2FA_DELIVERY_ERRORS, false);
-const LOG_REQUESTS = envFlag(process.env.CB_DEBUG_REQUESTS || process.env.BB_DEBUG_REQUESTS, true);
+const LOG_REQUESTS = envFlag(process.env.CB_DEBUG_REQUESTS || process.env.BB_DEBUG_REQUESTS, false);
 
 // 2FA delivery toggles
 const ENABLE_EMAIL_2FA = envFlag(process.env.CB_ENABLE_EMAIL_2FA || process.env.BB_ENABLE_EMAIL_2FA, true);
@@ -274,7 +274,7 @@ const EMAIL_FROM = (process.env.CB_EMAIL_FROM || process.env.BB_EMAIL_FROM || ''
 const EMAIL_2FA_SUBJECT = (process.env.CB_EMAIL_2FA_SUBJECT || process.env.BB_EMAIL_2FA_SUBJECT || 'CommunityBridge verification code').trim();
 const EMAIL_PASSWORD_RESET_SUBJECT = (process.env.CB_EMAIL_PASSWORD_RESET_SUBJECT || process.env.BB_EMAIL_PASSWORD_RESET_SUBJECT || 'CommunityBridge password reset').trim();
 
-const RETURN_PASSWORD_RESET_CODE = envFlag(process.env.CB_RETURN_PASSWORD_RESET_CODE || process.env.BB_RETURN_PASSWORD_RESET_CODE, NODE_ENV !== 'production');
+const RETURN_PASSWORD_RESET_CODE = envFlag(process.env.CB_RETURN_PASSWORD_RESET_CODE || process.env.BB_RETURN_PASSWORD_RESET_CODE, false);
 const PASSWORD_RESET_TTL_MINUTES = Math.max(5, Number(process.env.CB_PASSWORD_RESET_TTL_MINUTES || process.env.BB_PASSWORD_RESET_TTL_MINUTES || 30));
 
 const slog = require('./logger');
@@ -499,6 +499,55 @@ function normalizeRecipients(input) {
     else if (typeof item === 'object' && item.id != null) ids.push(String(item.id));
   }
   return Array.from(new Set(ids.filter(Boolean)));
+}
+
+function normalizeRoleTargets(input) {
+  if (!Array.isArray(input)) return [];
+  const roles = [];
+  for (const item of input) {
+    if (!item) continue;
+    roles.push(String(item).trim().toLowerCase());
+  }
+  return Array.from(new Set(roles.filter(Boolean)));
+}
+
+function messageVisibleToUser(user, message) {
+  if (!user || !message) return false;
+  if (isAdminRole(user.role)) return true;
+
+  const userId = safeString(user.id).trim();
+  if (!userId) return false;
+
+  const senderId = safeString(message.sender_json?.id || message.sender?.id).trim();
+  if (senderId && senderId === userId) return true;
+
+  const recipientIds = normalizeRecipients(message.to_json || message.to || []);
+  if (recipientIds.includes(userId)) return true;
+
+  const roles = normalizeRoleTargets(message.to_roles || message.toRoles || []);
+  return roles.includes(roleLower(user));
+}
+
+function memoVisibleToUser(user, row) {
+  if (!user || !row) return false;
+  if (isAdminRole(user.role)) return true;
+
+  const userId = safeString(user.id).trim();
+  if (!userId) return false;
+
+  const memo = row.memo_json && typeof row.memo_json === 'object' ? row.memo_json : {};
+  const proposerId = safeString(row.proposer_id || memo.proposerId || memo.proposerUid).trim();
+  if (proposerId && proposerId === userId) return true;
+
+  const recipientIds = normalizeRecipients(memo.recipients);
+  return recipientIds.includes(userId);
+}
+
+function proposalVisibleToUser(user, row) {
+  if (!user || !row) return false;
+  if (isAdminRole(user.role)) return true;
+  const userId = safeString(user.id).trim();
+  return !!userId && userId === safeString(row.proposer_id || row.proposerId || row.proposerUid).trim();
 }
 
 function normalizeE164Phone(input) {
@@ -882,6 +931,17 @@ async function initDb() {
       used_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id TEXT PRIMARY KEY,
+      actor_id TEXT,
+      action TEXT NOT NULL,
+      target_type TEXT,
+      target_id TEXT,
+      status TEXT NOT NULL,
+      details_json JSONB,
+      created_at TIMESTAMPTZ NOT NULL
+    );
   `);
 
   try {
@@ -1202,6 +1262,17 @@ async function getAdminUserIds() {
     return Array.from(new Set(ids.filter(Boolean)));
   } catch (_) {
     return ['dev'];
+  }
+}
+
+async function recordAuditLog({ actorId, action, targetType, targetId, status = 'success', details = {} } = {}) {
+  try {
+    await pool.query(
+      'INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, status, details_json, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8)',
+      [nanoId(), actorId ? String(actorId) : null, String(action || 'unknown'), targetType ? String(targetType) : null, targetId ? String(targetId) : null, String(status || 'success'), JSON.stringify(details || {}), new Date()]
+    );
+  } catch (_) {
+    // ignore audit log write failures
   }
 }
 
@@ -1801,6 +1872,13 @@ app.put('/api/org-settings', authMiddleware, requireAdmin, requireCapability('se
        ON CONFLICT (id) DO UPDATE SET data_json = EXCLUDED.data_json, updated_at = EXCLUDED.updated_at`,
       ['default', JSON.stringify(item), now, now]
     );
+    await recordAuditLog({
+      actorId: req.user?.id,
+      action: 'org_settings.updated',
+      targetType: 'org_settings',
+      targetId: 'default',
+      details: { orgArrivalEnabled: item.orgArrivalEnabled, hasLocation: Number.isFinite(item.lat) && Number.isFinite(item.lng) },
+    });
     return res.json({ ok: true, item });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || String(e) });
@@ -1827,7 +1905,38 @@ app.put('/api/permissions-config', authMiddleware, requireSuperAdmin, async (req
        ON CONFLICT (id) DO UPDATE SET data_json = EXCLUDED.data_json, updated_at = EXCLUDED.updated_at`,
       ['default', JSON.stringify(item), now, now]
     );
+    await recordAuditLog({
+      actorId: req.user?.id,
+      action: 'permissions_config.updated',
+      targetType: 'permissions_config',
+      targetId: 'default',
+      details: { roleCount: Object.keys(item || {}).length },
+    });
     return res.json({ ok: true, item });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.get('/api/audit-logs', authMiddleware, requireAdmin, async (req, res) => {
+  const rawLimit = Number(req.query?.limit);
+  const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(100, Math.floor(rawLimit))) : 25;
+  try {
+    const result = await pool.query(
+      'SELECT id, actor_id, action, target_type, target_id, status, details_json, created_at FROM audit_logs ORDER BY created_at DESC LIMIT $1',
+      [limit]
+    );
+    const items = (result.rows || []).map((row) => ({
+      id: row.id,
+      actorId: row.actor_id || '',
+      action: row.action || '',
+      targetType: row.target_type || '',
+      targetId: row.target_id || '',
+      status: row.status || 'success',
+      details: row.details_json && typeof row.details_json === 'object' ? row.details_json : {},
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    }));
+    return res.json({ ok: true, items });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || String(e) });
   }
@@ -1876,6 +1985,9 @@ app.post('/api/auth/forgot-password', authRateLimit, async (req, res) => {
   const email = (req.body && req.body.email) ? String(req.body.email).trim().toLowerCase() : '';
   if (!email) return res.status(400).json({ ok: false, error: 'email required' });
   if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'server missing BB_JWT_SECRET' });
+  if (!passwordResetEmailConfigured()) {
+    return res.status(503).json({ ok: false, error: 'Password reset delivery is not configured.' });
+  }
 
   // Always return ok to avoid account enumeration.
   try {
@@ -1896,14 +2008,10 @@ app.post('/api/auth/forgot-password', authRateLimit, async (req, res) => {
       }
 
       try {
-        if (passwordResetEmailConfigured()) {
-          await sendPasswordResetEmail({ to: email, code: resetCode });
-        } else {
-          slog.warn('auth', 'Password reset requested but SMTP not configured; logging reset code', { email: maskEmail(email), resetCode });
-        }
+        await sendPasswordResetEmail({ to: email, code: resetCode });
       } catch (e) {
         slog.error('auth', 'Password reset delivery failed', { email: maskEmail(email), message: e?.message || String(e) });
-        slog.warn('auth', 'Password reset code (fallback)', { email: maskEmail(email), resetCode });
+        return res.status(503).json({ ok: false, error: 'Password reset delivery failed.' });
       }
 
       const payload = { ok: true };
@@ -2234,6 +2342,17 @@ app.put('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapabil
       roleChanged: role !== undefined,
       scopeChanged: organizationId !== undefined || programIds !== undefined || campusIds !== undefined || memberships !== undefined,
     });
+    await recordAuditLog({
+      actorId: req.user?.id,
+      action: 'admin_user.updated',
+      targetType: 'user',
+      targetId: userId,
+      details: {
+        roleChanged: role !== undefined,
+        scopeChanged: organizationId !== undefined || programIds !== undefined || campusIds !== undefined || memberships !== undefined,
+        passwordChanged: newPassword !== undefined,
+      },
+    });
     return res.json({ ok: true, user: {
       id: row.id,
       email: row.email,
@@ -2286,6 +2405,13 @@ app.delete('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapa
 
     await pool.query('DELETE FROM users WHERE id = $1', [userId]);
   slog.info('admin', 'Managed user deleted', { actorId: req.user?.id, targetUserId: userId, targetRole: existingUser.role });
+    await recordAuditLog({
+      actorId: req.user?.id,
+      action: 'admin_user.deleted',
+      targetType: 'user',
+      targetId: userId,
+      details: { targetRole: existingUser.role },
+    });
     return res.json({ ok: true });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || 'admin delete failed' });
@@ -2321,7 +2447,7 @@ app.post('/api/auth/signup', authRateLimit, async (req, res) => {
       }
     } else {
       if (!ENABLE_EMAIL_2FA) return res.status(400).json({ ok: false, error: 'Email 2FA is currently disabled' });
-      if (!emailEnabled() && !DEBUG_2FA_RETURN_CODE) {
+      if (!emailEnabled()) {
         return res.status(503).json({
           ok: false,
           error: '2FA email delivery is not configured (set BB_SMTP_URL and BB_EMAIL_FROM, and ensure BB_ENABLE_EMAIL_2FA=1)',
@@ -2631,7 +2757,7 @@ app.post('/api/board/comments/react', authMiddleware, async (req, res) => {
 // Messages / Chats
 app.get('/api/messages', authMiddleware, async (req, res) => {
   const rows = await pgQueryAll('SELECT * FROM messages ORDER BY created_at ASC', []);
-  const out = rows.map((r) => ({
+  const out = rows.filter((r) => messageVisibleToUser(req.user, r)).map((r) => ({
     id: r.id,
     threadId: r.thread_id || undefined,
     body: r.body,
@@ -2697,8 +2823,8 @@ app.post('/api/messages', authMiddleware, async (req, res) => {
     const tokens = await getPushTokensForUsers(recipientIds, { kind: 'chats' });
     setTimeout(() => {
       sendExpoPush(tokens, {
-        title: safeString(sender?.name || 'New message'),
-        body,
+        title: 'New message',
+        body: 'Open Chats to view it.',
         data: { kind: 'chat_message', messageId: id, threadId: threadId || id },
       }).catch(() => {});
     }, 0);
@@ -2712,7 +2838,7 @@ app.post('/api/messages', authMiddleware, async (req, res) => {
 // Urgent memos
 app.get('/api/urgent-memos', authMiddleware, async (req, res) => {
   const rows = await pgQueryAll('SELECT * FROM urgent_memos ORDER BY created_at DESC', []);
-  res.json(rows.map((r) => {
+  res.json(rows.filter((r) => memoVisibleToUser(req.user, r)).map((r) => {
     const memo = (r.memo_json && typeof r.memo_json === 'object') ? r.memo_json : null;
     const base = (memo && typeof memo === 'object') ? memo : {};
     const createdAt = toIso(r.created_at);
@@ -2765,8 +2891,8 @@ app.post('/api/urgent-memos', authMiddleware, async (req, res) => {
     const tokens = await getPushTokensForUsers(recipientIds, { kind: 'updates' });
     setTimeout(() => {
       sendExpoPush(tokens, {
-        title,
-        body: body || 'Open the app for details.',
+        title: memoObj.type === 'admin_memo' ? 'New memo' : 'New alert',
+        body: 'Open the app for details.',
         data: { kind: memoObj.type || 'urgent_memo', memoId: id, childId: memoObj.childId || null },
       }).catch(() => {});
     }, 0);
@@ -2784,6 +2910,7 @@ app.post('/api/urgent-memos/respond', authMiddleware, async (req, res) => {
 
   const row = await pgQueryOne('SELECT * FROM urgent_memos WHERE id = $1', [memoId]);
   if (!row) return res.status(404).json({ ok: false, error: 'memo not found' });
+  if (!memoVisibleToUser(req.user, row)) return res.status(403).json({ ok: false, error: 'forbidden' });
 
   const t = new Date();
   const base = (row.memo_json && typeof row.memo_json === 'object') ? row.memo_json : {};
@@ -2801,7 +2928,10 @@ app.post('/api/urgent-memos/respond', authMiddleware, async (req, res) => {
 app.post('/api/urgent-memos/read', authMiddleware, async (req, res) => {
   const ids = Array.isArray(req.body && req.body.memoIds) ? req.body.memoIds.map(String) : [];
   if (!ids.length) return res.json({ ok: true });
-  await pool.query('UPDATE urgent_memos SET ack = 1 WHERE id = ANY($1::text[])', [ids]);
+  const rows = await pgQueryAll('SELECT * FROM urgent_memos WHERE id = ANY($1::text[])', [ids]);
+  const visibleIds = rows.filter((row) => memoVisibleToUser(req.user, row)).map((row) => String(row.id));
+  if (!visibleIds.length) return res.json({ ok: true, updatedAt: nowISO() });
+  await pool.query('UPDATE urgent_memos SET ack = 1 WHERE id = ANY($1::text[])', [visibleIds]);
   res.json({ ok: true, updatedAt: nowISO() });
 });
 
@@ -2810,13 +2940,15 @@ app.post('/api/arrival/ping', authMiddleware, async (req, res) => {
   const payload = req.body || {};
   const id = nanoId();
   const createdAt = new Date();
+  const actorId = req.user ? safeString(req.user.id).trim() : '';
+  const actorRole = req.user ? safeString(req.user.role).trim() : '';
 
   await pool.query(
     'INSERT INTO arrival_pings (id, user_id, role, child_id, lat, lng, event_id, when_iso, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
     [
       id,
-      payload.userId ? String(payload.userId) : (req.user ? String(req.user.id) : null),
-      payload.role ? String(payload.role) : (req.user ? String(req.user.role) : null),
+      actorId || null,
+      actorRole || null,
       payload.childId ? String(payload.childId) : null,
       Number.isFinite(Number(payload.lat)) ? Number(payload.lat) : null,
       Number.isFinite(Number(payload.lng)) ? Number(payload.lng) : null,
@@ -2827,9 +2959,8 @@ app.post('/api/arrival/ping', authMiddleware, async (req, res) => {
   );
 
   try {
-    const r = String(payload.role || (req.user ? req.user.role : '') || '').trim().toLowerCase();
+    const r = String(actorRole || '').trim().toLowerCase();
     if (r === 'parent' || r === 'therapist') {
-      const actorId = payload.userId ? String(payload.userId) : (req.user ? String(req.user.id) : '');
       const childId = payload.childId != null ? String(payload.childId) : null;
       const shiftId = payload.shiftId != null ? String(payload.shiftId) : null;
       const withinMins = 10;
@@ -2891,7 +3022,7 @@ app.post('/api/arrival/ping', authMiddleware, async (req, res) => {
 // Time change proposals
 app.get('/api/children/time-change-proposals', authMiddleware, async (req, res) => {
   const rows = await pgQueryAll('SELECT * FROM time_change_proposals ORDER BY created_at DESC', []);
-  res.json(rows.map((r) => ({
+  res.json(rows.filter((r) => proposalVisibleToUser(req.user, r)).map((r) => ({
     id: r.id,
     childId: r.child_id,
     type: r.type,
@@ -2930,9 +3061,11 @@ app.post('/api/children/respond-time-change', authMiddleware, async (req, res) =
   const action = (req.body && req.body.action) ? String(req.body.action) : '';
   if (!proposalId || !action) return res.status(400).json({ ok: false, error: 'proposalId and action required' });
 
-  await pool.query('UPDATE time_change_proposals SET action = $1 WHERE id = $2', [action, proposalId]);
   const row = await pgQueryOne('SELECT * FROM time_change_proposals WHERE id = $1', [proposalId]);
   if (!row) return res.status(404).json({ ok: false, error: 'not found' });
+  if (!proposalVisibleToUser(req.user, row)) return res.status(403).json({ ok: false, error: 'forbidden' });
+
+  await pool.query('UPDATE time_change_proposals SET action = $1 WHERE id = $2', [action, proposalId]);
 
   res.json({
     ok: true,

@@ -1385,8 +1385,8 @@ exports.onMessageCreate = regional.firestore
       if (!tokens.length) return null;
 
       await sendExpoPush(tokens, {
-        title: safeString(message?.sender?.name).trim() || 'New message',
-        body: safeString(message?.body).trim() || 'Open Chats to view the conversation.',
+        title: 'New message',
+        body: 'Open Chats to view it.',
         data: { kind: 'chat_message', messageId: snap.id, threadId: safeString(message?.threadId).trim() || snap.id },
         kind: 'chats',
       });
@@ -1431,8 +1431,8 @@ exports.onUrgentMemoCreate = regional.firestore
       if (!tokens.length) return null;
 
       await sendExpoPush(tokens, {
-        title: safeString(memo?.title || memo?.subject || (type === 'admin_memo' ? 'New memo' : 'New alert')).trim() || 'CommunityBridge',
-        body: safeString(memo?.body || memo?.note || 'Open the app for details.').trim() || 'Open the app for details.',
+        title: type === 'admin_memo' ? 'New memo' : 'New alert',
+        body: 'Open the app for details.',
         data: { kind: type || 'urgent_memo', memoId: snap.id, childId: memo?.childId || null },
         kind: 'updates',
       });

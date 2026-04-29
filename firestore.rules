@@ -89,7 +89,7 @@ service cloud.firestore {
     }
 
     match /therapists/{id} {
-      allow read: if signedIn() && mfaVerified();
+      allow read: if mfaVerified() && (isAdmin() || request.auth.uid == id);
       allow create, update, delete: if isAdmin();
     }
 
@@ -99,26 +99,10 @@ service cloud.firestore {
     }
 
     match /posts/{postId} {
-      allow read: if signedIn() && mfaVerified();
-
-      allow create: if mfaVerified() && request.resource.data.author.id == request.auth.uid;
-
-      allow update: if mfaVerified() && (
-        resource.data.author.id == request.auth.uid ||
-        request.resource.data.diff(resource.data).changedKeys().hasOnly(['likes', 'shares', 'updatedAt'])
-      );
-
-      allow delete: if mfaVerified() && (isAdmin() || (signedIn() && resource.data.author.id == request.auth.uid));
+      allow read, create, update, delete: if false;
 
       match /comments/{commentId} {
-        allow read: if signedIn() && mfaVerified();
-        allow create: if mfaVerified() && request.resource.data.author.id == request.auth.uid;
-
-        // Allow emoji reactions without letting users rewrite the comment body.
-        allow update: if mfaVerified() &&
-          request.resource.data.diff(resource.data).changedKeys().hasOnly(['reactions', 'userReactions']);
-
-        allow delete: if mfaVerified() && (isAdmin() || (signedIn() && resource.data.author.id == request.auth.uid));
+        allow read, create, update, delete: if false;
       }
     }
 
@@ -137,12 +121,23 @@ service cloud.firestore {
     }
 
     match /urgentMemos/{memoId} {
-      allow read: if signedIn() && mfaVerified();
+      allow read: if mfaVerified() && (
+        isAdmin() ||
+        resource.data.proposerUid == request.auth.uid ||
+        resource.data.proposerId == request.auth.uid ||
+        request.auth.uid in (resource.data.recipientIds || [])
+      );
       allow create: if isAdmin();
 
       // Allow users to record their response status; admins can update full memos.
-      allow update: if mfaVerified() && (isAdmin() || (signedIn() &&
-        request.resource.data.diff(resource.data).changedKeys().hasOnly(['status', 'respondedAt'])));
+      allow update: if mfaVerified() && (
+        isAdmin() ||
+        ((
+          resource.data.proposerUid == request.auth.uid ||
+          resource.data.proposerId == request.auth.uid ||
+          request.auth.uid in (resource.data.recipientIds || [])
+        ) && request.resource.data.diff(resource.data).changedKeys().hasOnly(['status', 'respondedAt']))
+      );
 
       allow delete: if isAdmin();
 
@@ -177,8 +172,7 @@ service cloud.firestore {
     }
 
     match /orgSettings/{id} {
-      allow read: if signedIn();
-      allow write: if isAdmin();
+      allow read, write: if false;
     }
 
     match /meta/{id} {

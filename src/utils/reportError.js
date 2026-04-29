@@ -50,6 +50,29 @@ function normalizeError(err) {
   return { err: e, code, message, name };
 }
 
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && (value.constructor === Object || Object.getPrototypeOf(value) === null);
+}
+
+function isSensitiveKey(key) {
+  const normalized = safeString(key).toLowerCase();
+  return [
+    'password', 'email', 'token', 'name', 'phone', 'address', 'body', 'note', 'notes', 'subject', 'message',
+    'child', 'parent', 'therapist', 'memo', 'recipient', 'location', 'lat', 'lng', 'avatar',
+  ].some((part) => normalized.includes(part));
+}
+
+function scrubValue(value, parentKey = '') {
+  if (Array.isArray(value)) return value.map((item) => scrubValue(item, parentKey));
+  if (isPlainObject(value)) {
+    return Object.fromEntries(Object.entries(value).map(([key, entryValue]) => (
+      [key, isSensitiveKey(key) || isSensitiveKey(parentKey) ? '[REDACTED]' : scrubValue(entryValue, key)]
+    )));
+  }
+  if (typeof value === 'string' && isSensitiveKey(parentKey)) return '[REDACTED]';
+  return value;
+}
+
 /**
  * Capture an exception to Sentry with safe, non-PII context.
  * Returns the Sentry event id (string) or empty string if not captured.
@@ -74,11 +97,7 @@ export function reportErrorToSentry(err, context = {}) {
 
         // Extra context should avoid PII (no emails, no names, no tokens)
         if (context && typeof context === 'object') {
-          const extras = { ...context };
-          delete extras.password;
-          delete extras.email;
-          delete extras.token;
-          scope.setExtras(extras);
+          scope.setExtras(scrubValue(context));
         }
 
         scope.setExtra('error_message', message);

@@ -3,8 +3,15 @@ import { InteractionManager, NativeModules, Platform, Share } from 'react-native
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Api from './Api';
 import { useAuth } from './AuthContext';
-import { additionalChildren, additionalParents } from './seed/directoryAdditions';
-import { seededParents, seededTherapists, seededChildrenWithParents } from './seed/directorySeed_v2';
+import {
+  seededParents,
+  seededTherapists,
+  seededChildrenWithParents,
+  seededDemoMessages,
+  seededDemoPosts,
+  seededDemoUrgentMemos,
+  seededDemoTimeChangeProposals,
+} from './seed/demoModeSeed';
 import { countUnreadVisibleThreads } from './utils/chatThreads';
 import { DEMO_ROLE_IDENTITIES, getEffectiveChatIdentity } from './utils/demoIdentity';
 import { attachTherapistsToChildren, mergeById } from './utils/directoryState';
@@ -52,6 +59,10 @@ function stripComputedChildFields(child) {
   return rest;
 }
 
+function cloneSeedValue(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 // Note: removed legacy demo children and therapist pools so the
 // directory is driven only by the dev seed toggle (seeded data)
 // or persisted AsyncStorage values. When the dev seed is off and
@@ -70,6 +81,16 @@ export function DataProvider({ children: reactChildren }) {
   const initialSyncDoneForUserRef = useRef(null);
   const storageScopeId = useMemo(() => getStorageScopeId(user), [user?.id, user?.uid, user?.email]);
   const storageKeys = useMemo(() => buildScopedStorageKeys(user), [storageScopeId]);
+  const sensitiveStorageKeys = useMemo(() => ([
+    storageKeys.posts,
+    storageKeys.messages,
+    storageKeys.memos,
+    storageKeys.children,
+    storageKeys.parents,
+    storageKeys.therapists,
+    storageKeys.archivedThreads,
+    storageKeys.threadReads,
+  ]), [storageKeys]);
   useEffect(() => {
     needsMfaRef.current = Boolean(needsMfa);
     if (!needsMfa) mfaEscalatedRef.current = false;
@@ -90,138 +111,25 @@ export function DataProvider({ children: reactChildren }) {
   const [storageReady, setStorageReady] = useState(false);
 
   function buildDemoMessages() {
-    return [
-      {
-        id: 'demo-msg-1',
-        threadId: 'demo-thread-admin',
-        body: 'Welcome to CommunityBridge demo mode. Start in Admin Controls to review directories, memos, and documents.',
-        sender: DEMO_ROLE_IDENTITIES.admin,
-        to: [{ id: DEMO_ROLE_IDENTITIES.therapist.id, name: DEMO_ROLE_IDENTITIES.therapist.name }],
-        createdAt: new Date('2026-04-20T08:30:00Z').toISOString(),
-      },
-      {
-        id: 'demo-msg-2',
-        threadId: 'demo-thread-admin',
-        body: 'I will confirm the staffing coverage and close the alert from the therapist dashboard.',
-        sender: DEMO_ROLE_IDENTITIES.therapist,
-        to: [{ id: DEMO_ROLE_IDENTITIES.admin.id, name: DEMO_ROLE_IDENTITIES.admin.name }],
-        createdAt: new Date('2026-04-20T08:33:00Z').toISOString(),
-      },
-      {
-        id: 'demo-msg-2b',
-        threadId: 'demo-thread-care',
-        body: 'Mateo had a strong session this morning. Notes and schedule details are ready on the My Child side.',
-        sender: DEMO_ROLE_IDENTITIES.therapist,
-        to: [{ id: DEMO_ROLE_IDENTITIES.parent.id, name: DEMO_ROLE_IDENTITIES.parent.name }],
-        createdAt: new Date('2026-04-20T09:15:00Z').toISOString(),
-      },
-      {
-        id: 'demo-msg-3',
-        threadId: 'demo-thread-care',
-        body: 'Thanks. I am switching into the parent view to check the child profile and alerts now.',
-        sender: DEMO_ROLE_IDENTITIES.parent,
-        to: [{ id: DEMO_ROLE_IDENTITIES.therapist.id, name: DEMO_ROLE_IDENTITIES.therapist.name }],
-        createdAt: new Date('2026-04-20T09:17:00Z').toISOString(),
-        outgoing: true,
-      },
-      {
-        id: 'demo-msg-4',
-        threadId: 'demo-thread-parent-admin',
-        body: 'Can you review Mateo\'s pickup change request before dismissal?',
-        sender: DEMO_ROLE_IDENTITIES.parent,
-        to: [{ id: DEMO_ROLE_IDENTITIES.admin.id, name: DEMO_ROLE_IDENTITIES.admin.name }],
-        createdAt: new Date('2026-04-20T10:05:00Z').toISOString(),
-      },
-      {
-        id: 'demo-msg-5',
-        threadId: 'demo-thread-parent-admin',
-        body: 'Yes, I approved it and notified the front desk team.',
-        sender: DEMO_ROLE_IDENTITIES.admin,
-        to: [{ id: DEMO_ROLE_IDENTITIES.parent.id, name: DEMO_ROLE_IDENTITIES.parent.name }],
-        createdAt: new Date('2026-04-20T10:08:00Z').toISOString(),
-      },
-    ];
+    return cloneSeedValue(seededDemoMessages);
   }
 
   function buildDemoPosts() {
-    return [
-      {
-        id: 'demo-post-1',
-        title: 'Program Update',
-        body: 'Therapy teams can now review documents by program and campus. Use the admin role to verify both flows.',
-        author: { id: 'admin-demo', name: 'Jordan Admin', avatar: null },
-        createdAt: new Date('2026-04-19T14:00:00Z').toISOString(),
-        likes: 4,
-        shares: 1,
-        comments: [
-          {
-            id: 'demo-comment-1',
-            body: 'Verified in the therapist view as well.',
-            author: { id: 'BCBA-001', name: 'Dr. Sarah Miller' },
-            createdAt: new Date('2026-04-19T14:15:00Z').toISOString(),
-            reactions: { '👍': 2 },
-            userReactions: {},
-            replies: [],
-          },
-        ],
-      },
-      {
-        id: 'demo-post-2',
-        title: 'Family Event',
-        body: 'Parent engagement night is scheduled for Friday at the North Campus. Reviewers can open and share this post.',
-        author: { id: 'PT-001', name: 'Carlos Garcia', avatar: null },
-        createdAt: new Date('2026-04-18T17:30:00Z').toISOString(),
-        likes: 6,
-        shares: 2,
-        comments: [],
-      },
-    ];
+    return cloneSeedValue(seededDemoPosts);
   }
 
   function buildDemoUrgentMemos() {
-    return [
-      {
-        id: 'demo-memo-1',
-        type: 'admin_memo',
-        subject: 'Transportation Review Needed',
-        body: 'Please confirm updated pickup instructions for Mateo Garcia before dismissal.',
-        recipients: [{ id: 'PT-001', name: 'Carlos Garcia' }],
-        proposerId: 'admin-demo',
-        status: 'sent',
-        createdAt: new Date('2026-04-20T10:00:00Z').toISOString(),
-      },
-      {
-        id: 'demo-memo-2',
-        type: 'time_update',
-        updateType: 'pickup',
-        childId: 'ST-001',
-        proposerId: 'PT-001',
-        proposedISO: new Date('2026-04-20T16:45:00Z').toISOString(),
-        note: 'Parent requested early pickup for therapy follow-up.',
-        status: 'pending',
-        createdAt: new Date('2026-04-20T10:15:00Z').toISOString(),
-      },
-    ];
+    return cloneSeedValue(seededDemoUrgentMemos);
   }
 
   function buildDemoTimeChangeProposals() {
-    return [
-      {
-        id: 'demo-proposal-1',
-        childId: 'ST-003',
-        type: 'dropoff',
-        proposedISO: new Date('2026-04-21T08:45:00Z').toISOString(),
-        note: 'Family requested delayed arrival due to appointment.',
-        proposerId: 'PT-002',
-        createdAt: new Date('2026-04-20T11:00:00Z').toISOString(),
-      },
-    ];
+    return cloneSeedValue(seededDemoTimeChangeProposals);
   }
 
   function buildDemoDirectory() {
-    const demoParents = mergeById(seededParents, additionalParents);
-    const demoChildren = mergeById(seededChildrenWithParents, additionalChildren);
-    const demoTherapists = mergeById(seededTherapists, deriveTherapistsFromChildren(demoChildren));
+    const demoParents = cloneSeedValue(seededParents);
+    const demoChildren = cloneSeedValue(seededChildrenWithParents);
+    const demoTherapists = cloneSeedValue(seededTherapists);
     return {
       parents: demoParents,
       therapists: demoTherapists,
@@ -308,24 +216,15 @@ export function DataProvider({ children: reactChildren }) {
     resetLocalState();
     (async () => {
       try {
-        const [postsRaw, mRaw, uRaw, cRaw, pRaw, tRaw, aRaw, threadReadsRaw] = await Promise.all([
-          AsyncStorage.getItem(storageKeys.posts),
-          AsyncStorage.getItem(storageKeys.messages),
-          AsyncStorage.getItem(storageKeys.memos),
-          AsyncStorage.getItem(storageKeys.children),
-          AsyncStorage.getItem(storageKeys.parents),
-          AsyncStorage.getItem(storageKeys.therapists),
-          AsyncStorage.getItem(storageKeys.archivedThreads),
-          AsyncStorage.getItem(storageKeys.threadReads),
-        ]);
         const [blockedRaw, chatBlockedRaw] = await Promise.all([
           AsyncStorage.getItem(storageKeys.blocked),
           AsyncStorage.getItem(storageKeys.chatBlocked),
         ]);
+        await AsyncStorage.multiRemove(sensitiveStorageKeys).catch(() => {});
         if (!mounted) return;
 
         if (isDemoReviewer) {
-          const hasStoredDemoState = [postsRaw, mRaw, uRaw, cRaw, pRaw, tRaw, aRaw, threadReadsRaw, blockedRaw, chatBlockedRaw].some((value) => value != null);
+          const hasStoredDemoState = [blockedRaw, chatBlockedRaw].some((value) => value != null);
           if (hasStoredDemoState) {
             // continue through normal hydration path using the reviewer-scoped cache
           } else {
@@ -334,69 +233,14 @@ export function DataProvider({ children: reactChildren }) {
           }
         }
 
-        // Posts
-        if (postsRaw) {
-          try {
-            const parsed = JSON.parse(postsRaw);
-            if (Array.isArray(parsed)) setPosts(parsed);
-            else setPosts([]);
-          } catch (e) {
-            setPosts([]);
-          }
-        } else {
-          setPosts([]);
-        }
-
-        // Messages and memos
-        if (mRaw) setMessages(JSON.parse(mRaw));
-        else setMessages([]);
-        if (threadReadsRaw) {
-          try {
-            const parsed = JSON.parse(threadReadsRaw);
-            setThreadReads(parsed && typeof parsed === 'object' ? parsed : {});
-          } catch (e) {
-            setThreadReads({});
-          }
-        } else {
-          setThreadReads({});
-        }
-        if (uRaw) setUrgentMemos(uRaw ? JSON.parse(uRaw) : []);
-
-        // Parents & Therapists (set first so children can attach references)
-        let parsedParents = [];
-        if (pRaw) {
-          try { const parsed = JSON.parse(pRaw); if (Array.isArray(parsed)) parsedParents = parsed; } catch (e) { parsedParents = []; }
-        }
-        let parsedTherapists = [];
-        if (tRaw) {
-          try { const parsed = JSON.parse(tRaw); if (Array.isArray(parsed)) parsedTherapists = parsed; } catch (e) { parsedTherapists = []; }
-        }
-        const mergedParents = mergeById(parsedParents, additionalParents);
-        setParents(mergedParents);
-
-        // Children
-        let parsedChildren = [];
-        if (cRaw) {
-          try { const parsed = JSON.parse(cRaw); if (Array.isArray(parsed)) parsedChildren = parsed; } catch (e) { parsedChildren = []; }
-        }
-        const mergedChildren = mergeById(parsedChildren, additionalChildren);
-
-        // Therapists: use persisted therapists, but if empty derive placeholders from children assignments.
-        const derivedTherapists = deriveTherapistsFromChildren(mergedChildren);
-        const mergedTherapists = mergeById(parsedTherapists, derivedTherapists);
-        setTherapists(mergedTherapists);
-
-        // Attach therapist objects where possible
-        const mapped = attachTherapistsToChildren(mergedChildren, mergedTherapists);
-        setChildren(mapped);
-
-        // Archived threads
-        if (aRaw) {
-          try { const parsed = JSON.parse(aRaw); if (Array.isArray(parsed)) setArchivedThreads(parsed); else setArchivedThreads([]); }
-          catch (e) { setArchivedThreads([]); }
-        } else {
-          setArchivedThreads([]);
-        }
+        setPosts([]);
+        setMessages([]);
+        setThreadReads({});
+        setUrgentMemos([]);
+        setParents([]);
+        setTherapists([]);
+        setChildren([]);
+        setArchivedThreads([]);
         // Blocked users
         if (blockedRaw) {
           try { const parsed = JSON.parse(blockedRaw); if (Array.isArray(parsed)) setBlockedUserIds(parsed); else setBlockedUserIds([]); }
@@ -419,39 +263,39 @@ export function DataProvider({ children: reactChildren }) {
       // after auth finishes loading to ensure requests include auth token.
     })();
     return () => { mounted = false; };
-  }, [buildDemoState, isDemoReviewer, storageKeys, storageScopeId]);
+  }, [buildDemoState, isDemoReviewer, sensitiveStorageKeys, storageKeys, storageScopeId]);
 
   useEffect(() => {
     if (!storageReady) return;
-    AsyncStorage.setItem(storageKeys.posts, JSON.stringify(posts)).catch(() => {});
+    AsyncStorage.removeItem(storageKeys.posts).catch(() => {});
   }, [posts, storageKeys.posts, storageReady]);
   useEffect(() => {
     if (!storageReady) return;
-    AsyncStorage.setItem(storageKeys.parents, JSON.stringify(parents)).catch(() => {});
+    AsyncStorage.removeItem(storageKeys.parents).catch(() => {});
   }, [parents, storageKeys.parents, storageReady]);
   useEffect(() => {
     if (!storageReady) return;
-    AsyncStorage.setItem(storageKeys.therapists, JSON.stringify(therapists)).catch(() => {});
+    AsyncStorage.removeItem(storageKeys.therapists).catch(() => {});
   }, [therapists, storageKeys.therapists, storageReady]);
   useEffect(() => {
     if (!storageReady) return;
-    AsyncStorage.setItem(storageKeys.messages, JSON.stringify(messages)).catch(() => {});
+    AsyncStorage.removeItem(storageKeys.messages).catch(() => {});
   }, [messages, storageKeys.messages, storageReady]);
   useEffect(() => {
     if (!storageReady) return;
-    AsyncStorage.setItem(storageKeys.threadReads, JSON.stringify(threadReads || {})).catch(() => {});
+    AsyncStorage.removeItem(storageKeys.threadReads).catch(() => {});
   }, [threadReads, storageKeys.threadReads, storageReady]);
   useEffect(() => {
     if (!storageReady) return;
-    AsyncStorage.setItem(storageKeys.archivedThreads, JSON.stringify(archivedThreads)).catch(() => {});
+    AsyncStorage.removeItem(storageKeys.archivedThreads).catch(() => {});
   }, [archivedThreads, storageKeys.archivedThreads, storageReady]);
   useEffect(() => {
     if (!storageReady) return;
-    AsyncStorage.setItem(storageKeys.children, JSON.stringify(children)).catch(() => {});
+    AsyncStorage.removeItem(storageKeys.children).catch(() => {});
   }, [children, storageKeys.children, storageReady]);
   useEffect(() => {
     if (!storageReady) return;
-    AsyncStorage.setItem(storageKeys.memos, JSON.stringify(urgentMemos)).catch(() => {});
+    AsyncStorage.removeItem(storageKeys.memos).catch(() => {});
   }, [urgentMemos, storageKeys.memos, storageReady]);
 
   // Persist blocked user ids
@@ -593,8 +437,8 @@ export function DataProvider({ children: reactChildren }) {
 
           // If server directory is empty and this is an admin session, seed it from local (persisted + additions).
           if (isAdmin && !remoteChildren.length && !remoteParents.length && !remoteTherapists.length) {
-            const localParents = mergeById(parents || [], additionalParents);
-            const localChildren = mergeById((children || []).map(stripComputedChildFields), additionalChildren);
+            const localParents = mergeById(parents || [], []);
+            const localChildren = mergeById((children || []).map(stripComputedChildFields), []);
             const derivedTherapists = deriveTherapistsFromChildren(localChildren);
             const localTherapists = mergeById(therapists || [], derivedTherapists);
 
@@ -691,7 +535,8 @@ export function DataProvider({ children: reactChildren }) {
       return created;
     } catch (e) {
       console.warn('createPost failed', e.message);
-      return temp;
+      setPosts((s) => s.filter((p) => p.id !== temp.id));
+      throw e;
     }
   }
 
@@ -762,7 +607,15 @@ export function DataProvider({ children: reactChildren }) {
       return created;
     } catch (e) {
       console.warn('replyToComment failed', e.message || e);
-      return temp;
+      setPosts((s) => s.map((p) => {
+        if (p.id !== postId) return p;
+        const comments = (p.comments || []).map((c) => {
+          if (c.id !== parentCommentId) return c;
+          return { ...c, replies: (c.replies || []).filter((r) => r.id !== temp.id) };
+        });
+        return { ...p, comments };
+      }));
+      throw e;
     }
   }
 

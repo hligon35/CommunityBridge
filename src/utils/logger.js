@@ -124,9 +124,17 @@ function isPlainObject(v) {
   return !!v && typeof v === 'object' && (v.constructor === Object || Object.getPrototypeOf(v) === null);
 }
 
-function redactValue(key, value) {
+function isSensitiveKey(key) {
   const k = String(key || '').toLowerCase();
-  if (k.includes('authorization') || k.includes('token') || k.includes('password') || k.includes('secret')) {
+  return [
+    'authorization', 'token', 'password', 'secret', 'email', 'name', 'firstname', 'lastname', 'phone', 'address',
+    'body', 'note', 'notes', 'subject', 'message', 'child', 'parent', 'therapist', 'memo', 'proposer',
+    'recipient', 'location', 'lat', 'lng', 'avatar', 'family', 'guardian', 'student',
+  ].some((part) => k.includes(part));
+}
+
+function redactValue(key, value) {
+  if (isSensitiveKey(key)) {
     return '[REDACTED]';
   }
   if (typeof value === 'string') {
@@ -136,13 +144,25 @@ function redactValue(key, value) {
   return value;
 }
 
+function redactDeep(value, parentKey = '') {
+  if (Array.isArray(value)) return value.map((item) => redactDeep(item, parentKey));
+  if (isPlainObject(value)) {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (isSensitiveKey(k) || isSensitiveKey(parentKey)) {
+        out[k] = '[REDACTED]';
+      } else {
+        out[k] = redactDeep(redactValue(k, v), k);
+      }
+    }
+    return out;
+  }
+  return redactValue(parentKey, value);
+}
+
 function redactObject(obj) {
   if (!isPlainObject(obj)) return obj;
-  const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k] = redactValue(k, v);
-  }
-  return out;
+  return redactDeep(obj);
 }
 
 function coerceData(data) {
