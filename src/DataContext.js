@@ -4,7 +4,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Api from './Api';
 import { useAuth } from './AuthContext';
 import { additionalChildren, additionalParents } from './seed/directoryAdditions';
+import { seededParents, seededTherapists, seededChildrenWithParents } from './seed/directorySeed_v2';
+import { countUnreadVisibleThreads } from './utils/chatThreads';
+import { DEMO_ROLE_IDENTITIES, getEffectiveChatIdentity } from './utils/demoIdentity';
 import { attachTherapistsToChildren, mergeById } from './utils/directoryState';
+import { setApplicationBadgeCountAsync } from './utils/pushNotifications';
 import { buildScopedStorageKeys, getStorageScopeId } from './utils/storageScope';
 
 const DataContext = createContext(null);
@@ -57,7 +61,7 @@ function stripComputedChildFields(child) {
 // Directory seed data is provided from `src/seed/directorySeed.js` (imported above)
 
 export function DataProvider({ children: reactChildren }) {
-  const { user, loading, needsMfa, refreshMfaState, markMfaRequired } = useAuth();
+  const { user, loading, needsMfa, refreshMfaState, markMfaRequired, isDemoReviewer } = useAuth();
   const needsMfaRef = useRef(Boolean(needsMfa));
   const mfaRefreshInFlightRef = useRef(false);
   const mfaEscalatedRef = useRef(false);
@@ -79,9 +83,168 @@ export function DataProvider({ children: reactChildren }) {
   const [children, setChildren] = useState([]);
   const [parents, setParents] = useState([]);
   const [therapists, setTherapists] = useState([]);
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [directoryError, setDirectoryError] = useState('');
   const [blockedUserIds, setBlockedUserIds] = useState([]);
   const [chatBlockedUserIds, setChatBlockedUserIds] = useState([]);
   const [storageReady, setStorageReady] = useState(false);
+
+  function buildDemoMessages() {
+    return [
+      {
+        id: 'demo-msg-1',
+        threadId: 'demo-thread-admin',
+        body: 'Welcome to CommunityBridge demo mode. Start in Admin Controls to review directories, memos, and documents.',
+        sender: DEMO_ROLE_IDENTITIES.admin,
+        to: [{ id: DEMO_ROLE_IDENTITIES.therapist.id, name: DEMO_ROLE_IDENTITIES.therapist.name }],
+        createdAt: new Date('2026-04-20T08:30:00Z').toISOString(),
+      },
+      {
+        id: 'demo-msg-2',
+        threadId: 'demo-thread-admin',
+        body: 'I will confirm the staffing coverage and close the alert from the therapist dashboard.',
+        sender: DEMO_ROLE_IDENTITIES.therapist,
+        to: [{ id: DEMO_ROLE_IDENTITIES.admin.id, name: DEMO_ROLE_IDENTITIES.admin.name }],
+        createdAt: new Date('2026-04-20T08:33:00Z').toISOString(),
+      },
+      {
+        id: 'demo-msg-2b',
+        threadId: 'demo-thread-care',
+        body: 'Mateo had a strong session this morning. Notes and schedule details are ready on the My Child side.',
+        sender: DEMO_ROLE_IDENTITIES.therapist,
+        to: [{ id: DEMO_ROLE_IDENTITIES.parent.id, name: DEMO_ROLE_IDENTITIES.parent.name }],
+        createdAt: new Date('2026-04-20T09:15:00Z').toISOString(),
+      },
+      {
+        id: 'demo-msg-3',
+        threadId: 'demo-thread-care',
+        body: 'Thanks. I am switching into the parent view to check the child profile and alerts now.',
+        sender: DEMO_ROLE_IDENTITIES.parent,
+        to: [{ id: DEMO_ROLE_IDENTITIES.therapist.id, name: DEMO_ROLE_IDENTITIES.therapist.name }],
+        createdAt: new Date('2026-04-20T09:17:00Z').toISOString(),
+        outgoing: true,
+      },
+      {
+        id: 'demo-msg-4',
+        threadId: 'demo-thread-parent-admin',
+        body: 'Can you review Mateo\'s pickup change request before dismissal?',
+        sender: DEMO_ROLE_IDENTITIES.parent,
+        to: [{ id: DEMO_ROLE_IDENTITIES.admin.id, name: DEMO_ROLE_IDENTITIES.admin.name }],
+        createdAt: new Date('2026-04-20T10:05:00Z').toISOString(),
+      },
+      {
+        id: 'demo-msg-5',
+        threadId: 'demo-thread-parent-admin',
+        body: 'Yes, I approved it and notified the front desk team.',
+        sender: DEMO_ROLE_IDENTITIES.admin,
+        to: [{ id: DEMO_ROLE_IDENTITIES.parent.id, name: DEMO_ROLE_IDENTITIES.parent.name }],
+        createdAt: new Date('2026-04-20T10:08:00Z').toISOString(),
+      },
+    ];
+  }
+
+  function buildDemoPosts() {
+    return [
+      {
+        id: 'demo-post-1',
+        title: 'Program Update',
+        body: 'Therapy teams can now review documents by program and campus. Use the admin role to verify both flows.',
+        author: { id: 'admin-demo', name: 'Jordan Admin', avatar: null },
+        createdAt: new Date('2026-04-19T14:00:00Z').toISOString(),
+        likes: 4,
+        shares: 1,
+        comments: [
+          {
+            id: 'demo-comment-1',
+            body: 'Verified in the therapist view as well.',
+            author: { id: 'BCBA-001', name: 'Dr. Sarah Miller' },
+            createdAt: new Date('2026-04-19T14:15:00Z').toISOString(),
+            reactions: { '👍': 2 },
+            userReactions: {},
+            replies: [],
+          },
+        ],
+      },
+      {
+        id: 'demo-post-2',
+        title: 'Family Event',
+        body: 'Parent engagement night is scheduled for Friday at the North Campus. Reviewers can open and share this post.',
+        author: { id: 'PT-001', name: 'Carlos Garcia', avatar: null },
+        createdAt: new Date('2026-04-18T17:30:00Z').toISOString(),
+        likes: 6,
+        shares: 2,
+        comments: [],
+      },
+    ];
+  }
+
+  function buildDemoUrgentMemos() {
+    return [
+      {
+        id: 'demo-memo-1',
+        type: 'admin_memo',
+        subject: 'Transportation Review Needed',
+        body: 'Please confirm updated pickup instructions for Mateo Garcia before dismissal.',
+        recipients: [{ id: 'PT-001', name: 'Carlos Garcia' }],
+        proposerId: 'admin-demo',
+        status: 'sent',
+        createdAt: new Date('2026-04-20T10:00:00Z').toISOString(),
+      },
+      {
+        id: 'demo-memo-2',
+        type: 'time_update',
+        updateType: 'pickup',
+        childId: 'ST-001',
+        proposerId: 'PT-001',
+        proposedISO: new Date('2026-04-20T16:45:00Z').toISOString(),
+        note: 'Parent requested early pickup for therapy follow-up.',
+        status: 'pending',
+        createdAt: new Date('2026-04-20T10:15:00Z').toISOString(),
+      },
+    ];
+  }
+
+  function buildDemoTimeChangeProposals() {
+    return [
+      {
+        id: 'demo-proposal-1',
+        childId: 'ST-003',
+        type: 'dropoff',
+        proposedISO: new Date('2026-04-21T08:45:00Z').toISOString(),
+        note: 'Family requested delayed arrival due to appointment.',
+        proposerId: 'PT-002',
+        createdAt: new Date('2026-04-20T11:00:00Z').toISOString(),
+      },
+    ];
+  }
+
+  function buildDemoDirectory() {
+    const demoParents = mergeById(seededParents, additionalParents);
+    const demoChildren = mergeById(seededChildrenWithParents, additionalChildren);
+    const demoTherapists = mergeById(seededTherapists, deriveTherapistsFromChildren(demoChildren));
+    return {
+      parents: demoParents,
+      therapists: demoTherapists,
+      children: attachTherapistsToChildren(demoChildren, demoTherapists),
+    };
+  }
+
+  function buildDemoState() {
+    const directory = buildDemoDirectory();
+    return {
+      posts: buildDemoPosts(),
+      messages: buildDemoMessages(),
+      threadReads: {},
+      urgentMemos: buildDemoUrgentMemos(),
+      archivedThreads: [],
+      timeChangeProposals: buildDemoTimeChangeProposals(),
+      children: directory.children,
+      parents: directory.parents,
+      therapists: directory.therapists,
+      blockedUserIds: [],
+      chatBlockedUserIds: [],
+    };
+  }
 
   function resetLocalState() {
     setPosts([]);
@@ -94,6 +257,38 @@ export function DataProvider({ children: reactChildren }) {
     setTherapists([]);
     setBlockedUserIds([]);
     setChatBlockedUserIds([]);
+  }
+
+  function applyLocalStateSnapshot(snapshot) {
+    setPosts(Array.isArray(snapshot?.posts) ? snapshot.posts : []);
+    setMessages(Array.isArray(snapshot?.messages) ? snapshot.messages : []);
+    setThreadReads(snapshot?.threadReads && typeof snapshot.threadReads === 'object' ? snapshot.threadReads : {});
+    setUrgentMemos(Array.isArray(snapshot?.urgentMemos) ? snapshot.urgentMemos : []);
+    setArchivedThreads(Array.isArray(snapshot?.archivedThreads) ? snapshot.archivedThreads : []);
+    setTimeChangeProposals(Array.isArray(snapshot?.timeChangeProposals) ? snapshot.timeChangeProposals : []);
+    setChildren(Array.isArray(snapshot?.children) ? snapshot.children : []);
+    setParents(Array.isArray(snapshot?.parents) ? snapshot.parents : []);
+    setTherapists(Array.isArray(snapshot?.therapists) ? snapshot.therapists : []);
+    setBlockedUserIds(Array.isArray(snapshot?.blockedUserIds) ? snapshot.blockedUserIds : []);
+    setChatBlockedUserIds(Array.isArray(snapshot?.chatBlockedUserIds) ? snapshot.chatBlockedUserIds : []);
+  }
+
+  function resetDemoData() {
+    applyLocalStateSnapshot(buildDemoState());
+  }
+
+  function resetMessagesToDemo() {
+    const demo = buildDemoState();
+    setMessages(demo.messages);
+    setThreadReads(demo.threadReads);
+    setArchivedThreads(demo.archivedThreads);
+  }
+
+  function resetChildrenToDemo() {
+    const demo = buildDemoState();
+    setChildren(demo.children);
+    setParents(demo.parents);
+    setTherapists(demo.therapists);
   }
 
   // Hydrate from storage then attempt remote sync.
@@ -128,6 +323,16 @@ export function DataProvider({ children: reactChildren }) {
           AsyncStorage.getItem(storageKeys.chatBlocked),
         ]);
         if (!mounted) return;
+
+        if (isDemoReviewer) {
+          const hasStoredDemoState = [postsRaw, mRaw, uRaw, cRaw, pRaw, tRaw, aRaw, threadReadsRaw, blockedRaw, chatBlockedRaw].some((value) => value != null);
+          if (hasStoredDemoState) {
+            // continue through normal hydration path using the reviewer-scoped cache
+          } else {
+            applyLocalStateSnapshot(buildDemoState());
+            return;
+          }
+        }
 
         // Posts
         if (postsRaw) {
@@ -214,7 +419,7 @@ export function DataProvider({ children: reactChildren }) {
       // after auth finishes loading to ensure requests include auth token.
     })();
     return () => { mounted = false; };
-  }, [storageKeys, storageScopeId]);
+  }, [buildDemoState, isDemoReviewer, storageKeys, storageScopeId]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -325,6 +530,8 @@ export function DataProvider({ children: reactChildren }) {
     const opts = options && typeof options === 'object' ? options : {};
     const force = Boolean(opts.force);
 
+    if (isDemoReviewer) return;
+
     // Avoid Firestore reads while MFA is required but not verified.
     if (!user || needsMfaRef.current) return;
 
@@ -374,6 +581,8 @@ export function DataProvider({ children: reactChildren }) {
       }
 
       // Directory sync. Admins can read/seed the full directory; non-admins use /api/directory/me.
+      setDirectoryLoading(true);
+      setDirectoryError('');
       try {
         const isAdmin = (user && user.role) ? ['admin', 'administrator'].includes(String(user.role).toLowerCase()) : false;
         let dir = isAdmin ? await Api.getDirectory() : await Api.getDirectoryMe();
@@ -409,6 +618,9 @@ export function DataProvider({ children: reactChildren }) {
         }
       } catch (e) {
         console.warn('getDirectory failed', e?.message || e);
+        setDirectoryError(String(e?.message || e || 'Could not load assigned children.'));
+      } finally {
+        setDirectoryLoading(false);
       }
     })();
 
@@ -424,7 +636,7 @@ export function DataProvider({ children: reactChildren }) {
   // Trigger network fetch once auth has finished loading and a user is signed in.
   useEffect(() => {
     let mounted = true;
-    if (loading || !user || needsMfa) return () => { mounted = false; };
+    if (loading || !user || needsMfa || isDemoReviewer) return () => { mounted = false; };
 
     const userKey = user?.id || user?.uid || user?.email || null;
     if (userKey && initialSyncDoneForUserRef.current === userKey) {
@@ -444,9 +656,22 @@ export function DataProvider({ children: reactChildren }) {
     }
 
     return () => { mounted = false; };
-  }, [loading, user, needsMfa]);
+  }, [isDemoReviewer, loading, user, needsMfa]);
 
   async function createPost(payload) {
+    if (isDemoReviewer) {
+      const created = {
+        ...(payload || {}),
+        id: `demo-post-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        author: payload?.author || { id: user?.id || 'reviewer-1', name: user?.name || 'App Review', avatar: null },
+        likes: 0,
+        shares: 0,
+        comments: [],
+      };
+      setPosts((s) => [created, ...(s || [])]);
+      return created;
+    }
     const temp = { ...payload, id: `temp-${Date.now()}`, createdAt: new Date().toISOString(), pending: true };
     setPosts((s) => [temp, ...s]);
     try {
@@ -471,6 +696,15 @@ export function DataProvider({ children: reactChildren }) {
   }
 
   async function like(postId) {
+    if (isDemoReviewer) {
+      let updated = null;
+      setPosts((s) => (s || []).map((p) => {
+        if (p.id !== postId) return p;
+        updated = { ...p, likes: (p.likes || 0) + 1 };
+        return updated;
+      }));
+      return updated;
+    }
     try {
       const updated = await Api.likePost(postId);
       setPosts((s) => s.map((p) => (p.id === postId ? { ...p, ...updated } : p)));
@@ -481,6 +715,19 @@ export function DataProvider({ children: reactChildren }) {
   }
 
   async function comment(postId, commentBody) {
+    if (isDemoReviewer) {
+      const created = {
+        id: `demo-comment-${Date.now()}`,
+        body: String(commentBody?.body || commentBody || '').trim(),
+        author: { id: user?.id || 'reviewer-1', name: user?.name || 'App Review' },
+        createdAt: new Date().toISOString(),
+        reactions: {},
+        userReactions: {},
+        replies: [],
+      };
+      setPosts((s) => (s || []).map((p) => (p.id === postId ? { ...p, comments: [...(p.comments || []), created] } : p)));
+      return created;
+    }
     try {
       const created = await Api.commentPost(postId, commentBody);
       setPosts((s) => s.map((p) => (p.id === postId ? { ...p, comments: [...(p.comments || []), created] } : p)));
@@ -673,17 +920,19 @@ export function DataProvider({ children: reactChildren }) {
   }
 
   async function sendMessage(payload) {
-    const senderId = user?.id != null ? String(user.id) : '';
+    const chatUser = getEffectiveChatIdentity(user);
+    const senderId = chatUser?.id != null ? String(chatUser.id) : '';
     if (senderId && (chatBlockedUserIds || []).some((id) => String(id) === senderId)) {
       const err = new Error('Your messaging access has been disabled by an administrator.');
       err.code = 'BB_CHAT_BLOCKED';
       throw err;
     }
     // Attach sender info from auth (if available) so UI shows names immediately
-    const sender = user ? { id: user.id, name: user.name, email: user.email } : undefined;
+    const sender = chatUser ? { id: chatUser.id, name: chatUser.name, email: chatUser.email } : undefined;
     const payloadWithSender = { ...payload, sender };
     const temp = { ...payloadWithSender, id: `temp-${Date.now()}`, createdAt: new Date().toISOString(), outgoing: true };
     setMessages((s) => [temp, ...s]);
+    if (isDemoReviewer) return temp;
     try {
       const sent = await Api.sendMessage(payloadWithSender);
       setMessages((s) => [sent, ...s.filter((m) => m.id !== temp.id)]);
@@ -769,6 +1018,7 @@ export function DataProvider({ children: reactChildren }) {
         createdAt: new Date().toISOString(),
       };
       setUrgentMemos((s) => [temp, ...(s || [])]);
+      if (isDemoReviewer) return temp;
       // Attempt server send; if server returns canonical memo, replace temp
       if (Api.sendUrgentMemo) {
         try {
@@ -805,6 +1055,8 @@ export function DataProvider({ children: reactChildren }) {
       // Optimistically add to local urgent memos so admins can see it immediately
       setUrgentMemos((s) => [temp, ...(s || [])]);
 
+      if (isDemoReviewer) return temp;
+
       // Attempt server send if API supports it
       if (Api.sendUrgentMemo) {
         try {
@@ -831,7 +1083,7 @@ export function DataProvider({ children: reactChildren }) {
       // Find memo locally
       const localMemo = (urgentMemos || []).find((m) => m.id === memoId);
       setUrgentMemos((s) => (s || []).map((m) => (m.id === memoId ? { ...m, status: action, respondedAt: new Date().toISOString() } : m)));
-      if (Api.respondUrgentMemo) {
+      if (!isDemoReviewer && Api.respondUrgentMemo) {
         try {
           await Api.respondUrgentMemo(memoId, action);
         } catch (e) {
@@ -929,29 +1181,40 @@ export function DataProvider({ children: reactChildren }) {
     }
   }
 
-  const unreadThreadCount = useMemo(() => {
-    const uid = user?.id ? String(user.id) : '';
-    if (!uid) return 0;
+  const unreadThreadCount = useMemo(() => countUnreadVisibleThreads(messages, threadReads, user, archivedThreads), [archivedThreads, messages, threadReads, user]);
+  const pendingUrgentCount = useMemo(() => {
+    const role = String(user?.role || '').trim().toLowerCase();
+    const uid = String(user?.id || user?.uid || '').trim();
+    const items = Array.isArray(urgentMemos) ? urgentMemos : [];
 
-    const latestIncomingByThread = new Map();
-    (messages || []).forEach((message) => {
-      const threadKey = message?.threadId != null ? String(message.threadId) : (message?.id != null ? String(message.id) : '');
-      if (!threadKey) return;
-      const senderId = message?.sender?.id != null ? String(message.sender.id) : '';
-      if (!senderId || senderId === uid) return;
-      const createdAtMs = Date.parse(String(message?.createdAt || ''));
-      if (!Number.isFinite(createdAtMs)) return;
-      const prev = latestIncomingByThread.get(threadKey) || 0;
-      if (createdAtMs > prev) latestIncomingByThread.set(threadKey, createdAtMs);
-    });
+    return items.filter((memo) => {
+      if (memo?.ack) return false;
 
-    let count = 0;
-    latestIncomingByThread.forEach((latestMs, threadKey) => {
-      const readAtMs = Date.parse(String((threadReads || {})[threadKey] || ''));
-      if (!Number.isFinite(readAtMs) || latestMs > readAtMs) count += 1;
-    });
-    return count;
-  }, [messages, threadReads, user]);
+      const status = String(memo?.status || '').trim().toLowerCase();
+      const recipients = Array.isArray(memo?.recipients) ? memo.recipients : [];
+      const recipientIds = recipients.map((item) => String(item?.id || item || '').trim()).filter(Boolean);
+      const proposerId = String(memo?.proposerId || memo?.proposerUid || '').trim();
+      const isAdminRole = role === 'admin' || role === 'administrator' || role === 'orgadmin' || role === 'org_admin' || role === 'campusadmin' || role === 'campus_admin' || role === 'superadmin' || role === 'super_admin';
+
+      if (isAdminRole) {
+        return !status || status === 'pending';
+      }
+
+      if (uid && recipientIds.includes(uid)) {
+        return true;
+      }
+
+      if (role === 'parent') {
+        return proposerId === uid && (!status || status === 'pending');
+      }
+
+      return false;
+    }).length;
+  }, [urgentMemos, user]);
+
+  useEffect(() => {
+    setApplicationBadgeCountAsync(unreadThreadCount + pendingUrgentCount).catch(() => {});
+  }, [pendingUrgentCount, unreadThreadCount]);
 
   return (
     <DataContext.Provider value={{
@@ -963,6 +1226,8 @@ export function DataProvider({ children: reactChildren }) {
       children,
       parents,
       therapists,
+      directoryLoading,
+      directoryError,
       setChildren,
       setParents,
       setTherapists,
@@ -994,6 +1259,9 @@ export function DataProvider({ children: reactChildren }) {
       blockChatUser,
       unblockChatUser,
       clearAllData,
+      resetDemoData,
+      resetMessagesToDemo,
+      resetChildrenToDemo,
       // time change proposals
       timeChangeProposals,
       proposeTimeChange,

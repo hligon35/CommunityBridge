@@ -26,6 +26,7 @@ function pushPrefAllows(preferences, kind) {
   if (!preferences || typeof preferences !== 'object') return true;
   const keys = Object.keys(preferences);
   if (!keys.length) return true;
+  if (kind === 'chats') return Boolean(preferences.chats ?? true);
   if (kind === 'updates') return Boolean(preferences.updates ?? preferences.other ?? true);
   if (kind === 'other') return Boolean(preferences.other ?? preferences.updates ?? true);
   return true;
@@ -53,6 +54,7 @@ async function sendExpoPush(tokens, { title, body, data, kind } = {}) {
     body: safeString(body || ''),
     data: (data && typeof data === 'object') ? data : {},
     sound: 'default',
+    badge: 1,
   }));
 
   const resp = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -1349,6 +1351,89 @@ exports.onArrivalPingCreate = regional.firestore
         title,
         body: 'Arrival detected. Open Alerts.',
         data: { kind: 'arrival_alert', memoId: createdMemoId, actorId, actorRole: role, childId: childId || null },
+        kind: 'updates',
+      });
+    } catch (_) {
+      // ignore push failures
+    }
+
+    return null;
+  });
+
+exports.onMessageCreate = regional.firestore
+  .document('messages/{messageId}')
+  .onCreate(async (snap) => {
+    const message = snap.data() || {};
+    const senderId = safeString(message?.sender?.id).trim();
+    const recipients = Array.isArray(message?.participantUids) ? message.participantUids.map((item) => safeString(item).trim()).filter(Boolean) : [];
+    const recipientUids = recipients.filter((uid) => uid && uid !== senderId);
+    if (!recipientUids.length) return null;
+
+    try {
+      const tokens = [];
+      for (const uid of recipientUids) {
+        const tSnap = await admin.firestore().collection('pushTokens').where('enabled', '==', true).where('userUid', '==', uid).limit(50).get();
+        tSnap.docs.forEach((d) => {
+          const rec = d.data() || {};
+          const token = safeString(rec.token || d.id).trim();
+          if (!token) return;
+          if (!pushPrefAllows(rec.preferences || {}, 'chats')) return;
+          tokens.push(token);
+        });
+      }
+
+      if (!tokens.length) return null;
+
+      await sendExpoPush(tokens, {
+        title: safeString(message?.sender?.name).trim() || 'New message',
+        body: safeString(message?.body).trim() || 'Open Chats to view the conversation.',
+        data: { kind: 'chat_message', messageId: snap.id, threadId: safeString(message?.threadId).trim() || snap.id },
+        kind: 'chats',
+      });
+    } catch (_) {
+      // ignore push failures
+    }
+
+    return null;
+  });
+
+exports.onUrgentMemoCreate = regional.firestore
+  .document('urgentMemos/{memoId}')
+  .onCreate(async (snap) => {
+    const memo = snap.data() || {};
+    const type = safeString(memo?.type).trim().toLowerCase();
+
+    try {
+      let targetUids = [];
+      if (type === 'arrival_alert' || type === 'time_update') {
+        const usersSnap = await admin.firestore().collection('users').where('role', 'in', ['admin', 'administrator']).get();
+        targetUids = usersSnap.docs.map((d) => d.id).filter(Boolean);
+      } else {
+        const recipients = Array.isArray(memo?.recipients) ? memo.recipients : [];
+        targetUids = recipients.map((item) => safeString(item?.id || item).trim()).filter(Boolean);
+      }
+
+      targetUids = Array.from(new Set(targetUids));
+      if (!targetUids.length) return null;
+
+      const tokens = [];
+      for (const uid of targetUids) {
+        const tSnap = await admin.firestore().collection('pushTokens').where('enabled', '==', true).where('userUid', '==', uid).limit(50).get();
+        tSnap.docs.forEach((d) => {
+          const rec = d.data() || {};
+          const token = safeString(rec.token || d.id).trim();
+          if (!token) return;
+          if (!pushPrefAllows(rec.preferences || {}, 'updates')) return;
+          tokens.push(token);
+        });
+      }
+
+      if (!tokens.length) return null;
+
+      await sendExpoPush(tokens, {
+        title: safeString(memo?.title || memo?.subject || (type === 'admin_memo' ? 'New memo' : 'New alert')).trim() || 'CommunityBridge',
+        body: safeString(memo?.body || memo?.note || 'Open the app for details.').trim() || 'Open the app for details.',
+        data: { kind: type || 'urgent_memo', memoId: snap.id, childId: memo?.childId || null },
         kind: 'updates',
       });
     } catch (_) {

@@ -70,7 +70,7 @@ function childCarouselImageFor(child, index) {
 
 export default function RoleDashboardScreen({ navigation }) {
   const { user } = useAuth();
-  const { children = [], therapists = [], urgentMemos = [] } = useData();
+  const { children = [], urgentMemos = [], directoryLoading = false, directoryError = '', fetchAndSync } = useData();
   const tenant = useTenant();
   const role = String(user?.role || 'parent').trim().toLowerCase();
   const isTherapist = role === 'therapist';
@@ -104,6 +104,8 @@ export default function RoleDashboardScreen({ navigation }) {
     if (isTherapist) return relevantChildren;
     return selectedChild ? [selectedChild] : [];
   }, [isTherapist, relevantChildren, selectedChild]);
+
+  const firstRelevantChild = relevantChildren[0] || null;
 
   const careTeamCount = useMemo(() => {
     if (isTherapist) return Math.max(1, activeChildren.length);
@@ -180,9 +182,9 @@ export default function RoleDashboardScreen({ navigation }) {
       value: nextSession,
       hint: isTherapist ? 'Based on your assigned learners.' : 'Based on your family schedule.',
       imageSource: nextSessionIcon,
-      onPress: () => (isTherapist
-        ? navigation.getParent()?.navigate('MyClass')
-        : navigation.navigate('ScheduleCalendar', { childId: selectedChild?.id || null })),
+      onPress: isTherapist
+        ? (firstRelevantChild ? () => navigation.navigate('ChildDetail', { childId: firstRelevantChild.id }) : undefined)
+        : () => navigation.navigate('ScheduleCalendar', { childId: selectedChild?.id || null }),
     },
     'mood-score': {
       key: 'mood-score',
@@ -193,11 +195,13 @@ export default function RoleDashboardScreen({ navigation }) {
     },
     'progress-report': {
       key: 'progress-report',
-      title: 'Progress Report',
+      title: isTherapist ? 'Assigned Children' : 'Progress Report',
       value: isTherapist ? `${relevantChildren.length}` : (selectedChild?.name || 'View child'),
-      hint: isTherapist ? 'Active learners assigned to you.' : 'Children linked to your account.',
+      hint: isTherapist ? 'Children currently linked to your schedule.' : 'Children linked to your account.',
       imageSource: progressReportIcon,
-      onPress: () => navigation.getParent()?.navigate(isTherapist ? 'MyClass' : 'MyChild', isTherapist ? undefined : { childId: selectedChild?.id || null }),
+      onPress: isTherapist
+        ? (firstRelevantChild ? () => navigation.navigate('ChildDetail', { childId: firstRelevantChild.id }) : undefined)
+        : () => navigation.getParent()?.navigate('MyChild', { childId: selectedChild?.id || null }),
     },
     'items-needed': {
       key: 'items-needed',
@@ -244,27 +248,66 @@ export default function RoleDashboardScreen({ navigation }) {
   const presetKeys = Array.isArray(activePreset) && activePreset.length
     ? activePreset
     : ['next-session', 'mood-score', 'progress-report', 'items-needed', 'care-team', 'billing', 'resources'];
+  const orderedPresetKeys = isTherapist
+    ? ['next-session', 'items-needed', ...presetKeys.filter((key) => !['next-session', 'items-needed'].includes(key))]
+    : presetKeys;
   const featureFlags = tenant?.featureFlags || {};
   const cardFlagGates = {
     billing: () => featureFlags.programBilling !== false,
   };
-  const dashboardCards = presetKeys
+  const dashboardCards = orderedPresetKeys
     .map((key) => cardDefinitions[key])
     .filter((card) => {
       if (!card) return false;
+      if (isTherapist && (card.key === 'progress-report' || card.key === 'mood-score' || card.key === 'care-team' || card.key === 'resources')) return false;
       const gate = cardFlagGates[card.key];
       return gate ? gate() : true;
     });
 
+  const retryDirectoryLoad = () => {
+    fetchAndSync?.({ force: true })?.catch?.(() => {});
+  };
+
   return (
     <ScreenWrapper bannerShowBack={false} style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
+        <View style={[styles.hero, isTherapist ? styles.heroTherapist : null]}>
           {isTherapist ? (
             <>
-              <Text style={styles.heroEyebrow}>{labels.staffDashboard || 'Therapist Dashboard'}</Text>
-              <Text style={styles.heroTitle}>Community tools are paused for now.</Text>
-              <Text style={styles.heroText}>Use this dashboard to jump into schedules, care-team information, billing context, and support resources while the wall is offline.</Text>
+              <Text style={styles.heroEyebrow}>{labels.dashboard || 'Dashboard'}</Text>
+              {directoryLoading ? (
+                <View style={styles.statusPanel}>
+                  <MaterialIcons name="hourglass-top" size={18} color="#2563eb" />
+                  <Text style={styles.statusText}>Loading assigned children...</Text>
+                </View>
+              ) : directoryError ? (
+                <View style={styles.statusPanel}>
+                  <MaterialIcons name="error-outline" size={18} color="#dc2626" />
+                  <Text style={styles.statusText}>{directoryError}</Text>
+                  <TouchableOpacity style={styles.retryButton} onPress={retryDirectoryLoad} activeOpacity={0.88}>
+                    <Text style={styles.retryButtonText}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : relevantChildren.length ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.familyCarouselTrack}>
+                  {relevantChildren.map((child, index) => (
+                    <TouchableOpacity
+                      key={child?.id || `${child?.name || 'child'}-${index}`}
+                      style={styles.familyCard}
+                      activeOpacity={0.88}
+                      onPress={() => navigation.navigate('ChildDetail', { childId: child?.id || null })}
+                    >
+                      <Image source={avatarSourceFor(child) || childCarouselImageFor(child, index)} style={styles.familyCardImage} resizeMode="cover" />
+                      <Text style={styles.familyCardName} numberOfLines={1}>{child?.name || 'Child'}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              ) : (
+                <View style={styles.statusPanel}>
+                  <MaterialIcons name="groups-2" size={18} color="#64748b" />
+                  <Text style={styles.statusText}>No assigned children are linked to this therapist yet.</Text>
+                </View>
+              )}
             </>
           ) : (
             <>
@@ -292,7 +335,7 @@ export default function RoleDashboardScreen({ navigation }) {
 
         <TenantSwitcher />
 
-        <View style={styles.grid}>
+        <View style={[styles.grid, isTherapist ? styles.gridTherapist : null]}>
           {dashboardCards.map((card) => {
             const cardContent = (
               <>
@@ -310,14 +353,14 @@ export default function RoleDashboardScreen({ navigation }) {
 
             if (card.onPress) {
               return (
-                <TouchableOpacity key={card.key} style={[styles.card, card.fullWidth ? styles.cardFullWidth : null]} onPress={card.onPress} activeOpacity={0.88}>
+                <TouchableOpacity key={card.key} style={[styles.card, isTherapist ? styles.cardTherapist : null, card.fullWidth ? styles.cardFullWidth : null]} onPress={card.onPress} activeOpacity={0.88}>
                   {cardContent}
                 </TouchableOpacity>
               );
             }
 
             return (
-              <View key={card.key} style={[styles.card, card.fullWidth ? styles.cardFullWidth : null]}>
+              <View key={card.key} style={[styles.card, isTherapist ? styles.cardTherapist : null, card.fullWidth ? styles.cardFullWidth : null]}>
                 {cardContent}
               </View>
             );
@@ -332,9 +375,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   content: { padding: 16, paddingBottom: Platform.OS === 'web' ? 32 : 16 },
   hero: { padding: 18, borderRadius: 18, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0' },
+  heroTherapist: { padding: 0, borderRadius: 0, backgroundColor: 'transparent', borderWidth: 0 },
   heroEyebrow: { color: '#2563eb', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 },
   heroTitle: { marginTop: 8, fontSize: 24, fontWeight: '800', color: '#0f172a' },
   heroText: { marginTop: 8, color: '#475569', lineHeight: 20 },
+  statusPanel: { marginTop: 14, padding: 12, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#dbeafe', flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
+  statusText: { flexShrink: 1, color: '#334155', lineHeight: 18 },
+  retryButton: { marginLeft: 'auto', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: '#2563eb' },
+  retryButtonText: { color: '#ffffff', fontWeight: '700', fontSize: 12 },
   familyCarouselTrack: { paddingRight: 8, paddingTop: 12 },
   familyCard: {
     width: 108,
@@ -351,7 +399,9 @@ const styles = StyleSheet.create({
   familyCardImage: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#e2e8f0' },
   familyCardName: { marginTop: 8, fontSize: 13, fontWeight: '800', color: '#0f172a', textAlign: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 16 },
+  gridTherapist: { justifyContent: 'space-between' },
   card: { width: '31.5%', paddingVertical: 12, paddingHorizontal: 10, marginBottom: 10, borderRadius: 18, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0' },
+  cardTherapist: { width: '48%' },
   cardFullWidth: { width: '100%' },
   cardIconRow: { width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eff6ff' },
   cardImageIcon: { width: 30, height: 30 },

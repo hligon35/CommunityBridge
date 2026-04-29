@@ -74,6 +74,29 @@ Notes:
 - To swap dev seed data later, point the script at another JSON file with `--seed-file path\to\file.json` or `CB_TENANT_SEED_FILE`.
 - The script upserts `organizations/{organizationId}`, `organizations/{organizationId}/programs/{programId}`, and `organizations/{organizationId}/campuses/{campusId}`.
 
+## Bootstrap elevated roles
+
+Do not allow public signup to create `superAdmin`, `orgAdmin`, `campusAdmin`, or `admin`. The intended bootstrap path is an operator-run script outside the app.
+
+Use [scripts/grant-admin-role.js](scripts/grant-admin-role.js) to promote an existing account after the user has already been created in Firebase Auth:
+
+```powershell
+$env:GOOGLE_APPLICATION_CREDENTIALS = "C:\path\to\service-account.json"
+$env:CB_DATABASE_URL = "postgres://..."
+npm run role:grant -- --email admin@communitybridge.app --role superAdmin
+```
+
+Notes:
+
+- This is the recommended way to create the first `superAdmin` and as the break-glass recovery path later.
+- The script updates Firebase custom claims, the Firestore `users/{uid}` profile document, and the Postgres `users` row when `CB_DATABASE_URL` is available.
+- If you only need to repair the Firebase-side role, add `--firebase-only`.
+- Dry run the promotion first with:
+
+```powershell
+npm run role:grant:dry -- --email admin@communitybridge.app --role superAdmin
+```
+
 Configuration
 
 - Set `EXPO_PUBLIC_API_BASE_URL` in your environment to change the API base URL (recommended).

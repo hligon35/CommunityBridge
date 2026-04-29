@@ -7,7 +7,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { resetToLogin, resetToTwoFactor } from './navigationRef';
 import { logger, setDebugContext } from './utils/logger';
 import { reportErrorToSentry } from './utils/reportError';
-import { normalizeRoleOverride, isDevSwitcherUser, getMfaFreshnessWindowMs, DEV_SWITCH_EMAIL } from './utils/authState';
+import { normalizeRoleOverride, isDevSwitcherUser, isDemoReviewerUser, isSpecialAccessUser, getMfaFreshnessWindowMs } from './utils/authState';
 
 const AuthContext = createContext(null);
 const MFA_VERIFIED_CACHE_KEY = 'bb_mfa_verified_at_cache_v1';
@@ -115,7 +115,7 @@ export function AuthProvider({ children }) {
 
   function applyDevRoleOverride(nextUser, overrideRole) {
     if (!nextUser) return nextUser;
-    if (!isDevSwitcherUser(nextUser.email)) return nextUser;
+    if (!isSpecialAccessUser(nextUser.email)) return nextUser;
     const normalized = normalizeRoleOverride(overrideRole);
     if (!normalized) return nextUser;
     return {
@@ -269,9 +269,9 @@ export function AuthProvider({ children }) {
           id: fbUser.uid,
           name: fbUser.displayName || '',
           email: fbUser.email || '',
-          role: isDevSwitcherUser(fbUser.email) ? 'admin' : 'parent',
+          role: isSpecialAccessUser(fbUser.email) ? 'admin' : 'parent',
         };
-        const storedOverride = isDevSwitcherUser(fbUser.email) ? await readDevRoleOverride() : '';
+        const storedOverride = isSpecialAccessUser(fbUser.email) ? await readDevRoleOverride() : '';
         setDevRoleOverride(storedOverride);
         setUser(applyDevRoleOverride(profileForState, storedOverride));
 
@@ -389,9 +389,9 @@ export function AuthProvider({ children }) {
       id: fbUser.uid,
       name: fbUser.displayName || '',
       email: fbUser.email || '',
-      role: isDevSwitcherUser(fbUser.email) ? 'admin' : 'parent',
+      role: isSpecialAccessUser(fbUser.email) ? 'admin' : 'parent',
     };
-    const override = isDevSwitcherUser(nextUser?.email) ? await readDevRoleOverride() : '';
+    const override = isSpecialAccessUser(nextUser?.email) ? await readDevRoleOverride() : '';
     setDevRoleOverride(override);
     setToken(nextToken);
     setUser(applyDevRoleOverride(nextUser, override));
@@ -399,12 +399,12 @@ export function AuthProvider({ children }) {
   }
 
   async function setRole(nextRole) {
-    // Allow role override in any build for the controlled dev@communitybridge.app
-    // account; for everyone else, restrict to __DEV__ builds.
-    if (!__DEV__ && !isDevSwitcherUser(user?.email)) return;
+    // Allow role override in any build for the controlled special-access
+    // accounts; for everyone else, restrict to __DEV__ builds.
+    if (!__DEV__ && !isSpecialAccessUser(user?.email)) return;
     const normalized = normalizeRoleOverride(nextRole);
     if (!normalized) return;
-    if (!isDevSwitcherUser(user?.email)) return;
+    if (!isSpecialAccessUser(user?.email)) return;
 
     setDevRoleOverride(normalized);
     await writeDevRoleOverride(normalized);
@@ -422,7 +422,8 @@ export function AuthProvider({ children }) {
     () => {
       // Master 2FA bypass for the controlled dev account so we can navigate
       // hierarchy/paths without going through the org-level MFA gate.
-      const isDevBypass = isDevSwitcherUser(user?.email);
+      const isDevBypass = isSpecialAccessUser(user?.email);
+      const isDemoReviewer = isDemoReviewerUser(user?.email);
       return ({
         token,
         user,
@@ -437,6 +438,7 @@ export function AuthProvider({ children }) {
         mfaVerified: isDevBypass ? true : mfaVerified,
         mfaLoading,
         needsMfa: isDevBypass ? false : Boolean(mfaRequired && !mfaVerified),
+        isDemoReviewer,
         markMfaRequired,
         refreshMfaState,
       });

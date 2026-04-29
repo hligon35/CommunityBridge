@@ -1,17 +1,21 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useData } from '../DataContext';
+import { useAuth } from '../AuthContext';
 import { avatarSourceFor } from '../utils/idVisibility';
 import { MaterialIcons } from '@expo/vector-icons';
+import { isAdminRole } from '../core/tenant/models';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
 
 export default function ChildDetailScreen() {
   const route = useRoute();
   const navigation = useNavigation();
+  const { user } = useAuth();
   const { childId } = route.params || {};
   const { children = [] } = useData();
+  const canOpenRelatedChats = isAdminRole(user?.role);
 
   const child = (children || []).find((c) => c.id === childId) || null;
 
@@ -42,15 +46,16 @@ export default function ChildDetailScreen() {
         </View>
       ) : null}
 
-      <View style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'flex-end' }}>
-        <TouchableOpacity style={{ padding: 8, backgroundColor: '#2563eb', borderRadius: 8 }} onPress={() => {
-          const firstParent = (child.parents || [])[0];
-          const firstTherapist = child.amTherapist || child.pmTherapist || child.bcaTherapist;
-          const target = firstParent ? firstParent.id : (firstTherapist ? firstTherapist.id : null);
-          if (target) navigation.navigate('AdminChatMonitor', { initialUserId: target });
-        }}><Text style={{ color: '#fff', fontWeight: '700' }}>Related Chats</Text></TouchableOpacity>
-        
-      </View>
+      {canOpenRelatedChats ? (
+        <View style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'flex-end' }}>
+          <TouchableOpacity style={{ padding: 8, backgroundColor: '#2563eb', borderRadius: 8 }} onPress={() => {
+            const firstParent = (child.parents || [])[0];
+            const firstTherapist = child.amTherapist || child.pmTherapist || child.bcaTherapist;
+            const target = firstParent ? firstParent.id : (firstTherapist ? firstTherapist.id : null);
+            if (target) navigation.navigate('AdminChatMonitor', { initialUserId: target });
+          }}><Text style={{ color: '#fff', fontWeight: '700' }}>Related Chats</Text></TouchableOpacity>
+        </View>
+      ) : null}
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Parents</Text>

@@ -4,20 +4,18 @@ import { useAuth } from '../AuthContext';
 import { BASE_URL } from '../config';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import devToolsFlag from '../utils/devToolsFlag';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import ImageToggle from '../components/ImageToggle';
 import TenantSwitcher from '../components/TenantSwitcher';
-import { avatarSourceFor, setIdVisibilityEnabled, initIdVisibilityFromStorage } from '../utils/idVisibility';
+import { avatarSourceFor } from '../utils/idVisibility';
 import { registerForExpoPushTokenAsync } from '../utils/pushNotifications';
 import * as Api from '../Api';
 import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
-import { SETTINGS_KEYS, readBooleanSetting, writeBooleanSetting, writeJsonSetting } from '../utils/appSettings';
+import { SETTINGS_KEYS, readBooleanSetting, writeBooleanSetting } from '../utils/appSettings';
 import { isAdminRole } from '../core/tenant/models';
 
 const editIconImage = require('../../assets/icons/edit.png');
-const currentLocationIcon = require('../../assets/icons/currentLocation.png');
 const checkUpdatesIcon = require('../../assets/icons/checkUpdates.png');
 const deleteAccountIcon = require('../../assets/icons/deleteAccount.png');
 
@@ -33,8 +31,6 @@ const PUSH_UPDATES_KEY = 'settings_push_updates_v1';
 const PUSH_OTHER_KEY = 'settings_push_other_v1';
 const SHOW_EMAIL_KEY = SETTINGS_KEYS.showEmail;
 const SHOW_PHONE_KEY = SETTINGS_KEYS.showPhone;
-const SHOW_IDS_KEY = SETTINGS_KEYS.showIds;
-const BUSINESS_ADDR_KEY = SETTINGS_KEYS.businessAddress;
 
 export default function SettingsScreen({ navigation }) {
   const { user, logout, setRole } = useAuth();
@@ -55,7 +51,6 @@ export default function SettingsScreen({ navigation }) {
   const [pushOther, setPushOther] = useState(false);
   const [showEmail, setShowEmail] = useState(true);
   const [showPhone, setShowPhone] = useState(true);
-  const [showIds, setShowIds] = useState(false);
 
   const [updateStatus, setUpdateStatus] = useState({
     isEnabled: Updates.isEnabled,
@@ -103,16 +98,8 @@ export default function SettingsScreen({ navigation }) {
         if (po !== null) setPushOther(po === '1');
         const se = await AsyncStorage.getItem(SHOW_EMAIL_KEY);
         const sp = await AsyncStorage.getItem(SHOW_PHONE_KEY);
-        const si = await AsyncStorage.getItem(SHOW_IDS_KEY);
         if (se !== null) setShowEmail(se === '1');
         if (sp !== null) setShowPhone(sp === '1');
-        if (si !== null) setShowIds(si === '1');
-        // initialize module-level cache from storage
-        initIdVisibilityFromStorage().catch(() => {});
-        const bRaw = await AsyncStorage.getItem(BUSINESS_ADDR_KEY);
-        if (bRaw) {
-          try { const parsed = JSON.parse(bRaw); if (parsed && parsed.address) setBusinessAddress(parsed.address); } catch (e) {}
-        }
       } catch (e) {
         // ignore
       }
@@ -178,55 +165,6 @@ export default function SettingsScreen({ navigation }) {
       setUpdateBusy(false);
     }
   }
-
-  const [businessAddress, setBusinessAddress] = useState('');
-
-  async function saveBusinessAddress(obj) {
-    try {
-      // Preserve any existing admin-configured fields (e.g., dropZoneMiles)
-      let merged = { ...(obj || {}) };
-      try {
-        const existingRaw = await AsyncStorage.getItem(BUSINESS_ADDR_KEY);
-        if (existingRaw) {
-          const existing = JSON.parse(existingRaw);
-          if (existing && typeof existing === 'object') {
-            merged = { ...existing, ...merged };
-          }
-        }
-      } catch (e) {}
-      await writeJsonSetting(BUSINESS_ADDR_KEY, merged);
-      setBusinessAddress(merged.address || '');
-    } catch (e) {}
-  }
-
-  async function pickBusinessLocation() {
-    try {
-      const Location = require('expo-location');
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (!perm.granted) { Alert.alert('Location required', 'Please grant location permission to set business address.'); return; }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
-      const addr = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
-      await saveBusinessAddress({ address: addr, lat: pos.coords.latitude, lng: pos.coords.longitude });
-      Alert.alert('Saved', 'Business location saved.');
-    } catch (e) {
-      console.warn('pickBusinessLocation failed', e?.message || e);
-      Alert.alert('Location failed', 'Could not get current location.');
-    }
-  }
-
-  const [devToolsVisible, setDevToolsVisible] = useState(true);
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const v = await devToolsFlag.get();
-        if (!mounted) return;
-        setDevToolsVisible(Boolean(v));
-      } catch (e) {}
-    })();
-    const unsub = devToolsFlag.addListener((v) => { if (mounted) setDevToolsVisible(Boolean(v)); });
-    return () => { mounted = false; try { unsub(); } catch (e) {} };
-  }, []);
 
   useEffect(() => {
     writeBooleanSetting(ARRIVAL_KEY, arrivalEnabled).catch(() => {});
@@ -331,10 +269,6 @@ export default function SettingsScreen({ navigation }) {
   useEffect(() => {
     writeBooleanSetting(SHOW_PHONE_KEY, showPhone).catch(() => {});
   }, [showPhone]);
-
-  useEffect(() => {
-    setIdVisibilityEnabled(!!showIds);
-  }, [showIds]);
 
   const toggleArrival = () => {
     const next = !arrivalEnabled;
@@ -615,37 +549,7 @@ export default function SettingsScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Admin: business address (used for arrival detection geofence) */}
-        {user && isAdminRole(user.role) ? (
-          <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
-            <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8 }}>Business Address</Text>
-            <Text style={{ fontSize: 14, color: '#6b7280', marginBottom: 8 }}>Set the center's address used to detect nearby arrivals (lat,lng).</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ flex: 1 }}>{businessAddress || 'Not set'}</Text>
-              <TouchableOpacity onPress={pickBusinessLocation} accessibilityLabel="Use current location" style={{ marginLeft: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: 44 }}>
-                <Image source={currentLocationIcon} style={{ width: 30, height: 30, resizeMode: 'contain' }} />
-                <Text style={{ marginLeft: 8, color: '#2563eb', fontWeight: '700', fontSize: 13 }}>Current Location</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : null}
-        
-
           {/* Profile Privacy moved above Push Notifications */}
-
-          {/* IDs: developer toggle (persistent) - admin only (moved for admins to Admin Controls) */}
-          {(user && isAdminRole(user.role)) ? (
-            <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
-              <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8 }}>IDs</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <View style={{ flex: 1, paddingRight: 8 }}>
-                  <Text style={{ fontSize: 14 }}>Show internal IDs</Text>
-                  <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Toggle to show internal ID strings in profiles (debug only).</Text>
-                </View>
-                <ImageToggle value={showIds} onValueChange={setShowIds} accessibilityLabel="Show internal IDs" />
-              </View>
-            </View>
-          ) : null}
 
           {/* Build / Update footer (fills extra space at bottom) */}
           <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>

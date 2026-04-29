@@ -12,6 +12,31 @@ const { Pool } = require('pg');
 const multer = require('multer');
 const { registerFirebaseMfaRoutes } = require('./firebase-mfa-routes');
 const { registerOrganizationIntakeRoutes } = require('./organization-intake-routes');
+const { normalizeScopedUser, canManageTargetUser, filterManageableUsers } = require('./admin-scope');
+
+let firebaseAdminLib = null;
+function getFirebaseAdmin() {
+  if (firebaseAdminLib) return firebaseAdminLib;
+  // eslint-disable-next-line global-require
+  firebaseAdminLib = require('firebase-admin');
+  try {
+    if (!firebaseAdminLib.apps || !firebaseAdminLib.apps.length) {
+      const projectId = safeString(
+        process.env.CB_FIREBASE_PROJECT_ID ||
+        process.env.BB_FIREBASE_PROJECT_ID ||
+        process.env.FIREBASE_PROJECT_ID ||
+        process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ||
+        process.env.GCLOUD_PROJECT ||
+        process.env.GCP_PROJECT ||
+        'communitybridge-26apr'
+      ).trim();
+      firebaseAdminLib.initializeApp(projectId ? { projectId } : undefined);
+    }
+  } catch (_) {
+    // ignore duplicate initializeApp calls
+  }
+  return firebaseAdminLib;
+}
 
 function parseCsvEnv(value) {
   return String(value || '')
@@ -369,6 +394,78 @@ function safeString(v) {
   }
 }
 
+async function syncFirebaseManagedUser(userId, nextFields = {}) {
+  const admin = getFirebaseAdmin();
+  const auth = admin.auth();
+  const firestore = admin.firestore();
+  const uid = String(userId || '').trim();
+  const userRecord = await auth.getUser(uid);
+  const update = {};
+
+  if (nextFields.email !== undefined) update.email = String(nextFields.email || '').trim().toLowerCase();
+  if (nextFields.name !== undefined) update.displayName = String(nextFields.name || '').trim();
+  if (nextFields.password !== undefined) update.password = String(nextFields.password || '');
+  if (Object.keys(update).length) await auth.updateUser(uid, update);
+
+  if (nextFields.role !== undefined) {
+    const currentClaims = userRecord.customClaims || {};
+    await auth.setCustomUserClaims(uid, { ...currentClaims, role: String(nextFields.role).trim() });
+  }
+
+  const profileUpdate = {
+    id: uid,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (nextFields.email !== undefined) profileUpdate.email = String(nextFields.email || '').trim().toLowerCase();
+  if (nextFields.name !== undefined) profileUpdate.name = String(nextFields.name || '').trim();
+  if (nextFields.role !== undefined) profileUpdate.role = String(nextFields.role).trim();
+  if (nextFields.organizationId !== undefined) profileUpdate.organizationId = safeString(nextFields.organizationId).trim();
+  if (nextFields.programIds !== undefined) profileUpdate.programIds = normalizeManagedIdList(nextFields.programIds);
+  if (nextFields.campusIds !== undefined) profileUpdate.campusIds = normalizeManagedIdList(nextFields.campusIds);
+  if (nextFields.memberships !== undefined) profileUpdate.memberships = Array.isArray(nextFields.memberships) ? nextFields.memberships.filter((item) => item && typeof item === 'object') : [];
+  await firestore.collection('users').doc(uid).set(profileUpdate, { merge: true });
+}
+
+async function deleteFirebaseManagedUser(userId) {
+  const admin = getFirebaseAdmin();
+  const auth = admin.auth();
+  const firestore = admin.firestore();
+  const uid = String(userId || '').trim();
+  if (!uid) return;
+
+  await firestore.collection('users').doc(uid).delete().catch(() => {});
+  await firestore.collection('parents').doc(uid).delete().catch(() => {});
+  await firestore.collection('directoryLinks').doc(uid).delete().catch(() => {});
+  await auth.deleteUser(uid);
+}
+
+function normalizeManagedIdList(values) {
+  return Array.from(new Set((Array.isArray(values) ? values : [])
+    .map((value) => safeString(value).trim())
+    .filter(Boolean)));
+}
+
+async function getFirebaseManagedProfiles(userIds) {
+  const ids = normalizeManagedIdList(userIds);
+  if (!ids.length) return new Map();
+  const admin = getFirebaseAdmin();
+  const firestore = admin.firestore();
+  const refs = ids.map((id) => firestore.collection('users').doc(id));
+  const snaps = await Promise.all(refs.map((ref) => ref.get().catch(() => null)));
+  const out = new Map();
+  snaps.forEach((snap, index) => {
+    if (!snap || !snap.exists) return;
+    const data = snap.data() || {};
+    out.set(ids[index], {
+      organizationId: safeString(data.organizationId).trim(),
+      programIds: normalizeManagedIdList(data.programIds || data.branchIds),
+      campusIds: normalizeManagedIdList(data.campusIds),
+      memberships: Array.isArray(data.memberships) ? data.memberships.filter((item) => item && typeof item === 'object') : [],
+    });
+  });
+  return out;
+}
+
 function roleLower(u) {
   try { return String(u && u.role ? u.role : '').trim().toLowerCase(); } catch (_) { return ''; }
 }
@@ -387,9 +484,21 @@ function pushPrefAllows(preferences, kind) {
   if (!preferences || typeof preferences !== 'object') return true;
   const keys = Object.keys(preferences);
   if (!keys.length) return true;
+  if (kind === 'chats') return Boolean(preferences.chats ?? true);
   if (kind === 'updates') return Boolean(preferences.updates ?? preferences.other ?? true);
   if (kind === 'other') return Boolean(preferences.other ?? preferences.updates ?? true);
   return true;
+}
+
+function normalizeRecipients(input) {
+  if (!Array.isArray(input)) return [];
+  const ids = [];
+  for (const item of input) {
+    if (!item) continue;
+    if (typeof item === 'string' || typeof item === 'number') ids.push(String(item));
+    else if (typeof item === 'object' && item.id != null) ids.push(String(item.id));
+  }
+  return Array.from(new Set(ids.filter(Boolean)));
 }
 
 function normalizeE164Phone(input) {
@@ -686,6 +795,13 @@ async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS permissions_config (
+      id TEXT PRIMARY KEY,
+      data_json JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS posts (
       id TEXT PRIMARY KEY,
       author_json JSONB,
@@ -838,7 +954,100 @@ async function sendPasswordResetEmail({ to, code }) {
 
 function isAdminRole(role) {
   const r = safeString(role).trim().toLowerCase();
-  return r === 'admin' || r === 'administrator';
+  return r === 'admin'
+    || r === 'administrator'
+    || r === 'campusadmin'
+    || r === 'campus_admin'
+    || r === 'orgadmin'
+    || r === 'org_admin'
+    || r === 'organizationadmin'
+    || r === 'superadmin'
+    || r === 'super_admin';
+}
+
+function isSuperAdminRole(role) {
+  const r = safeString(role).trim().toLowerCase();
+  return r === 'superadmin' || r === 'super_admin';
+}
+
+function isRestrictedSignupRole(role) {
+  return isAdminRole(role);
+}
+
+function defaultPermissionsConfig() {
+  return {
+    Admin: {
+      'users:manage': true,
+      'children:edit': true,
+      'messages:send': true,
+      'settings:system': true,
+      'export:data': true,
+    },
+    Teacher: {
+      'users:manage': false,
+      'children:edit': false,
+      'messages:send': true,
+      'settings:system': false,
+      'export:data': false,
+    },
+    Therapist: {
+      'users:manage': false,
+      'children:edit': true,
+      'messages:send': true,
+      'settings:system': false,
+      'export:data': false,
+    },
+    Parent: {
+      'users:manage': false,
+      'children:edit': false,
+      'messages:send': true,
+      'settings:system': false,
+      'export:data': false,
+    },
+    Staff: {
+      'users:manage': false,
+      'children:edit': false,
+      'messages:send': true,
+      'settings:system': false,
+      'export:data': false,
+    },
+  };
+}
+
+async function getPermissionsConfigRow() {
+  const row = await pgQueryOne('SELECT data_json FROM permissions_config WHERE id = $1', ['default']);
+  return row && row.data_json ? row.data_json : null;
+}
+
+function permissionRoleKey(role) {
+  const r = safeString(role).trim().toLowerCase();
+  if (r === 'superadmin' || r === 'super_admin') return 'Admin';
+  if (r === 'admin' || r === 'administrator' || r === 'campusadmin' || r === 'campus_admin' || r === 'orgadmin' || r === 'org_admin' || r === 'organizationadmin') return 'Admin';
+  if (r.includes('therapist') || r.includes('bcba')) return 'Therapist';
+  if (r.includes('teacher') || r.includes('faculty')) return 'Teacher';
+  if (r.includes('parent')) return 'Parent';
+  return 'Staff';
+}
+
+function roleHasCapability(role, config, capability) {
+  if (isSuperAdminRole(role)) return true;
+  const key = permissionRoleKey(role);
+  const caps = config && typeof config === 'object' ? config[key] : null;
+  return Boolean(caps && caps[capability]);
+}
+
+async function ensurePermissionsConfigSeeded() {
+  const existing = await getPermissionsConfigRow();
+  if (existing) return existing;
+  const now = new Date();
+  const config = defaultPermissionsConfig();
+  await pool.query(
+    `INSERT INTO permissions_config (id, data_json, created_at, updated_at)
+     VALUES ($1, $2::jsonb, $3, $4)
+     ON CONFLICT (id) DO NOTHING`,
+    ['default', JSON.stringify(config), now, now]
+  );
+  return config;
 }
 
 function normalizeSession(value) {
@@ -987,7 +1196,7 @@ async function getAdminUserIds() {
     const ids = [];
     for (const r of rows) {
       const role = safeString(r.role).trim().toLowerCase();
-      if (role === 'admin' || role === 'administrator') ids.push(String(r.id));
+      if (isAdminRole(role)) ids.push(String(r.id));
     }
     ids.push('dev');
     return Array.from(new Set(ids.filter(Boolean)));
@@ -1059,6 +1268,7 @@ async function sendExpoPush(tokens, { title, body, data } = {}) {
       body: safeString(body || ''),
       data: (data && typeof data === 'object') ? data : {},
       sound: 'default',
+      badge: 1,
     }));
 
     const resp = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -1168,16 +1378,30 @@ async function authMiddleware(req, res, next) {
   }
 
   if (!token) return res.status(401).json({ ok: false, error: 'missing auth token' });
-  if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'server missing BB_JWT_SECRET' });
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    const userId = payload && payload.sub ? String(payload.sub) : '';
+    let userId = '';
+    if (JWT_SECRET) {
+      try {
+        const payload = jwt.verify(token, JWT_SECRET);
+        userId = payload && payload.sub ? String(payload.sub) : '';
+      } catch (_) {
+        userId = '';
+      }
+    }
+
+    if (!userId) {
+      const admin = getFirebaseAdmin();
+      const decoded = await admin.auth().verifyIdToken(token);
+      userId = decoded && decoded.uid ? String(decoded.uid) : '';
+    }
+
     if (!userId) return res.status(401).json({ ok: false, error: 'invalid token' });
 
     const row = await pgQueryOne('SELECT id,email,name,avatar,phone,address,role FROM users WHERE id = $1', [userId]);
     if (!row) return res.status(401).json({ ok: false, error: 'user not found' });
-    req.user = userToClient(row);
+    const firebaseProfile = await getFirebaseManagedProfiles([userId]).catch(() => new Map());
+    req.user = normalizeScopedUser({ ...userToClient(row), ...(firebaseProfile.get(userId) || {}) });
     return next();
   } catch (e) {
     return res.status(401).json({ ok: false, error: 'invalid token' });
@@ -1189,6 +1413,25 @@ function requireAdmin(req, res, next) {
     if (req.user && isAdminRole(req.user.role)) return next();
   } catch (e) {}
   return res.status(403).json({ ok: false, error: 'admin required' });
+}
+
+function requireSuperAdmin(req, res, next) {
+  try {
+    if (req.user && isSuperAdminRole(req.user.role)) return next();
+  } catch (e) {}
+  return res.status(403).json({ ok: false, error: 'super admin required' });
+}
+
+function requireCapability(capability) {
+  return async (req, res, next) => {
+    try {
+      const config = await ensurePermissionsConfigSeeded();
+      if (roleHasCapability(req.user?.role, config, capability)) return next();
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e?.message || String(e) });
+    }
+    return res.status(403).json({ ok: false, error: `${capability} capability required` });
+  };
 }
 
 function isParentRole(role) {
@@ -1443,7 +1686,7 @@ app.get('/api/directory/me', authMiddleware, async (req, res) => {
   }
 });
 
-app.post('/api/directory/merge', authMiddleware, requireAdmin, async (req, res) => {
+app.post('/api/directory/merge', authMiddleware, requireAdmin, requireCapability('children:edit'), async (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const children = Array.isArray(body.children) ? body.children : [];
   const parents = Array.isArray(body.parents) ? body.parents : [];
@@ -1534,7 +1777,7 @@ app.get('/api/org-settings', authMiddleware, async (req, res) => {
   }
 });
 
-app.put('/api/org-settings', authMiddleware, requireAdmin, async (req, res) => {
+app.put('/api/org-settings', authMiddleware, requireAdmin, requireCapability('settings:system'), async (req, res) => {
   const payload = req.body && typeof req.body === 'object' ? req.body : {};
   const address = payload.address != null ? String(payload.address) : '';
   const lat = payload.lat != null ? Number(payload.lat) : null;
@@ -1554,6 +1797,32 @@ app.put('/api/org-settings', authMiddleware, requireAdmin, async (req, res) => {
   try {
     await pool.query(
       `INSERT INTO org_settings (id, data_json, created_at, updated_at)
+       VALUES ($1, $2::jsonb, $3, $4)
+       ON CONFLICT (id) DO UPDATE SET data_json = EXCLUDED.data_json, updated_at = EXCLUDED.updated_at`,
+      ['default', JSON.stringify(item), now, now]
+    );
+    return res.json({ ok: true, item });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.get('/api/permissions-config', authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const item = await ensurePermissionsConfigSeeded();
+    return res.json({ ok: true, item });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.put('/api/permissions-config', authMiddleware, requireSuperAdmin, async (req, res) => {
+  const item = req.body && typeof req.body === 'object' ? req.body : null;
+  if (!item) return res.status(400).json({ ok: false, error: 'permissions config object required' });
+  const now = new Date();
+  try {
+    await pool.query(
+      `INSERT INTO permissions_config (id, data_json, created_at, updated_at)
        VALUES ($1, $2::jsonb, $3, $4)
        ON CONFLICT (id) DO UPDATE SET data_json = EXCLUDED.data_json, updated_at = EXCLUDED.updated_at`,
       ['default', JSON.stringify(item), now, now]
@@ -1814,6 +2083,215 @@ app.put('/api/auth/me', authMiddleware, async (req, res) => {
   }
 });
 
+app.get('/api/admin/users', authMiddleware, requireAdmin, requireCapability('users:manage'), async (req, res) => {
+  try {
+    const rows = await pgQueryAll(
+      'SELECT id,email,name,avatar,phone,address,role,created_at,updated_at FROM users ORDER BY lower(email) ASC',
+      []
+    );
+    const firebaseProfiles = await getFirebaseManagedProfiles((rows || []).map((row) => row.id)).catch(() => new Map());
+    const items = (rows || []).map((row) => ({
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      avatar: row.avatar || '',
+      phone: row.phone || '',
+      address: row.address || '',
+      role: row.role,
+      organizationId: firebaseProfiles.get(row.id)?.organizationId || '',
+      programIds: firebaseProfiles.get(row.id)?.programIds || [],
+      campusIds: firebaseProfiles.get(row.id)?.campusIds || [],
+      memberships: firebaseProfiles.get(row.id)?.memberships || [],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+    return res.json({ ok: true, items: filterManageableUsers(req.user, items) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || 'list users failed' });
+  }
+});
+
+app.put('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapability('users:manage'), async (req, res) => {
+  const userId = safeString(req.params && req.params.userId).trim();
+  if (!userId) return res.status(400).json({ ok: false, error: 'userId required' });
+
+  const name = (req.body && req.body.name != null) ? String(req.body.name).trim() : undefined;
+  const email = (req.body && req.body.email != null) ? String(req.body.email).trim().toLowerCase() : undefined;
+  const avatarRaw = (req.body && req.body.avatar != null) ? String(req.body.avatar).trim() : undefined;
+  const phoneRaw = (req.body && req.body.phone != null) ? String(req.body.phone).trim() : undefined;
+  const address = (req.body && req.body.address != null) ? String(req.body.address).trim() : undefined;
+  const role = (req.body && req.body.role != null) ? String(req.body.role).trim() : undefined;
+  const organizationId = (req.body && req.body.organizationId != null) ? String(req.body.organizationId).trim() : undefined;
+  const programIds = (req.body && req.body.programIds != null) ? normalizeManagedIdList(req.body.programIds) : undefined;
+  const campusIds = (req.body && req.body.campusIds != null) ? normalizeManagedIdList(req.body.campusIds) : undefined;
+  const memberships = (req.body && Array.isArray(req.body.memberships))
+    ? req.body.memberships.filter((item) => item && typeof item === 'object').map((item) => ({
+      organizationId: safeString(item.organizationId).trim(),
+      programId: safeString(item.programId || item.branchId).trim(),
+      campusId: safeString(item.campusId).trim(),
+      role: safeString(item.role || role || '').trim(),
+      programType: safeString(item.programType).trim(),
+    })).filter((item) => item.organizationId)
+    : undefined;
+  const newPassword = (req.body && req.body.password != null) ? String(req.body.password) : undefined;
+
+  if (name !== undefined && !name) return res.status(400).json({ ok: false, error: 'name cannot be empty' });
+  if (email !== undefined && !email) return res.status(400).json({ ok: false, error: 'email cannot be empty' });
+
+  let avatar = avatarRaw;
+  if (avatar !== undefined) {
+    if (!avatar) avatar = '';
+    const ok = avatar.startsWith('http://') || avatar.startsWith('https://') || avatar.startsWith('/uploads/');
+    if (!ok) return res.status(400).json({ ok: false, error: 'avatar must be a valid URL or /uploads/... path' });
+    if (avatar.length > 2048) return res.status(400).json({ ok: false, error: 'avatar URL too long' });
+  }
+
+  let phone = phoneRaw;
+  if (phone !== undefined) {
+    if (!phone) phone = '';
+    else {
+      const normalized = normalizeE164Phone(phone);
+      if (!normalized) return res.status(400).json({ ok: false, error: 'phone must be in E.164 format (e.g. +15551234567)' });
+      phone = normalized;
+    }
+  }
+
+  if (newPassword !== undefined) {
+    if (!String(newPassword).trim()) return res.status(400).json({ ok: false, error: 'password cannot be empty' });
+    if (String(newPassword).length < 6) return res.status(400).json({ ok: false, error: 'password must be at least 6 characters' });
+  }
+
+  try {
+    const existingUser = await pgQueryOne('SELECT id,email,role FROM users WHERE id = $1', [userId]);
+    if (!existingUser) return res.status(404).json({ ok: false, error: 'user not found' });
+
+    const requesterIsSuperAdmin = isSuperAdminRole(req.user?.role);
+    const targetIsSuperAdmin = isSuperAdminRole(existingUser.role);
+    const targetProfile = await getFirebaseManagedProfiles([userId]).catch(() => new Map());
+    const targetScopedUser = normalizeScopedUser({ ...existingUser, ...(targetProfile.get(userId) || {}) });
+    if (targetIsSuperAdmin && !requesterIsSuperAdmin) {
+      return res.status(403).json({ ok: false, error: 'super admin required to manage this user' });
+    }
+    if (role !== undefined && isAdminRole(role) && !requesterIsSuperAdmin) {
+      return res.status(403).json({ ok: false, error: 'super admin required to assign elevated roles' });
+    }
+    if (!canManageTargetUser(req.user, targetScopedUser)) {
+      return res.status(403).json({ ok: false, error: 'target user is outside your admin scope' });
+    }
+
+    if (email !== undefined) {
+      const duplicate = await pgQueryOne('SELECT id FROM users WHERE lower(email) = $1 AND id <> $2', [email, userId]);
+      if (duplicate) return res.status(409).json({ ok: false, error: 'email already exists' });
+    }
+
+    const firebaseFields = {};
+    if (name !== undefined) firebaseFields.name = name;
+    if (email !== undefined) firebaseFields.email = email;
+    if (role !== undefined) firebaseFields.role = role;
+    if (organizationId !== undefined) firebaseFields.organizationId = organizationId;
+    if (programIds !== undefined) firebaseFields.programIds = programIds;
+    if (campusIds !== undefined) firebaseFields.campusIds = campusIds;
+    if (memberships !== undefined) firebaseFields.memberships = memberships;
+    if (newPassword !== undefined) firebaseFields.password = newPassword;
+    if (Object.keys(firebaseFields).length) {
+      try {
+        await syncFirebaseManagedUser(userId, firebaseFields);
+      } catch (e) {
+        return res.status(500).json({ ok: false, error: e?.message || 'firebase sync failed' });
+      }
+    }
+
+    const sets = [];
+    const values = [];
+    let i = 1;
+    if (name !== undefined) { sets.push(`name = $${i}`); values.push(name); i += 1; }
+    if (email !== undefined) { sets.push(`email = $${i}`); values.push(email); i += 1; }
+    if (avatar !== undefined) { sets.push(`avatar = $${i}`); values.push(avatar); i += 1; }
+    if (phone !== undefined) { sets.push(`phone = $${i}`); values.push(phone); i += 1; }
+    if (address !== undefined) { sets.push(`address = $${i}`); values.push(address); i += 1; }
+    if (role !== undefined) { sets.push(`role = $${i}`); values.push(role); i += 1; }
+    if (newPassword !== undefined) {
+      const hash = bcrypt.hashSync(newPassword, 12);
+      sets.push(`password_hash = $${i}`);
+      values.push(hash);
+      i += 1;
+    }
+    if (!sets.length) return res.status(400).json({ ok: false, error: 'no fields to update' });
+
+    sets.push(`updated_at = $${i}`);
+    values.push(new Date());
+    i += 1;
+    values.push(userId);
+
+    await pool.query(`UPDATE users SET ${sets.join(', ')} WHERE id = $${i}`, values);
+
+    const row = await pgQueryOne('SELECT id,email,name,avatar,phone,address,role,created_at,updated_at FROM users WHERE id = $1', [userId]);
+    const firebaseProfile = await getFirebaseManagedProfiles([userId]).catch(() => new Map());
+    const scope = firebaseProfile.get(userId) || {};
+    slog.info('admin', 'Managed user updated', {
+      actorId: req.user?.id,
+      targetUserId: userId,
+      roleChanged: role !== undefined,
+      scopeChanged: organizationId !== undefined || programIds !== undefined || campusIds !== undefined || memberships !== undefined,
+    });
+    return res.json({ ok: true, user: {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      avatar: row.avatar || '',
+      phone: row.phone || '',
+      address: row.address || '',
+      role: row.role,
+      organizationId: scope.organizationId || '',
+      programIds: scope.programIds || [],
+      campusIds: scope.campusIds || [],
+      memberships: scope.memberships || [],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    } });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || 'admin update failed' });
+  }
+});
+
+app.delete('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapability('users:manage'), async (req, res) => {
+  const userId = safeString(req.params && req.params.userId).trim();
+  if (!userId) return res.status(400).json({ ok: false, error: 'userId required' });
+  if (userId === safeString(req.user?.id).trim()) return res.status(400).json({ ok: false, error: 'cannot delete the active user via admin endpoint' });
+
+  try {
+    const existingUser = await pgQueryOne('SELECT id,role FROM users WHERE id = $1', [userId]);
+    if (!existingUser) return res.status(404).json({ ok: false, error: 'user not found' });
+
+    const requesterIsSuperAdmin = isSuperAdminRole(req.user?.role);
+    const targetIsAdmin = isAdminRole(existingUser.role);
+    const targetProfile = await getFirebaseManagedProfiles([userId]).catch(() => new Map());
+    const targetScopedUser = normalizeScopedUser({ ...existingUser, ...(targetProfile.get(userId) || {}) });
+    if (targetIsAdmin && !requesterIsSuperAdmin) {
+      return res.status(403).json({ ok: false, error: 'super admin required to delete elevated users' });
+    }
+    if (!canManageTargetUser(req.user, targetScopedUser)) {
+      return res.status(403).json({ ok: false, error: 'target user is outside your admin scope' });
+    }
+
+    try {
+      await deleteFirebaseManagedUser(userId);
+    } catch (e) {
+      const code = String(e?.code || '');
+      const message = String(e?.message || '');
+      if (!code.includes('auth/user-not-found') && !message.toLowerCase().includes('user-not-found')) {
+        return res.status(500).json({ ok: false, error: e?.message || 'firebase delete failed' });
+      }
+    }
+
+    await pool.query('DELETE FROM users WHERE id = $1', [userId]);
+  slog.info('admin', 'Managed user deleted', { actorId: req.user?.id, targetUserId: userId, targetRole: existingUser.role });
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || 'admin delete failed' });
+  }
+});
+
 app.post('/api/auth/signup', authRateLimit, async (req, res) => {
   if (!ALLOW_SIGNUP) return res.status(403).json({ ok: false, error: 'signup disabled' });
 
@@ -1826,6 +2304,7 @@ app.post('/api/auth/signup', authRateLimit, async (req, res) => {
 
   if (!email || !password || !name) return res.status(400).json({ ok: false, error: 'name, email, password required' });
   if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'server missing BB_JWT_SECRET' });
+  if (isRestrictedSignupRole(role)) return res.status(403).json({ ok: false, error: 'elevated roles must be provisioned by an existing administrator' });
 
   const exists = await pgQueryOne('SELECT id FROM users WHERE lower(email) = $1', [email]);
   if (exists) return res.status(409).json({ ok: false, error: 'email already exists' });
@@ -2213,6 +2692,20 @@ app.post('/api/messages', authMiddleware, async (req, res) => {
     [id, threadId, body, jsonb(sender), jsonb(to), t]
   );
 
+  try {
+    const recipientIds = normalizeRecipients(to).filter((uid) => uid !== String(req.user?.id || ''));
+    const tokens = await getPushTokensForUsers(recipientIds, { kind: 'chats' });
+    setTimeout(() => {
+      sendExpoPush(tokens, {
+        title: safeString(sender?.name || 'New message'),
+        body,
+        data: { kind: 'chat_message', messageId: id, threadId: threadId || id },
+      }).catch(() => {});
+    }, 0);
+  } catch (_) {
+    // ignore push failures
+  }
+
   res.status(201).json({ id, threadId: threadId || undefined, body, sender, to, createdAt: t.toISOString() });
 });
 
@@ -2264,6 +2757,23 @@ app.post('/api/urgent-memos', authMiddleware, async (req, res) => {
   );
 
   slog.info('api', 'Urgent memo created', { memoId: id, type: memoObj.type, status: status || undefined });
+
+  try {
+    const recipientIds = (memoObj.type === 'arrival_alert' || memoObj.type === 'time_update')
+      ? await getAdminUserIds()
+      : normalizeRecipients(memoObj.recipients);
+    const tokens = await getPushTokensForUsers(recipientIds, { kind: 'updates' });
+    setTimeout(() => {
+      sendExpoPush(tokens, {
+        title,
+        body: body || 'Open the app for details.',
+        data: { kind: memoObj.type || 'urgent_memo', memoId: id, childId: memoObj.childId || null },
+      }).catch(() => {});
+    }, 0);
+  } catch (_) {
+    // ignore push failures
+  }
+
   res.status(201).json(memoObj);
 });
 

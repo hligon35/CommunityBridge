@@ -58,9 +58,31 @@ export function configureNotificationHandling() {
     handleNotification: async () => ({
       shouldShowAlert: true,
       shouldPlaySound: false,
-      shouldSetBadge: false,
+      shouldSetBadge: true,
     }),
   });
+}
+
+export async function setApplicationBadgeCountAsync(count) {
+  if (Platform.OS === 'web') {
+    return { ok: false, reason: 'web-unsupported' };
+  }
+  if (isExpoGo()) {
+    return { ok: false, reason: 'expo-go' };
+  }
+
+  const Notifications = getNotificationsLib();
+  if (!Notifications || typeof Notifications.setBadgeCountAsync !== 'function') {
+    return { ok: false, reason: 'missing-deps' };
+  }
+
+  try {
+    const safeCount = Number.isFinite(Number(count)) ? Math.max(0, Math.trunc(Number(count))) : 0;
+    const applied = await Notifications.setBadgeCountAsync(safeCount);
+    return { ok: !!applied, count: safeCount };
+  } catch (e) {
+    return { ok: false, reason: 'set-badge-failed', message: e?.message || String(e) };
+  }
 }
 
 export async function registerForExpoPushTokenAsync() {
@@ -111,5 +133,6 @@ export async function registerForExpoPushTokenAsync() {
 
 export default {
   configureNotificationHandling,
+  setApplicationBadgeCountAsync,
   registerForExpoPushTokenAsync,
 };

@@ -51,6 +51,8 @@
     "seed:tenant-directory:dry": "node ./scripts/seed-tenant-directory.js --dry",
     "seed:test-users": "node ./scripts/seed-test-users.js",
     "seed:test-users:dry": "node ./scripts/seed-test-users.js --dry",
+    "role:grant": "node ./scripts/grant-admin-role.js",
+    "role:grant:dry": "node ./scripts/grant-admin-role.js --dry",
     "dev:user:sync": "node ./scripts/sync-dev-account.js",
     "dev:user:sync:dry": "node ./scripts/sync-dev-account.js --dry",
     "cloudrun:secrets": "powershell -ExecutionPolicy Bypass -File ./scripts/create-cloudrun-secrets.ps1 -FromFile ./env/cloudrun.env",

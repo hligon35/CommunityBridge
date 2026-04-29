@@ -6,7 +6,7 @@ import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { MaterialIcons } from '@expo/vector-icons';
 import { logPress } from '../utils/logger';
 import { HelpButton } from '../components/TopButtons';
-import { isAdminRole } from '../core/tenant/models';
+import { buildVisibleThreads } from '../utils/chatThreads';
 
 function timeAgo(iso) {
   if (!iso) return '';
@@ -108,45 +108,7 @@ export default function ChatsScreen({ navigation }) {
     });
   }, [navigation]);
 
-  // Group by threadId (fallback to id)
-  const threads = (messages || []).reduce((acc, msg) => {
-    const key = msg.threadId || msg.threadId === 0 ? msg.threadId : msg.threadId || msg.id || msg.contactId || 'default';
-    acc[key] = acc[key] || { id: key, last: msg, participants: new Set() };
-    // track participants
-    if (msg.sender) acc[key].participants.add(msg.sender.name || msg.sender.id || '');
-    if (msg.to && Array.isArray(msg.to)) msg.to.forEach(t => acc[key].participants.add(t.name || t.id || ''));
-    if (new Date(msg.createdAt) > new Date(acc[key].last.createdAt)) acc[key].last = msg;
-    return acc;
-  }, {});
-
-  const list = Object.values(threads).map((t) => {
-    const latestIncomingAt = (messages || [])
-      .filter((m) => String(m.threadId || m.id) === String(t.id))
-      .filter((m) => String(m.sender?.id || '') !== String(user?.id || ''))
-      .reduce((latest, message) => {
-        const messageMs = Date.parse(String(message?.createdAt || ''));
-        return Number.isFinite(messageMs) && messageMs > latest ? messageMs : latest;
-      }, 0);
-    const readAtMs = Date.parse(String(threadReads?.[String(t.id)] || ''));
-    const isUnread = latestIncomingAt > 0 && (!Number.isFinite(readAtMs) || latestIncomingAt > readAtMs);
-    return {
-      id: t.id,
-      last: t.last,
-      title: Array.from(t.participants).filter(Boolean).slice(0,2).join(', ') || (t.last.sender?.name || 'Conversation'),
-      participants: Array.from(t.participants).filter(Boolean),
-      isUnread,
-    };
-  });
-
-  // enforce access: non-admin users only see threads where they are a participant
-  const visibleList = (user && isAdminRole(user.role)) ? list : list.filter(l => {
-    if (!user) return false;
-    // try matching by id or name
-    return (l.participants || []).some(p => p.toString().toLowerCase().includes((user.id || user.name || '').toString().toLowerCase()));
-  });
-
-  // remove archived threads from visible list
-  const unarchivedList = (visibleList || []).filter(l => !(archivedThreads || []).includes(l.id));
+  const unarchivedList = buildVisibleThreads(messages, threadReads, user, archivedThreads);
   const displayList = ((dateFilterDays && Number(dateFilterDays) > 0)
     ? (unarchivedList || []).filter((t) => {
         const iso = t?.last?.createdAt;
@@ -156,17 +118,7 @@ export default function ChatsScreen({ navigation }) {
         const cutoff = Date.now() - (Number(dateFilterDays) * 24 * 60 * 60 * 1000);
         return ts >= cutoff;
       })
-    : unarchivedList)
-    .slice()
-    .sort((a, b) => {
-      if (!!a?.isUnread !== !!b?.isUnread) return a?.isUnread ? -1 : 1;
-      const aTs = Date.parse(String(a?.last?.createdAt || ''));
-      const bTs = Date.parse(String(b?.last?.createdAt || ''));
-      if (!Number.isFinite(aTs) && !Number.isFinite(bTs)) return 0;
-      if (!Number.isFinite(aTs)) return 1;
-      if (!Number.isFinite(bTs)) return -1;
-      return bTs - aTs;
-    });
+    : unarchivedList);
   const unreadCount = displayList.filter((item) => item?.isUnread).length;
 
   async function onRefresh() {

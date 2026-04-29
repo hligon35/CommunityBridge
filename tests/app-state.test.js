@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const {
   normalizeRoleOverride,
   isDevSwitcherUser,
+  isDemoReviewerUser,
+  isSpecialAccessUser,
   getMfaFreshnessWindowMs,
   DEFAULT_MFA_WINDOW_MS,
   DEV_MFA_WINDOW_MS,
@@ -11,6 +13,9 @@ const {
 const { attachTherapistsToChildren, mergeById } = require('../src/utils/directoryState');
 const { humanizeScreenLabel } = require('../src/utils/screenLabels');
 const { getStorageScopeId, buildScopedStorageKeys, STORAGE_SCOPE_FALLBACK } = require('../src/utils/storageScope');
+const { buildVisibleThreads, countUnreadVisibleThreads } = require('../src/utils/chatThreads');
+const { getEffectiveChatIdentity } = require('../src/utils/demoIdentity');
+const { canManageTargetUser, filterManageableUsers } = require('../scripts/admin-scope');
 
 test('normalizeRoleOverride maps supported role aliases', () => {
   assert.equal(normalizeRoleOverride(' Administrator '), 'admin');
@@ -22,7 +27,11 @@ test('normalizeRoleOverride maps supported role aliases', () => {
 test('dev switcher user and MFA window honor the controlled dev account', () => {
   assert.equal(isDevSwitcherUser('dev@communitybridge.app'), true);
   assert.equal(isDevSwitcherUser('other@communitybridge.app'), false);
+  assert.equal(isDemoReviewerUser('appreview@communitybridge.app'), true);
+  assert.equal(isSpecialAccessUser('appreview@communitybridge.app'), true);
+  assert.equal(isSpecialAccessUser('dev@communitybridge.app'), true);
   assert.equal(getMfaFreshnessWindowMs({ email: 'dev@communitybridge.app' }), DEV_MFA_WINDOW_MS);
+  assert.equal(getMfaFreshnessWindowMs({ email: 'appreview@communitybridge.app' }), DEV_MFA_WINDOW_MS);
   assert.equal(getMfaFreshnessWindowMs({ email: 'other@communitybridge.app' }), DEFAULT_MFA_WINDOW_MS);
 });
 
@@ -81,4 +90,102 @@ test('buildScopedStorageKeys creates distinct keys per user scope', () => {
   assert.equal(alpha.messages, 'bbs_messages_v1::alpha');
   assert.notEqual(alpha.posts, beta.posts);
   assert.notEqual(alpha.blocked, beta.blocked);
+});
+
+test('org admin can only manage non-admin users in the same organization', () => {
+  const actor = { role: 'orgAdmin', organizationId: 'org-1' };
+  assert.equal(canManageTargetUser(actor, { role: 'parent', organizationId: 'org-1' }), true);
+  assert.equal(canManageTargetUser(actor, { role: 'parent', organizationId: 'org-2' }), false);
+  assert.equal(canManageTargetUser(actor, { role: 'admin', organizationId: 'org-1' }), false);
+});
+
+test('campus admin can only manage non-admin users with overlapping campus scope', () => {
+  const actor = { role: 'campusAdmin', organizationId: 'org-1', campusIds: ['campus-a'] };
+  assert.equal(canManageTargetUser(actor, { role: 'parent', organizationId: 'org-1', campusIds: ['campus-a'] }), true);
+  assert.equal(canManageTargetUser(actor, { role: 'parent', organizationId: 'org-1', campusIds: ['campus-b'] }), false);
+  assert.equal(canManageTargetUser(actor, { role: 'parent', organizationId: 'org-2', campusIds: ['campus-a'] }), false);
+});
+
+test('filterManageableUsers keeps global admins away from elevated targets but not regular users', () => {
+  const actor = { role: 'admin' };
+  const items = filterManageableUsers(actor, [
+    { id: '1', role: 'parent' },
+    { id: '2', role: 'orgAdmin', organizationId: 'org-1' },
+    { id: '3', role: 'therapist' },
+  ]);
+  assert.deepEqual(items.map((item) => item.id), ['1', '3']);
+});
+
+test('visible chat threads and unread counts stay scoped to the active user', () => {
+  const messages = [
+    {
+      id: 'thread-parent',
+      threadId: 'thread-parent',
+      createdAt: '2026-04-28T10:00:00.000Z',
+      sender: { id: 'therapist-1', name: 'Therapist One' },
+      to: [{ id: 'parent-1', name: 'Parent One' }],
+    },
+    {
+      id: 'thread-admin',
+      threadId: 'thread-admin',
+      createdAt: '2026-04-28T11:00:00.000Z',
+      sender: { id: 'therapist-2', name: 'Therapist Two' },
+      to: [{ id: 'admin-1', name: 'Admin One' }],
+    },
+  ];
+
+  const parentThreads = buildVisibleThreads(messages, {}, { id: 'parent-1', role: 'parent' }, []);
+  assert.deepEqual(parentThreads.map((thread) => thread.id), ['thread-parent']);
+  assert.equal(countUnreadVisibleThreads(messages, {}, { id: 'parent-1', role: 'parent' }, []), 1);
+  assert.equal(countUnreadVisibleThreads(messages, {}, { id: 'parent-2', role: 'parent' }, []), 0);
+  assert.equal(countUnreadVisibleThreads(messages, {}, { id: 'admin-1', role: 'admin' }, []), 2);
+  assert.equal(countUnreadVisibleThreads(messages, {}, { id: 'admin-1', role: 'admin' }, ['thread-admin']), 1);
+});
+
+test('special-access users resolve to the active demo chat persona', () => {
+  assert.deepEqual(
+    getEffectiveChatIdentity({ id: 'firebase-user', email: 'appreview@communitybridge.app', role: 'admin' }),
+    { id: 'admin-demo', name: 'Jordan Admin', email: 'admin-demo@communitybridge.app', role: 'admin' }
+  );
+  assert.deepEqual(
+    getEffectiveChatIdentity({ id: 'firebase-user', email: 'dev@communitybridge.app', role: 'therapist' }),
+    { id: 'ABA-001', name: 'Daniel Lopez', email: 'daniel.lopez@communitybridge.app', role: 'therapist' }
+  );
+  assert.deepEqual(
+    getEffectiveChatIdentity({ id: 'firebase-user', email: 'dev@communitybridge.app', role: 'parent' }),
+    { id: 'PT-001', name: 'Carlos Garcia', email: 'carlos.garcia@communitybridge.app', role: 'parent' }
+  );
+});
+
+test('special-access chat visibility follows the active role persona instead of the shared login id', () => {
+  const messages = [
+    {
+      id: 'admin-thread-1',
+      threadId: 'admin-thread',
+      createdAt: '2026-04-28T10:00:00.000Z',
+      sender: { id: 'admin-demo', name: 'Jordan Admin' },
+      to: [{ id: 'ABA-001', name: 'Daniel Lopez' }],
+    },
+    {
+      id: 'parent-thread-1',
+      threadId: 'parent-thread',
+      createdAt: '2026-04-28T11:00:00.000Z',
+      sender: { id: 'ABA-001', name: 'Daniel Lopez' },
+      to: [{ id: 'PT-001', name: 'Carlos Garcia' }],
+    },
+  ];
+
+  const sharedLogin = { id: 'firebase-user', email: 'appreview@communitybridge.app' };
+  assert.deepEqual(
+    buildVisibleThreads(messages, {}, { ...sharedLogin, role: 'admin' }, []).map((thread) => thread.id),
+    ['parent-thread', 'admin-thread']
+  );
+  assert.deepEqual(
+    buildVisibleThreads(messages, {}, { ...sharedLogin, role: 'therapist' }, []).map((thread) => thread.id),
+    ['admin-thread', 'parent-thread']
+  );
+  assert.deepEqual(
+    buildVisibleThreads(messages, {}, { ...sharedLogin, role: 'parent' }, []).map((thread) => thread.id),
+    ['parent-thread']
+  );
 });

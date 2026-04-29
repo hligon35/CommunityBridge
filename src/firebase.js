@@ -155,17 +155,275 @@ const WEB_SDKCONFIG_FALLBACK = {
   measurementId: 'G-HYK2C00ZRK',
 };
 
+const IOS_SDKCONFIG_FALLBACK = {
+  apiKey: 'AIzaSyDP9ZCQ3MSzo5ugidAbdqw7f20ZUU2gf68',
+  authDomain: 'communitybridge-26apr.firebaseapp.com',
+  projectId: 'communitybridge-26apr',
+  storageBucket: 'communitybridge-26apr.firebasestorage.app',
+  messagingSenderId: '752508556236',
+  appId: '1:752508556236:ios:e328734571597e42c14369',
+};
+
 const webFallback = Platform.OS === 'web' ? WEB_SDKCONFIG_FALLBACK : null;
+const JS_SDK_FALLBACK = WEB_SDKCONFIG_FALLBACK;
+
+function isWebFirebaseAppId(value) {
+  return String(value || '').includes(':web:');
+}
+
+function isJsSdkFirebaseAppId(value) {
+  return isWebFirebaseAppId(value);
+}
+
+function getFirebaseConfigValue(key) {
+  const envValue = getExpoPublicEnv(key);
+
+  if (Platform.OS === 'web') {
+    if (key === 'EXPO_PUBLIC_FIREBASE_APP_ID') {
+      if (isWebFirebaseAppId(envValue)) return envValue;
+      return webFallback?.appId || envValue || fromGoogleServices?.appId || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_API_KEY') {
+      return webFallback?.apiKey || envValue || fromGoogleServices?.apiKey || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN') {
+      return webFallback?.authDomain || envValue || fromGoogleServices?.authDomain || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_PROJECT_ID') {
+      return webFallback?.projectId || envValue || fromGoogleServices?.projectId || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET') {
+      return webFallback?.storageBucket || envValue || fromGoogleServices?.storageBucket || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') {
+      return webFallback?.messagingSenderId || envValue || fromGoogleServices?.messagingSenderId || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID') {
+      return webFallback?.measurementId || envValue || '';
+    }
+  }
+
+  if (Platform.OS === 'ios') {
+    if (key === 'EXPO_PUBLIC_FIREBASE_APP_ID') {
+      if (isJsSdkFirebaseAppId(envValue)) return envValue;
+      return JS_SDK_FALLBACK?.appId || envValue || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_API_KEY') {
+      return JS_SDK_FALLBACK?.apiKey || envValue || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN') {
+      return JS_SDK_FALLBACK?.authDomain || envValue || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_PROJECT_ID') {
+      return JS_SDK_FALLBACK?.projectId || envValue || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET') {
+      return JS_SDK_FALLBACK?.storageBucket || envValue || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') {
+      return JS_SDK_FALLBACK?.messagingSenderId || envValue || '';
+    }
+  }
+
+  if (Platform.OS === 'android') {
+    if (key === 'EXPO_PUBLIC_FIREBASE_APP_ID') {
+      if (isJsSdkFirebaseAppId(envValue)) return envValue;
+      return JS_SDK_FALLBACK?.appId || envValue || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_API_KEY') {
+      return JS_SDK_FALLBACK?.apiKey || envValue || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN') {
+      return JS_SDK_FALLBACK?.authDomain || envValue || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_PROJECT_ID') {
+      return JS_SDK_FALLBACK?.projectId || envValue || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET') {
+      return JS_SDK_FALLBACK?.storageBucket || envValue || '';
+    }
+
+    if (key === 'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') {
+      return JS_SDK_FALLBACK?.messagingSenderId || envValue || '';
+    }
+  }
+
+  return envValue;
+}
 
 const firebaseConfig = {
-  apiKey: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_API_KEY') || webFallback?.apiKey || fromGoogleServices?.apiKey || '',
-  authDomain: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN') || webFallback?.authDomain || fromGoogleServices?.authDomain || '',
-  projectId: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_PROJECT_ID') || webFallback?.projectId || fromGoogleServices?.projectId || '',
-  storageBucket: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET') || webFallback?.storageBucket || fromGoogleServices?.storageBucket || '',
-  messagingSenderId: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') || webFallback?.messagingSenderId || fromGoogleServices?.messagingSenderId || '',
-  appId: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_APP_ID') || webFallback?.appId || fromGoogleServices?.appId || '',
-  measurementId: getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID') || webFallback?.measurementId,
+  apiKey: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_API_KEY') || fromGoogleServices?.apiKey || '',
+  authDomain: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN') || fromGoogleServices?.authDomain || '',
+  projectId: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_PROJECT_ID') || fromGoogleServices?.projectId || '',
+  storageBucket: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET') || fromGoogleServices?.storageBucket || '',
+  messagingSenderId: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') || fromGoogleServices?.messagingSenderId || '',
+  appId: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_APP_ID') || fromGoogleServices?.appId || '',
+  measurementId: getFirebaseConfigValue('EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID') || webFallback?.measurementId,
 };
+
+function maskValue(value, keepStart = 6, keepEnd = 4) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (text.length <= keepStart + keepEnd) return text;
+  return `${text.slice(0, keepStart)}...${text.slice(-keepEnd)}`;
+}
+
+function getAppIdPlatform(value) {
+  const text = String(value || '');
+  if (text.includes(':web:')) return 'web';
+  if (text.includes(':ios:')) return 'ios';
+  if (text.includes(':android:')) return 'android';
+  return 'unknown';
+}
+
+export function getFirebaseConfigDebugInfo() {
+  return {
+    platform: Platform.OS,
+    projectId: String(firebaseConfig.projectId || ''),
+    authDomain: String(firebaseConfig.authDomain || ''),
+    appIdHint: maskValue(firebaseConfig.appId, 14, 8),
+    appIdPlatform: getAppIdPlatform(firebaseConfig.appId),
+    apiKeyHint: maskValue(firebaseConfig.apiKey, 10, 4),
+    storageBucket: String(firebaseConfig.storageBucket || ''),
+    messagingSenderId: String(firebaseConfig.messagingSenderId || ''),
+    usingJsSdkFallback: Platform.OS !== 'web',
+  };
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  let timeoutId = null;
+  try {
+    if (controller) {
+      timeoutId = setTimeout(() => {
+        try { controller.abort(); } catch (_) {}
+      }, timeoutMs);
+    }
+    const response = await fetch(url, {
+      ...options,
+      ...(controller ? { signal: controller.signal } : {}),
+    });
+    return response;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function probeFirebaseEndpoint(name, url, options) {
+  try {
+    const response = await fetchWithTimeout(url, options, 8000);
+    let body = '';
+    try {
+      body = await response.text();
+    } catch (_) {
+      body = '';
+    }
+    return {
+      name,
+      ok: response.ok,
+      status: Number(response.status || 0),
+      bodyHint: maskValue(body.replace(/\s+/g, ' ').trim(), 80, 0),
+    };
+  } catch (error) {
+    return {
+      name,
+      ok: false,
+      status: 0,
+      errorName: String(error?.name || ''),
+      errorMessage: String(error?.message || error || ''),
+    };
+  }
+}
+
+async function probeFirebaseJsonEndpoint(name, url, options) {
+  try {
+    const response = await fetchWithTimeout(url, options, 8000);
+    let json = null;
+    try {
+      json = await response.json();
+    } catch (_) {
+      json = null;
+    }
+    return {
+      name,
+      ok: response.ok,
+      status: Number(response.status || 0),
+      json,
+    };
+  } catch (error) {
+    return {
+      name,
+      ok: false,
+      status: 0,
+      errorName: String(error?.name || ''),
+      errorMessage: String(error?.message || error || ''),
+      json: null,
+    };
+  }
+}
+
+export async function probeFirebaseAuthNetwork() {
+  const apiKey = String(firebaseConfig.apiKey || '').trim();
+  const signInUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(apiKey)}`;
+  const tokenUrl = `https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(apiKey)}`;
+
+  const [identityToolkit, secureExchange] = await Promise.all([
+    probeFirebaseEndpoint('identityToolkit', signInUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'probe@communitybridge.app', password: 'invalid', returnSecureToken: true }),
+    }),
+    probeFirebaseEndpoint('secureToken', tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'grant_type=refresh_token&refresh_token=invalid',
+    }),
+  ]);
+
+  return {
+    config: getFirebaseConfigDebugInfo(),
+    identityToolkit,
+    secureExchange,
+  };
+}
+
+export async function probeFirebasePasswordSignIn(email, password) {
+  const apiKey = String(firebaseConfig.apiKey || '').trim();
+  const signInUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(apiKey)}`;
+
+  const result = await probeFirebaseJsonEndpoint('passwordSignIn', signInUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: String(email || '').trim(),
+      password: String(password || ''),
+      returnSecureToken: true,
+    }),
+  });
+
+  return {
+    name: result.name,
+    ok: result.ok,
+    status: result.status,
+    errorMessage: String(result?.json?.error?.message || result?.errorMessage || ''),
+    localIdHint: maskValue(result?.json?.localId || '', 6, 4),
+  };
+}
 
 const required = ['apiKey', 'projectId', 'appId'];
 const missing = required.filter((k) => !firebaseConfig[k]);

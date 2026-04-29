@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import { logger } from './utils/logger';
-import { getAuthInstance, getAuthInitError, db, storage, functions } from './firebase';
+import { getAuthInstance, getAuthInitError, getFirebaseConfigDebugInfo, probeFirebaseAuthNetwork, probeFirebasePasswordSignIn, db, storage, functions } from './firebase';
 import { BASE_URL } from './config';
 import { DEFAULT_AVATAR_TOKEN } from './utils/idVisibility';
 import { isAdminRole } from './core/tenant/models';
@@ -231,7 +231,44 @@ async function upsertUserProfile(uid, fields) {
 export async function login(email, password) {
   const e = normalizeEmailInput(email);
   const a = requireAuth();
-  const cred = await signInWithEmailAndPassword(a, e, String(password || ''));
+  let cred;
+  try {
+    cred = await signInWithEmailAndPassword(a, e, String(password || ''));
+  } catch (error) {
+    const code = String(error?.code || '');
+    if (code === 'auth/network-request-failed' || isLikelyNetworkError(error)) {
+      const configInfo = getFirebaseConfigDebugInfo();
+      logger.warn('auth', 'Firebase auth network failure diagnostics: config', configInfo);
+      try {
+        const probe = await probeFirebaseAuthNetwork();
+        logger.warn('auth', 'Firebase auth network failure diagnostics: probe', probe);
+        error.firebaseNetworkProbe = probe;
+      } catch (probeError) {
+        logger.warn('auth', 'Firebase auth network failure diagnostics: probe failed', {
+          message: String(probeError?.message || probeError || ''),
+        });
+      }
+
+      try {
+        const credentialProbe = await probeFirebasePasswordSignIn(e, String(password || ''));
+        logger.warn('auth', 'Firebase auth network failure diagnostics: passwordProbe', credentialProbe);
+        error.firebasePasswordProbe = credentialProbe;
+
+        if (!credentialProbe.ok && credentialProbe.errorMessage === 'INVALID_LOGIN_CREDENTIALS') {
+          const invalidCredsError = new Error('Invalid email or password.');
+          invalidCredsError.code = 'auth/invalid-credential';
+          invalidCredsError.firebasePasswordProbe = credentialProbe;
+          throw invalidCredsError;
+        }
+      } catch (probeError) {
+        if (probeError?.code === 'auth/invalid-credential') throw probeError;
+        logger.warn('auth', 'Firebase auth network failure diagnostics: passwordProbe failed', {
+          message: String(probeError?.message || probeError || ''),
+        });
+      }
+    }
+    throw error;
+  }
   const token = await getIdToken(cred.user, true);
   const profile = (await getUserProfile(cred.user.uid)) || (await upsertUserProfile(cred.user.uid, {
     name: cred.user.displayName || '',
@@ -267,6 +304,12 @@ export async function signup(payload) {
   const programId = String(payload?.programId || '').trim();
   const campusId = String(payload?.campusId || '').trim();
   const enrollmentCode = String(payload?.enrollmentCode || '').trim();
+
+  if (isAdminRole(role)) {
+    const err = new Error('Elevated roles must be provisioned by an existing administrator.');
+    err.code = 'BB_ELEVATED_ROLE_REQUIRES_ADMIN';
+    throw err;
+  }
 
   let enrollmentContext = null;
   if (organizationId || programId || campusId || enrollmentCode) {
@@ -553,6 +596,83 @@ export async function updateMe(payload) {
     // keep update successful even if token refresh is temporarily unavailable
   }
   return { ok: true, token, user: profile };
+}
+
+export async function listManagedUsers() {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Admin user management requires the API server.');
+    err.code = 'BB_ADMIN_USERS_API_REQUIRED';
+    throw err;
+  }
+
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/admin/users`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load managed users.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, items: Array.isArray(json.items) ? json.items : [] };
+}
+
+export async function updateManagedUser(userId, payload) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Admin user management requires the API server.');
+    err.code = 'BB_ADMIN_USERS_API_REQUIRED';
+    throw err;
+  }
+
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/admin/users/${encodeURIComponent(String(userId || ''))}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not update user.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, user: json.user || null };
+}
+
+export async function deleteManagedUser(userId) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Admin user management requires the API server.');
+    err.code = 'BB_ADMIN_USERS_API_REQUIRED';
+    throw err;
+  }
+
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/admin/users/${encodeURIComponent(String(userId || ''))}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not delete user.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true };
 }
 
 async function getPostComments(postId, max = 50) {
@@ -1211,16 +1331,114 @@ export async function mergeDirectory(payload) {
 }
 
 export async function getOrgSettings() {
-  requireUser();
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (apiBase) {
+    try {
+      const idToken = await u.getIdToken(true);
+      const resp = await fetchWithTimeout(`${apiBase}/api/org-settings`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+      const json = await resp.json().catch(() => null);
+      if (!resp.ok || !json || json.ok !== true) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load organization settings.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+      return { ok: true, item: json.item || null };
+    } catch (err) {
+      const status = Number(err?.httpStatus || 0);
+      if (!isLikelyNetworkError(err) && status !== 404 && status < 500) throw err;
+    }
+  }
   const snap = await getDoc(doc(db, 'orgSettings', 'main'));
   if (!snap.exists()) return null;
   return { ok: true, item: { id: snap.id, ...(snap.data() || {}) } };
 }
 
 export async function updateOrgSettings(payload) {
-  requireUser();
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (apiBase) {
+    try {
+      const idToken = await u.getIdToken(true);
+      const resp = await fetchWithTimeout(`${apiBase}/api/org-settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(payload || {}),
+      });
+      const json = await resp.json().catch(() => null);
+      if (!resp.ok || !json || json.ok !== true) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not save organization settings.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+      return { ok: true, item: json.item || null };
+    } catch (err) {
+      const status = Number(err?.httpStatus || 0);
+      if (!isLikelyNetworkError(err) && status !== 404 && status < 500) throw err;
+    }
+  }
   await setDoc(doc(db, 'orgSettings', 'main'), { ...(payload || {}), updatedAt: serverTimestamp() }, { merge: true });
   return { ok: true };
+}
+
+export async function getPermissionsConfig() {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Permissions configuration requires the API server.');
+    err.code = 'BB_PERMISSIONS_API_REQUIRED';
+    throw err;
+  }
+
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/permissions-config`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load permissions configuration.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, item: json.item || {} };
+}
+
+export async function updatePermissionsConfig(payload) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Permissions configuration requires the API server.');
+    err.code = 'BB_PERMISSIONS_API_REQUIRED';
+    throw err;
+  }
+
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/permissions-config`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not save permissions configuration.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, item: json.item || {} };
 }
 
 export async function respondTimeChange(proposalId, action) {
@@ -1388,6 +1606,9 @@ export default {
   resetPassword,
   me,
   updateMe,
+  listManagedUsers,
+  updateManagedUser,
+  deleteManagedUser,
   getPosts,
   createPost,
   likePost,
@@ -1412,6 +1633,8 @@ export default {
   mergeDirectory,
   getOrgSettings,
   updateOrgSettings,
+  getPermissionsConfig,
+  updatePermissionsConfig,
   respondTimeChange,
   sharePost,
   registerPushToken,

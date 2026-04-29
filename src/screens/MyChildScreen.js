@@ -14,7 +14,7 @@ import { isAdminRole } from '../core/tenant/models';
 
 export default function MyChildScreen() {
   const route = useRoute();
-  const { children, parents, urgentMemos, sendTimeUpdateAlert, timeChangeProposals, proposeTimeChange, respondToProposal, respondToUrgentMemo } = useData();
+  const { children, parents, urgentMemos, timeChangeProposals, proposeTimeChange, respondToProposal, respondToUrgentMemo } = useData();
   const { user } = useAuth();
   const tenant = useTenant() || {};
   const childProfileMode = tenant.childProfileMode || { mode: 'family', entityLabel: 'child', collectionLabel: 'children', profileTitle: 'My Child', profileSummaryTitle: 'Family Overview' };
@@ -69,17 +69,7 @@ export default function MyChildScreen() {
 
   const childProposals = (timeChangeProposals || []).filter((p) => p.childId === child.id);
   const [proposePreset, setProposePreset] = useState('10m_later');
-  const [showTimeAlertModal, setShowTimeAlertModal] = useState(false);
-  const [timeAlertType, setTimeAlertType] = useState('pickup');
-  const [timeAlertDate, setTimeAlertDate] = useState(new Date());
-
-  function clamp(n, min, max) {
-    return Math.max(min, Math.min(max, n));
-  }
-
-  const moodScore = clamp(Number(child?.moodScore ?? child?.mood ?? 10) || 10, 1, 15);
-  const moodPct = ((moodScore - 1) / 14) * 100;
-  const moodColor = moodScore <= 4 ? '#ef4444' : moodScore <= 8 ? '#F59E0B' : moodScore <= 12 ? '#FBBF24' : '#10B981';
+  const [expandedReviewSection, setExpandedReviewSection] = useState(null);
 
   async function submitProposal(offsetMillis) {
     try {
@@ -128,60 +118,55 @@ export default function MyChildScreen() {
     Linking.openURL(`mailto:${email}`).catch(() => {});
   };
 
-  const dailySessions = useMemo(() => {
-    const baseDrop = child?.dropoffTimeISO ? new Date(child.dropoffTimeISO) : null;
-    const basePick = child?.pickupTimeISO ? new Date(child.pickupTimeISO) : null;
+  const dailyReviewSections = useMemo(() => ([
+    {
+      key: 'daily-recap',
+      title: 'Session Summary',
+      content: child?.notes || 'No daily recap has been recorded yet.',
+    },
+    {
+      key: 'monthly-goal',
+      title: 'Monthly Focus',
+      content: child?.monthlyGoal || child?.carePlan || 'No monthly goal has been recorded yet.',
+    },
+    {
+      key: 'success-criteria',
+      title: 'Milestones Met',
+      content: child?.successCriteria || child?.goalProgress || 'No success criteria have been recorded yet.',
+    },
+    {
+      key: 'programs-worked-on',
+      title: 'Programs Covered',
+      content: child?.curriculum || child?.programCurriculum || 'No worked-on programs have been recorded yet.',
+    },
+    {
+      key: 'interfering-behavior',
+      title: 'Behavior Tracking',
+      content: child?.interferingBehaviorLevels || child?.behaviorNotes || 'No interfering behavior levels have been recorded yet.',
+    },
+  ]), [child]);
 
-    const days = [];
-    for (let i = 0; i < 7; i += 1) {
-      const d = new Date();
-      d.setHours(0, 0, 0, 0);
-      d.setDate(d.getDate() + i);
-      days.push(d);
-    }
+  const linkedParents = useMemo(() => {
+    if (!Array.isArray(parents) || !child?.id) return [];
+    return parents.filter((parent) => childHasParent(child, parent?.id));
+  }, [child, parents]);
 
-    function timeOnDay(day, base) {
-      if (!base || Number.isNaN(base.getTime())) return null;
-      const dt = new Date(day);
-      dt.setHours(base.getHours(), base.getMinutes(), 0, 0);
-      return dt;
-    }
+  const studentTherapistCards = useMemo(() => {
+    const raw = [
+      child?.bcaTherapist ? { ...child.bcaTherapist, cardKey: `bca-${child.bcaTherapist.id || child.bcaTherapist.name || 'therapist'}` } : null,
+      child?.amTherapist ? { ...child.amTherapist, cardKey: `am-${child.amTherapist.id || child.amTherapist.name || 'therapist'}` } : null,
+      child?.pmTherapist ? { ...child.pmTherapist, cardKey: `pm-${child.pmTherapist.id || child.pmTherapist.name || 'therapist'}` } : null,
+    ].filter(Boolean);
 
-    function formatDayLabel(day) {
-      try {
-        return day.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-      } catch (e) {
-        return String(day);
-      }
-    }
-
-    function formatTime(t) {
-      if (!t || Number.isNaN(t.getTime())) return '—';
-      try {
-        return t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      } catch (e) {
-        return t.toLocaleString();
-      }
-    }
-
-    return days.map((day, idx) => {
-      const drop = timeOnDay(day, baseDrop);
-      const pick = timeOnDay(day, basePick);
-      const therapist = (child?.session === 'AM')
-        ? child?.amTherapist
-        : (child?.session === 'PM')
-          ? child?.pmTherapist
-          : (child?.amTherapist || child?.pmTherapist);
-      return {
-        id: `${child?.id || 'child'}_${idx}_${day.toISOString().slice(0, 10)}`,
-        label: formatDayLabel(day),
-        dropoff: formatTime(drop),
-        pickup: formatTime(pick),
-        session: child?.session || 'Session',
-        room: child?.room || '',
-        therapistName: therapist?.name || '',
-      };
+    const unique = [];
+    const seen = new Set();
+    raw.forEach((item) => {
+      const key = String(item?.id || item?.email || item?.name || item?.cardKey || '').trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      unique.push(item);
     });
+    return unique;
   }, [child]);
 
   const programDocs = useMemo(() => {
@@ -233,49 +218,30 @@ export default function MyChildScreen() {
   return (
     <ScreenWrapper bannerShowBack={false} style={{ flex: 1 }}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12 }}>
-      {/* Child selector - only show if user has multiple children */}
-      {childList.length > 1 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} pagingEnabled={false}>
-          {childList.map((c, i) => (
-            <TouchableOpacity key={c.id || i} onPress={() => setSelectedIndex(i)} style={[styles.selectorItem, selectedIndex === i && styles.selectorActive]}>
-              <Image source={avatarSourceFor(c)} style={styles.selectorAvatar} />
-              <Text style={styles.selectorName}>{shortName(c.name, 12)}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      ) : null}
       {/* Developer action moved to DevRoleSwitcher */}
-
-      {childProfileMode.profileSummaryTitle ? (
-        <Text style={styles.summaryTitle}>{childProfileMode.profileSummaryTitle}</Text>
-      ) : null}
 
       <View style={styles.card}>
         <Image source={avatarSourceFor(child)} style={styles.avatar} />
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={styles.name}>{shortName(child.name, 20)}</Text>
-          <Text style={styles.meta}>{child.age} • {child.room}</Text>
+          {(child.age || child.room) ? (
+            <Text style={styles.meta}>{[child.age, child.room].filter(Boolean).join(' • ')}</Text>
+          ) : null}
         </View>
       </View>
 
-      <View style={styles.halfRow}>
-        <View style={[styles.section, styles.halfTile, styles.needsTile]}>
-          <Text style={styles.sectionTitle}>{`${possessivePrefix} needs...`}</Text>
-          <Text style={styles.sectionText}>{child.notes || 'No notes available.'}</Text>
+      {childList.length ? (
+        <View style={styles.linkedChildrenWrap}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.linkedChildrenTrack} pagingEnabled={false}>
+            {childList.map((c, i) => (
+              <TouchableOpacity key={c.id || i} onPress={() => setSelectedIndex(i)} style={[styles.linkedChildCard, selectedIndex === i ? styles.linkedChildCardSelected : null]} activeOpacity={0.88}>
+                <Image source={avatarSourceFor(c)} style={styles.linkedChildAvatar} />
+                <Text style={styles.linkedChildName} numberOfLines={1}>{shortName(c.name, 12) || 'Child'}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
-
-        <View style={[styles.section, styles.halfTile, styles.moodTile]}>
-          <Text style={styles.sectionTitle}>Mood</Text>
-          <Text style={[styles.sectionText, { marginBottom: 8 }]}>Score: {moodScore} / 15</Text>
-          <View style={styles.moodMeterOuter}>
-            <View style={[styles.moodMeterFill, { width: `${moodPct}%`, backgroundColor: moodColor }]} />
-          </View>
-          <View style={styles.moodMeterLabels}>
-            <Text style={styles.moodLabel}>1 (bad)</Text>
-            <Text style={styles.moodLabel}>15 (awesome)</Text>
-          </View>
-        </View>
-      </View>
+      ) : null}
 
       {/* Propose modal */}
       {showProposeModal && (
@@ -331,72 +297,28 @@ export default function MyChildScreen() {
       )}
 
       <View style={styles.scheduleWrap}>
-        <Text style={styles.scheduleGroupTitle}>Schedule</Text>
+        <Text style={styles.scheduleGroupTitle}>Daily Review</Text>
 
-        <View style={[styles.section, { marginTop: 8 }]}>
-          <Text style={styles.sectionTitle}>Daily Sessions</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 6 }}>
-            {(dailySessions || []).map((s) => (
-              <View key={s.id} style={styles.sessionCard}>
-                <Text style={styles.sessionDay}>{s.label}</Text>
-                <Text style={styles.sessionMeta}>{s.session}{s.room ? ` • ${s.room}` : ''}</Text>
-                <View style={{ height: 8 }} />
-                <Text style={styles.sessionTimeLabel}>Drop-off</Text>
-                <Text style={styles.sessionTime}>{s.dropoff}</Text>
-                <View style={{ height: 6 }} />
-                <Text style={styles.sessionTimeLabel}>Pick-up</Text>
-                <Text style={styles.sessionTime}>{s.pickup}</Text>
-                {s.therapistName ? (
-                  <Text style={styles.sessionTherapist} numberOfLines={1}>Therapist: {s.therapistName}</Text>
+        <View style={styles.reviewAccordionList}>
+          {dailyReviewSections.map((section) => {
+            const isExpanded = expandedReviewSection === section.key;
+            return (
+              <TouchableOpacity
+                key={section.key}
+                style={styles.reviewAccordionCard}
+                activeOpacity={0.9}
+                onPress={() => setExpandedReviewSection(isExpanded ? null : section.key)}
+              >
+                <View style={styles.reviewAccordionHeader}>
+                  <Text style={styles.reviewAccordionTitle}>{section.title}</Text>
+                  <MaterialIcons name={isExpanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={28} color="#667085" />
+                </View>
+                {isExpanded ? (
+                  <Text style={styles.reviewAccordionContent}>{section.content}</Text>
                 ) : null}
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-
-        <View style={[styles.section, { marginTop: 8 }]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
-            {/* Drop-off container */}
-            <TouchableOpacity onPress={() => { setTimeAlertType('dropoff'); setTimeAlertDate(new Date(child.dropoffTimeISO || Date.now())); setShowTimeAlertModal(true); }} style={styles.scheduleTile}>
-              <Text style={styles.scheduleLabel}>Drop-off</Text>
-              <View style={styles.scheduleDivider} />
-              <Text style={styles.scheduleTime}>{formatISO(child.dropoffTimeISO)}</Text>
-              {/* status indicator */}
-              {(() => {
-                const memo = (urgentMemos || []).find((m) => m.childId === child.id && m.type === 'time_update' && m.updateType === 'dropoff');
-                if (!memo) return null;
-                const color = memo.status === 'accepted' ? '#10B981' : memo.status === 'denied' ? '#ef4444' : '#F59E0B';
-                return <View style={[styles.statusDot, { backgroundColor: color }]} />;
-              })()}
-              {(() => {
-                const memo = (urgentMemos || []).find((m) => m.childId === child.id && m.type === 'time_update' && m.updateType === 'dropoff');
-                if (memo && memo.status === 'denied') {
-                  return <Text style={styles.callBanner}>Please call</Text>;
-                }
-                return null;
-              })()}
-            </TouchableOpacity>
-
-            {/* Pick-up container */}
-            <TouchableOpacity onPress={() => { setTimeAlertType('pickup'); setTimeAlertDate(new Date(child.pickupTimeISO || Date.now())); setShowTimeAlertModal(true); }} style={styles.scheduleTile}>
-              <Text style={styles.scheduleLabel}>Pick-up</Text>
-              <View style={styles.scheduleDivider} />
-              <Text style={styles.scheduleTime}>{formatISO(child.pickupTimeISO)}</Text>
-              {(() => {
-                const memo = (urgentMemos || []).find((m) => m.childId === child.id && m.type === 'time_update' && m.updateType === 'pickup');
-                if (!memo) return null;
-                const color = memo.status === 'accepted' ? '#10B981' : memo.status === 'denied' ? '#ef4444' : '#F59E0B';
-                return <View style={[styles.statusDot, { backgroundColor: color }]} />;
-              })()}
-              {(() => {
-                const memo = (urgentMemos || []).find((m) => m.childId === child.id && m.type === 'time_update' && m.updateType === 'pickup');
-                if (memo && memo.status === 'denied') {
-                  return <Text style={styles.callBanner}>Please call</Text>;
-                }
-                return null;
-              })()}
-            </TouchableOpacity>
-          </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         <View style={styles.section}>
@@ -496,116 +418,120 @@ export default function MyChildScreen() {
         </View>
       </View>
 
-      {/* Time alert modal */}
-      {showTimeAlertModal && (
-        <Modal transparent visible animationType="fade">
-          <TouchableWithoutFeedback onPress={() => setShowTimeAlertModal(false)}>
-            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' }}>
-              <TouchableWithoutFeedback>
-                <View style={{ width: '90%', backgroundColor: '#fff', padding: 12, borderRadius: 8 }}>
-                  <Text style={{ fontWeight: '700', marginBottom: 8 }}>Send {timeAlertType === 'pickup' ? 'Pickup' : 'Drop-off'} Time Update</Text>
-                  <Text style={{ marginBottom: 8 }}>Select the updated time to send as an urgent alert to admin.</Text>
-                  <View style={{ marginBottom: 8 }}>
-                    <Text style={{ marginBottom: 6 }}>Selected: {new Date(timeAlertDate).toLocaleString()}</Text>
-                    <DateTimePicker value={timeAlertDate} mode="datetime" display={Platform.OS === 'android' ? 'default' : 'inline'} onChange={(e, d) => d && setTimeAlertDate(d)} />
-                  </View>
-                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-                    <TouchableOpacity onPress={() => setShowTimeAlertModal(false)} style={{ marginRight: 8, padding: 8 }}><Text>Cancel</Text></TouchableOpacity>
-                    <TouchableOpacity onPress={async () => {
-                      try {
-                        await sendTimeUpdateAlert(child.id, timeAlertType, new Date(timeAlertDate).toISOString(), `Requested by ${user?.name || 'Parent'}`);
-                        Alert.alert('Sent', 'Your time update has been sent as an urgent alert to administration.');
-                        setShowTimeAlertModal(false);
-                      } catch (e) {
-                        console.warn('sendTimeUpdateAlert failed', e?.message || e);
-                        Alert.alert('Failed', 'Could not send alert.');
-                      }
-                    }} style={{ padding: 8, backgroundColor: '#2563eb', borderRadius: 8 }}><Text style={{ color: '#fff' }}>Send</Text></TouchableOpacity>
-                  </View>
-                </View>
-              </TouchableWithoutFeedback>
-            </View>
-          </TouchableWithoutFeedback>
-        </Modal>
-      )}
-
       {/* Care team */}
       <View style={styles.careTeamWrap}>
-        <Text style={styles.careTeamTitle}>Care Team</Text>
+        <Text style={styles.careTeamTitle}>{childProfileMode.mode === 'student' ? 'Support Team' : 'Care Team'}</Text>
 
-        {/* BCA therapist tile (always render; show placeholder when not assigned) */}
-        <View style={[styles.card, { marginTop: 8, alignItems: 'center' }]}>
-          {child.bcaTherapist ? (
-            <>
-              <Image source={avatarSourceFor(child.bcaTherapist)} style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#eee' }} />
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.name}>{shortName(child.bcaTherapist.name, 20)}</Text>
-                <Text style={styles.meta}>{child.bcaTherapist.role}</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <TouchableOpacity onPress={() => openPhone(child.bcaTherapist.phone)} style={{ paddingVertical: 6 }} accessibilityLabel="Call BCA therapist">
-                  <MaterialIcons name="call" size={20} color="#2563eb" />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => openEmail(child.bcaTherapist.email)} style={{ paddingVertical: 6 }} accessibilityLabel="Email BCA therapist">
-                  <MaterialIcons name="email" size={20} color="#2563eb" />
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : (
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.name}>BCA Therapist</Text>
-              <Text style={styles.meta}>No BCA therapist assigned.</Text>
+        {childProfileMode.mode === 'student' ? (
+          <>
+            <View style={styles.sectionCompact}>
+              <Text style={styles.sectionTitle}>Parents</Text>
+              {linkedParents.length ? (
+                <View style={styles.peopleCardGrid}>
+                  {linkedParents.map((parent, index) => (
+                    <View key={parent?.id || `parent-${index}`} style={styles.personCard}>
+                      <Image source={avatarSourceFor(parent)} style={styles.personCardAvatar} />
+                      <Text style={styles.personCardName} numberOfLines={2}>{shortName(parent?.name, 18) || 'Parent'}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.sectionText}>No parents linked yet.</Text>
+              )}
             </View>
-          )}
-        </View>
 
-        <View style={[styles.row, { marginTop: 12 }]}> 
-          <View style={[styles.therapistBlock, { marginRight: 8 }]}>
-            <Text style={styles.therapistTitle}>AM Therapist</Text>
-            {child.amTherapist ? (
-              <View style={styles.therapistInner}>
-                <Image source={avatarSourceFor(child.amTherapist)} style={styles.therapistAvatar} />
-                <View style={{ flex: 1, marginLeft: 8, alignItems: 'center' }}>
-                  <Text style={styles.therapistName}>{shortName(child.amTherapist.name, 18)}</Text>
-                  <Text style={styles.therapistRole}>{child.amTherapist.role}</Text>
-                  <View style={styles.amIconRow}>
-                    <TouchableOpacity onPress={() => openPhone(child.amTherapist.phone)} style={styles.iconTouch} accessibilityLabel="Call AM therapist">
-                      <MaterialIcons name="call" size={22} color="#2563eb" />
+            <View style={styles.sectionCompact}>
+              <Text style={styles.sectionTitle}>Therapists</Text>
+              {studentTherapistCards.length ? (
+                <View style={styles.peopleCardGrid}>
+                  {studentTherapistCards.map((therapist, index) => (
+                    <View key={therapist?.cardKey || therapist?.id || `therapist-${index}`} style={styles.personCard}>
+                      <Image source={avatarSourceFor(therapist)} style={styles.personCardAvatar} />
+                      <Text style={styles.personCardName} numberOfLines={2}>{shortName(therapist?.name, 18) || 'Therapist'}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.sectionText}>No therapists assigned yet.</Text>
+              )}
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={[styles.card, { marginTop: 8, alignItems: 'center' }]}>
+              {child.bcaTherapist ? (
+                <>
+                  <Image source={avatarSourceFor(child.bcaTherapist)} style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#eee' }} />
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.name}>{shortName(child.bcaTherapist.name, 20)}</Text>
+                    <Text style={styles.meta}>{child.bcaTherapist.role}</Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <TouchableOpacity onPress={() => openPhone(child.bcaTherapist.phone)} style={{ paddingVertical: 6 }} accessibilityLabel="Call BCA therapist">
+                      <MaterialIcons name="call" size={20} color="#2563eb" />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => openEmail(child.amTherapist.email)} style={styles.iconTouch} accessibilityLabel="Email AM therapist">
-                      <MaterialIcons name="email" size={22} color="#2563eb" />
+                    <TouchableOpacity onPress={() => openEmail(child.bcaTherapist.email)} style={{ paddingVertical: 6 }} accessibilityLabel="Email BCA therapist">
+                      <MaterialIcons name="email" size={20} color="#2563eb" />
                     </TouchableOpacity>
                   </View>
+                </>
+              ) : (
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.name}>BCA Therapist</Text>
+                  <Text style={styles.meta}>No BCA therapist assigned.</Text>
                 </View>
-              </View>
-            ) : (
-              <Text style={styles.sectionText}>No AM therapist assigned.</Text>
-            )}
-          </View>
+              )}
+            </View>
 
-          <View style={[styles.therapistBlock, { marginLeft: 8 }]}>
-            <Text style={styles.therapistTitle}>PM Therapist</Text>
-            {child.pmTherapist ? (
-              <View style={styles.therapistInner}>
-                <Image source={avatarSourceFor(child.pmTherapist)} style={styles.therapistAvatar} />
-                <View style={{ flex: 1, marginLeft: 8, alignItems: 'center' }}>
-                  <Text style={styles.therapistName}>{shortName(child.pmTherapist.name, 18)}</Text>
-                  <Text style={styles.therapistRole}>{child.pmTherapist.role}</Text>
-                  <View style={styles.amIconRow}>
-                    <TouchableOpacity onPress={() => openPhone(child.pmTherapist.phone)} style={styles.iconTouch} accessibilityLabel="Call PM therapist">
-                      <MaterialIcons name="call" size={22} color="#2563eb" />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => openEmail(child.pmTherapist.email)} style={styles.iconTouch} accessibilityLabel="Email PM therapist">
-                      <MaterialIcons name="email" size={22} color="#2563eb" />
-                    </TouchableOpacity>
+            <View style={[styles.row, { marginTop: 12 }]}> 
+              <View style={[styles.therapistBlock, { marginRight: 8 }]}>
+                <Text style={styles.therapistTitle}>AM Therapist</Text>
+                {child.amTherapist ? (
+                  <View style={styles.therapistInner}>
+                    <Image source={avatarSourceFor(child.amTherapist)} style={styles.therapistAvatar} />
+                    <View style={{ flex: 1, marginLeft: 8, alignItems: 'center' }}>
+                      <Text style={styles.therapistName}>{shortName(child.amTherapist.name, 18)}</Text>
+                      <Text style={styles.therapistRole}>{child.amTherapist.role}</Text>
+                      <View style={styles.amIconRow}>
+                        <TouchableOpacity onPress={() => openPhone(child.amTherapist.phone)} style={styles.iconTouch} accessibilityLabel="Call AM therapist">
+                          <MaterialIcons name="call" size={22} color="#2563eb" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => openEmail(child.amTherapist.email)} style={styles.iconTouch} accessibilityLabel="Email AM therapist">
+                          <MaterialIcons name="email" size={22} color="#2563eb" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
                   </View>
-                </View>
+                ) : (
+                  <Text style={styles.sectionText}>No AM therapist assigned.</Text>
+                )}
               </View>
-            ) : (
-              <Text style={styles.sectionText}>No PM therapist assigned.</Text>
-            )}
-          </View>
-        </View>
+
+              <View style={[styles.therapistBlock, { marginLeft: 8 }]}>
+                <Text style={styles.therapistTitle}>PM Therapist</Text>
+                {child.pmTherapist ? (
+                  <View style={styles.therapistInner}>
+                    <Image source={avatarSourceFor(child.pmTherapist)} style={styles.therapistAvatar} />
+                    <View style={{ flex: 1, marginLeft: 8, alignItems: 'center' }}>
+                      <Text style={styles.therapistName}>{shortName(child.pmTherapist.name, 18)}</Text>
+                      <Text style={styles.therapistRole}>{child.pmTherapist.role}</Text>
+                      <View style={styles.amIconRow}>
+                        <TouchableOpacity onPress={() => openPhone(child.pmTherapist.phone)} style={styles.iconTouch} accessibilityLabel="Call PM therapist">
+                          <MaterialIcons name="call" size={22} color="#2563eb" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => openEmail(child.pmTherapist.email)} style={styles.iconTouch} accessibilityLabel="Email PM therapist">
+                          <MaterialIcons name="email" size={22} color="#2563eb" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                ) : (
+                  <Text style={styles.sectionText}>No PM therapist assigned.</Text>
+                )}
+              </View>
+            </View>
+          </>
+        )}
 
         <View style={[styles.card, { marginTop: 12 }]}>
           <View style={{ flex: 1 }}>
@@ -625,25 +551,17 @@ const styles = StyleSheet.create({
   avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#eee' },
   name: { fontSize: 18, fontWeight: '700' },
   meta: { color: '#6b7280', marginTop: 4 },
-  summaryTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 8 },
   section: { marginTop: 12, backgroundColor: '#fff', padding: 12, borderRadius: 8 },
+  sectionCompact: { marginTop: 12, backgroundColor: '#fff', padding: 12, borderRadius: 12 },
   sectionTitle: { fontWeight: '700', marginBottom: 6 },
   sectionText: { color: '#374151' },
-  sessionCard: { width: 180, marginRight: 10, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff', borderRadius: 12, padding: 12 },
-  sessionDay: { fontWeight: '800', color: '#111827' },
-  sessionMeta: { color: '#6b7280', marginTop: 4, fontSize: 12 },
-  sessionTimeLabel: { color: '#6b7280', fontSize: 12, fontWeight: '700' },
-  sessionTime: { color: '#111827', fontWeight: '700' },
-  sessionTherapist: { marginTop: 8, color: '#374151', fontSize: 12 },
+  peopleCardGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4, marginTop: 4 },
+  personCard: { width: '50%', paddingHorizontal: 4, marginBottom: 8, alignItems: 'center' },
+  personCardAvatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#eee', marginBottom: 8 },
+  personCardName: { fontSize: 13, fontWeight: '700', color: '#111827', textAlign: 'center' },
   docRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
   docBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff', marginLeft: 8 },
   docBtnText: { marginLeft: 6, color: '#2563eb', fontWeight: '700' },
-  scheduleTile: { flex: 1, backgroundColor: '#fff', padding: 12, marginHorizontal: 6, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  scheduleLabel: { fontWeight: '700', marginBottom: 6 },
-  scheduleDivider: { height: 1, width: '60%', backgroundColor: '#e6e7ea', marginVertical: 6 },
-  scheduleTime: { color: '#374151', textAlign: 'center' },
-  statusDot: { width: 12, height: 12, borderRadius: 6, position: 'absolute', top: 8, right: 8 },
-  callBanner: { marginTop: 8, color: '#b91c1c', fontWeight: '700' },
   row: { flexDirection: 'row', marginTop: 12 },
   therapistBlock: { flex: 1, backgroundColor: '#fff', padding: 10, borderRadius: 8 },
   therapistTitle: { fontWeight: '700', marginBottom: 8 },
@@ -653,10 +571,12 @@ const styles = StyleSheet.create({
   therapistRole: { color: '#6b7280', fontSize: 12 },
   contactButton: { paddingVertical: 6 },
   contactText: { color: '#2563eb', fontSize: 13 },
-  selectorItem: { alignItems: 'center', padding: 8, marginRight: 8, backgroundColor: '#fff', borderRadius: 8, width: 100 },
-  selectorAvatar: { width: 48, height: 48, borderRadius: 24, marginBottom: 6 },
-  selectorName: { fontSize: 12, textAlign: 'center' },
-  selectorActive: { borderWidth: 2, borderColor: '#2563eb' },
+  linkedChildrenWrap: { marginTop: 12 },
+  linkedChildrenTrack: { paddingRight: 8 },
+  linkedChildCard: { alignItems: 'center', paddingVertical: 12, paddingHorizontal: 10, marginRight: 10, backgroundColor: '#fff', borderRadius: 16, width: 104, borderWidth: 1, borderColor: '#e5e7eb' },
+  linkedChildCardSelected: { borderColor: '#2563eb', backgroundColor: '#eff6ff' },
+  linkedChildAvatar: { width: 56, height: 56, borderRadius: 28, marginBottom: 8, backgroundColor: '#eee' },
+  linkedChildName: { fontSize: 12, textAlign: 'center', fontWeight: '700', color: '#111827' },
   amIconRow: { flexDirection: 'row', marginTop: 8, justifyContent: 'center' },
   iconTouch: { marginHorizontal: 12 },
   demoButton: { backgroundColor: '#2563eb', padding: 10, borderRadius: 8, alignItems: 'center', marginBottom: 8 },
@@ -664,12 +584,20 @@ const styles = StyleSheet.create({
   careTeamTitle: { textAlign: 'center', fontWeight: '800', fontSize: 16, color: '#111827' },
   scheduleWrap: { marginTop: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12 },
   scheduleGroupTitle: { textAlign: 'center', fontWeight: '800', fontSize: 16, color: '#111827' },
-  halfRow: { flexDirection: 'row', marginTop: 12 },
-  halfTile: { flex: 1 },
-  needsTile: { minHeight: 160, marginRight: 8 },
-  moodTile: { minHeight: 160, marginLeft: 8 },
-  moodMeterOuter: { height: 14, borderRadius: 999, backgroundColor: '#e5e7eb', overflow: 'hidden', borderWidth: 1, borderColor: '#d1d5db' },
-  moodMeterFill: { height: '100%', borderRadius: 999 },
-  moodMeterLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
-  moodLabel: { fontSize: 12, color: '#6b7280' },
+  reviewAccordionList: { marginTop: 8 },
+  reviewAccordionCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 22,
+    paddingHorizontal: 22,
+    paddingVertical: 20,
+    marginBottom: 14,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  reviewAccordionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  reviewAccordionTitle: { fontSize: 18, fontWeight: '500', color: '#111827', flex: 1, paddingRight: 12 },
+  reviewAccordionContent: { marginTop: 14, color: '#475569', lineHeight: 20 },
 });

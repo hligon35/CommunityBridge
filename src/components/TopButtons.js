@@ -32,7 +32,7 @@ export function LogoutButton() {
   );
 }
 
-export function BackButton({ onPress }) {
+export function BackButton({ onPress, label = '' }) {
   const logEvent = (ev) => { logger.debug('ui', `TopButtons.BackButton:${ev}`); };
   return (
     <TouchableOpacity
@@ -47,6 +47,7 @@ export function BackButton({ onPress }) {
       activeOpacity={0.85}
     >
       <MaterialIcons name="chevron-left" size={26} color="#111827" />
+      {label ? <Text style={styles.backText}>{label}</Text> : null}
     </TouchableOpacity>
   );
 }
@@ -58,15 +59,16 @@ const styles = StyleSheet.create({
   help: { color: '#2563eb', fontWeight: '600' },
   logout: { color: '#ef4444', fontWeight: '600' },
   backBtn: {
-    width: 36,
+    minWidth: 36,
     height: 36,
-    paddingHorizontal: 0,
+    paddingHorizontal: 8,
     paddingVertical: 0,
     borderRadius: 10,
     backgroundColor: '#f1f5f9',
     borderWidth: 1,
     borderColor: '#e2e8f0',
     alignItems: 'center',
+    flexDirection: 'row',
     justifyContent: 'center',
     shadowColor: '#0f172a',
     shadowOpacity: 0.06,
@@ -74,7 +76,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  backText: { color: '#111827', fontWeight: '700', fontSize: 14 },
+  backText: { color: '#111827', fontWeight: '700', fontSize: 14, marginLeft: 2 },
 });
 
 export default { HelpButton, LogoutButton };

@@ -143,6 +143,9 @@ function CommunityStack() {
       <CommunityStackNav.Screen name="InsuranceBilling" component={InsuranceBillingScreen} options={{ title: 'Billing & Insurance' }} />
       <CommunityStackNav.Screen name="CareTeam" component={CareTeamScreen} options={{ title: 'My Care Team' }} />
       <CommunityStackNav.Screen name="ScheduleCalendar" component={ScheduleCalendarScreen} options={{ title: 'Schedule' }} />
+      <CommunityStackNav.Screen name="ChildDetail" component={ChildDetailScreen} options={{ title: 'Child Profile' }} />
+      <CommunityStackNav.Screen name="ParentDetail" component={ParentDetailScreen} options={{ title: 'Parent' }} />
+      <CommunityStackNav.Screen name="FacultyDetail" component={FacultyDetailScreen} options={{ title: 'Faculty' }} />
     </CommunityStackNav.Navigator>
   );
 }
@@ -175,7 +178,7 @@ function ChatsStack() {
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
         headerStyle: { height: HEADER_HEIGHT },
-        headerLeft: () => (back ? <BackButton onPress={() => navigation.goBack()} /> : <HelpButton />),
+        headerLeft: () => (back ? <BackButton onPress={() => navigation.goBack()} label={route?.name === 'ChatThread' ? 'Chats' : ''} /> : <HelpButton />),
       })}
     >
       <ChatsStackNav.Screen name="ChatsList" component={ChatsScreen} options={{ title: 'Chats' }} />
@@ -231,7 +234,6 @@ function MainRoutes() {
   screens.push({ name: 'Chats', component: ChatsStack });
 
   if (isStaffRole(role)) {
-    screens.push({ name: 'MyClass', component: MyClassStack });
   } else if (isAdminRole(role)) {
     screens.push({ name: 'Controls', component: ControlsStack });
   } else {

@@ -8,7 +8,6 @@ const IMAGE_PICKER_MEDIA_TYPES = ImagePicker.MediaTypeOptions?.Images ?? ImagePi
 import { useAuth } from '../AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { useData } from '../DataContext';
-import devWallFlag from '../utils/devWallFlag';
 import { avatarSourceFor } from '../utils/idVisibility';
 import * as Api from '../Api';
 import PostCard from '../components/PostCard';
@@ -101,7 +100,6 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const navigation = useNavigation();
   const { posts, createPost, like, comment, share, recordShare, fetchAndSync, children, therapists } = useData();
-  const [showWall, setShowWall] = useState(true);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showUserModal, setShowUserModal] = useState(false);
   const [title, setTitle] = useState('');
@@ -119,10 +117,10 @@ export default function HomeScreen() {
   const feedItems = React.useMemo(() => {
     const items = [{ __type: 'composer', id: '__composer__' }];
     const hasPosts = Array.isArray(displayedPosts) && displayedPosts.length > 0;
-    if (!showWall || !hasPosts) items.push({ __type: 'empty', id: '__empty__' });
-    if (showWall && hasPosts) items.push(...displayedPosts);
+    if (!hasPosts) items.push({ __type: 'empty', id: '__empty__' });
+    if (hasPosts) items.push(...displayedPosts);
     return items;
-  }, [displayedPosts, showWall]);
+  }, [displayedPosts]);
 
   React.useEffect(() => {
     try {
@@ -135,19 +133,6 @@ export default function HomeScreen() {
     { label: 'Students', value: (children || []).length },
     { label: 'Staff', value: (therapists || []).length },
   ]), [children, displayedPosts.length, therapists]);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const v = await devWallFlag.get();
-        if (!mounted) return;
-        setShowWall(Boolean(v));
-      } catch (e) {}
-    })();
-    const unsub = devWallFlag.addListener((v) => { if (mounted) setShowWall(Boolean(v)); });
-    return () => { mounted = false; unsub(); };
-  }, []);
 
   async function onRefresh() {
     try {
@@ -357,7 +342,7 @@ export default function HomeScreen() {
                       <Text style={{ marginTop: 4, color: '#64748b' }}>Recent updates, classroom notes, and announcements.</Text>
                     </View>
                     <FlatList
-                      data={showWall ? displayedPosts : []}
+                      data={displayedPosts}
                       onTouchStart={() => Keyboard.dismiss()}
                       keyExtractor={(i) => String(i.id)}
                       keyboardShouldPersistTaps="handled"

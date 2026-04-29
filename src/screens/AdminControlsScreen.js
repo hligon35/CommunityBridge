@@ -10,6 +10,8 @@ import { GOOGLE_PLACES_API_KEY } from '../config';
 import * as FileSystem from 'expo-file-system';
 import * as Api from '../Api';
 import { useTenant } from '../core/tenant/TenantContext';
+import { useAuth } from '../AuthContext';
+import { isAdminRole, isSuperAdminRole } from '../core/tenant/models';
 import { SETTINGS_KEYS, readJsonSetting, writeBooleanSetting, writeJsonSetting } from '../utils/appSettings';
 import ImageToggle from '../components/ImageToggle';
 
@@ -26,26 +28,68 @@ const APP_BUNDLE_ID = (() => {
 const BUSINESS_ADDR_KEY = SETTINGS_KEYS.businessAddress;
 const ORG_ARRIVAL_KEY = SETTINGS_KEYS.orgArrivalEnabled;
 const alertsIcon = require('../../assets/icons/alerts.png');
-const alertsUnreadIcon = require('../../assets/icons/alerts(unread).png');
 const importDirectoryIcon = require('../../assets/icons/importDirectory.png');
 const exportDirectoryIcon = require('../../assets/icons/exportDirectory.png');
 const studentsIcon = require('../../assets/icons/students.png');
 const facultyIcon = require('../../assets/icons/faculty.png');
 const parentsIcon = require('../../assets/icons/parents.png');
 const currentLocationIcon = require('../../assets/icons/currentLocation.png');
+const SHOW_IMPORT_EXPORT_CONTROLS = false;
 
 export default function AdminControlsScreen() {
   const navigation = useNavigation();
-  const { messages, children, parents = [], therapists = [], urgentMemos = [] } = useData();
+  const { messages, children, parents = [], therapists = [], urgentMemos = [], fetchAndSync } = useData();
+  const { user } = useAuth();
   const tenant = useTenant() || {};
   const tenantFlags = tenant.featureFlags || {};
+  const canManagePermissions = isSuperAdminRole(user?.role);
   const isWeb = Platform.OS === 'web';
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [importPickedFile, setImportPickedFile] = useState(null);
-  const [showStudentsPreview, setShowStudentsPreview] = useState(false);
-  const [showFacultyPreview, setShowFacultyPreview] = useState(false);
-  const [showParentsPreview, setShowParentsPreview] = useState(false);
+  const [activeDirectoryPreview, setActiveDirectoryPreview] = useState('');
+  const [importBusy, setImportBusy] = useState(false);
+  const [adminCapabilities, setAdminCapabilities] = useState({
+    'users:manage': false,
+    'children:edit': true,
+    'settings:system': true,
+    'export:data': true,
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await Api.getPermissionsConfig();
+        const role = String(user?.role || '').trim().toLowerCase();
+        const config = res?.item && typeof res.item === 'object' ? res.item : {};
+        let key = 'Staff';
+        if (role === 'superadmin' || role === 'super_admin' || role === 'admin' || role === 'administrator' || role === 'campusadmin' || role === 'campus_admin' || role === 'orgadmin' || role === 'org_admin' || role === 'organizationadmin') key = 'Admin';
+        else if (role.includes('therapist') || role.includes('bcba')) key = 'Therapist';
+        else if (role.includes('teacher') || role.includes('faculty')) key = 'Teacher';
+        else if (role.includes('parent')) key = 'Parent';
+        const nextCaps = config[key] && typeof config[key] === 'object' ? config[key] : {};
+        if (mounted) setAdminCapabilities((current) => ({ ...current, ...nextCaps }));
+      } catch (_) {
+        // Keep defaults if the permissions API is unavailable.
+      }
+    })();
+    return () => { mounted = false; };
+  }, [user?.role]);
+
+  function hasCapability(capability) {
+    if (canManagePermissions) return true;
+    return Boolean(adminCapabilities[capability]);
+  }
+
+  const canOpenAccessControls = isAdminRole(user?.role);
+  const showStudentsPreview = activeDirectoryPreview === 'students';
+  const showFacultyPreview = activeDirectoryPreview === 'faculty';
+  const showParentsPreview = activeDirectoryPreview === 'parents';
+
+  function toggleDirectoryPreview(nextPreview) {
+    setActiveDirectoryPreview((current) => (current === nextPreview ? '' : nextPreview));
+  }
 
   const therapistCount = useMemo(() => {
     const set = new Set();
@@ -69,6 +113,10 @@ export default function AdminControlsScreen() {
   // open admin chat monitor (admin-only chat oversight)
   const openChats = () => navigation.navigate('AdminChatMonitor');
   const openImport = () => {
+    if (!hasCapability('children:edit')) {
+      Alert.alert('Permission required', 'Your account cannot import directory records.');
+      return;
+    }
     setImportPickedFile(null);
     setImportModalVisible(true);
   };
@@ -84,7 +132,7 @@ export default function AdminControlsScreen() {
         accessibilityLabel="Open Alerts"
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
-        <Image source={pendingAlertCount > 0 ? alertsUnreadIcon : alertsIcon} style={styles.headerImageIcon} />
+        <Image source={alertsIcon} style={styles.headerImageIcon} />
         <Text style={styles.headerIconLabel}>Alerts</Text>
         {pendingAlertCount > 0 ? (
           <View style={styles.headerBadge}>
@@ -96,11 +144,13 @@ export default function AdminControlsScreen() {
   }
 
   function HeaderRightButtons() {
+    if (!SHOW_IMPORT_EXPORT_CONTROLS) return null;
     return (
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <TouchableOpacity
           onPress={openImport}
-          style={[styles.headerIconBtn, { marginRight: 10 }]}
+          disabled={!hasCapability('children:edit')}
+          style={[styles.headerIconBtn, { marginRight: 10 }, !hasCapability('children:edit') ? styles.headerIconBtnDisabled : null]}
           accessibilityLabel="Import Data"
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
@@ -110,7 +160,8 @@ export default function AdminControlsScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => setExportModalVisible(true)}
-          style={styles.headerIconBtn}
+          disabled={!hasCapability('export:data')}
+          style={[styles.headerIconBtn, !hasCapability('export:data') ? styles.headerIconBtnDisabled : null]}
           accessibilityLabel="Export Data"
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
@@ -139,6 +190,10 @@ export default function AdminControlsScreen() {
 
   async function doExportShare() {
     try {
+      if (!hasCapability('export:data')) {
+        Alert.alert('Permission required', 'Your account cannot export data.');
+        return;
+      }
       const payload = buildExportPayload();
       await Share.share({ message: payload, title: 'CommunityBridge export' });
       setExportModalVisible(false);
@@ -149,6 +204,10 @@ export default function AdminControlsScreen() {
 
   async function doExportSaveToFolderAndroid() {
     try {
+      if (!hasCapability('export:data')) {
+        Alert.alert('Permission required', 'Your account cannot export data.');
+        return;
+      }
       if (Platform.OS !== 'android' || !FileSystem?.StorageAccessFramework) {
         return doExportShare();
       }
@@ -176,6 +235,28 @@ export default function AdminControlsScreen() {
 
   async function pickImportFile() {
     try {
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
+        await new Promise((resolve) => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = '.json,application/json,text/plain,.txt';
+          input.onchange = () => {
+            const file = input.files && input.files[0] ? input.files[0] : null;
+            if (file) {
+              setImportPickedFile({
+                name: file.name || 'selected file',
+                file,
+                size: file.size,
+                mimeType: file.type || 'application/json',
+              });
+            }
+            resolve();
+          };
+          input.click();
+        });
+        return;
+      }
+
       const DocumentPickerModule = require('expo-document-picker');
       const DocumentPicker = DocumentPickerModule?.default || DocumentPickerModule;
       if (!DocumentPicker?.getDocumentAsync) {
@@ -201,6 +282,58 @@ export default function AdminControlsScreen() {
       });
     } catch (e) {
       Alert.alert('Import failed', e?.message || String(e));
+    }
+  }
+
+  function normalizeImportedDirectory(payload) {
+    const source = payload && typeof payload === 'object' ? payload : {};
+    const normalized = {
+      children: Array.isArray(source.children) ? source.children.filter(Boolean) : [],
+      parents: Array.isArray(source.parents) ? source.parents.filter(Boolean) : [],
+      therapists: Array.isArray(source.therapists) ? source.therapists.filter(Boolean) : [],
+    };
+    const total = normalized.children.length + normalized.parents.length + normalized.therapists.length;
+    if (!total) {
+      throw new Error('Import file must contain at least one of: children, parents, therapists.');
+    }
+    return normalized;
+  }
+
+  async function readImportFileContents() {
+    if (!importPickedFile) throw new Error('Choose a file to import.');
+    if (importPickedFile.file && typeof importPickedFile.file.text === 'function') {
+      return importPickedFile.file.text();
+    }
+    if (importPickedFile.uri) {
+      return FileSystem.readAsStringAsync(importPickedFile.uri, { encoding: FileSystem.EncodingType.UTF8 });
+    }
+    throw new Error('Selected file could not be read.');
+  }
+
+  async function doImportSelectedFile() {
+    try {
+      setImportBusy(true);
+      const raw = await readImportFileContents();
+      let parsed = null;
+      try {
+        parsed = JSON.parse(String(raw || ''));
+      } catch (_) {
+        throw new Error('Import currently supports JSON files with children, parents, and therapists arrays.');
+      }
+
+      const normalized = normalizeImportedDirectory(parsed);
+      await Api.mergeDirectory(normalized);
+      await fetchAndSync({ force: true });
+      setImportModalVisible(false);
+      setImportPickedFile(null);
+      Alert.alert(
+        'Import complete',
+        `Imported ${normalized.children.length} students, ${normalized.parents.length} parents, and ${normalized.therapists.length} staff records.`
+      );
+    } catch (e) {
+      Alert.alert('Import failed', e?.message || String(e));
+    } finally {
+      setImportBusy(false);
     }
   }
 
@@ -302,7 +435,23 @@ export default function AdminControlsScreen() {
 
   const toggleShowIds = () => { const next = !showIds; setShowIds(next); setIdVisibilityEnabled(next); };
 
+  function getOrgSettingsErrorMessage(error, fallback) {
+    const message = String(error?.message || error || '').trim();
+    if (!message) return fallback;
+    if (/permission|forbidden|unauthorized/i.test(message)) {
+      return 'Your account is signed in, but it does not have permission to change organization arrival settings.';
+    }
+    if (/network|timed out|failed to fetch/i.test(message)) {
+      return 'The save request could not reach the server. Confirm the API is running and try again.';
+    }
+    return message;
+  }
+
   async function toggleOrgArrival() {
+    if (!hasCapability('settings:system')) {
+      Alert.alert('Permission required', 'Your account cannot change organization settings.');
+      return;
+    }
     const next = !orgArrivalEnabled;
     setOrgArrivalEnabled(next);
     try {
@@ -317,11 +466,15 @@ export default function AdminControlsScreen() {
     } catch (e) {
       // revert on failure
       setOrgArrivalEnabled(!next);
-      Alert.alert('Error', 'Could not update organization arrival detection setting.');
+      Alert.alert('Error', getOrgSettingsErrorMessage(e, 'Could not update organization arrival detection setting.'));
     }
   }
 
   async function saveArrivalControls() {
+    if (!hasCapability('settings:system')) {
+      Alert.alert('Permission required', 'Your account cannot change organization settings.');
+      return;
+    }
     let latNum = Number(orgLat);
     let lngNum = Number(orgLng);
     const milesNum = Number(dropZoneMiles);
@@ -377,7 +530,7 @@ export default function AdminControlsScreen() {
       await writeJsonSetting(BUSINESS_ADDR_KEY, obj);
       Alert.alert('Saved', 'Arrival detection controls updated.');
     } catch (e) {
-      Alert.alert('Error', 'Could not save arrival detection controls.');
+      Alert.alert('Error', getOrgSettingsErrorMessage(e, 'Could not save arrival detection controls.'));
     }
   }
 
@@ -656,7 +809,7 @@ export default function AdminControlsScreen() {
     <ScreenWrapper
       bannerShowBack={false}
       bannerLeft={<HeaderAlertButton />}
-      bannerRight={<HeaderRightButtons />}
+      bannerRight={SHOW_IMPORT_EXPORT_CONTROLS ? <HeaderRightButtons /> : null}
       style={styles.container}
     >
       <Modal
@@ -684,6 +837,49 @@ export default function AdminControlsScreen() {
 
             <View style={styles.overlayActions}>
               <TouchableOpacity style={styles.overlayCancel} onPress={() => setExportModalVisible(false)}>
+                <Text style={styles.overlayCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={importModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setImportModalVisible(false)}
+      >
+        <Pressable style={styles.overlayBackdrop} onPress={() => setImportModalVisible(false)}>
+          <Pressable style={styles.overlayCard} onPress={() => {}}>
+            <Text style={styles.overlayTitle}>Import</Text>
+            <Text style={styles.overlaySub}>Choose a JSON directory export that contains children, parents, and therapists arrays.</Text>
+
+            <TouchableOpacity style={styles.overlayOption} onPress={pickImportFile} accessibilityLabel="Choose import file" disabled={importBusy}>
+              <MaterialIcons name="upload-file" size={18} color="#374151" />
+              <Text style={styles.overlayOptionText}>{importPickedFile?.name ? `Selected: ${importPickedFile.name}` : 'Choose file'}</Text>
+            </TouchableOpacity>
+
+            {importPickedFile ? (
+              <Text style={styles.overlayMetaText}>
+                {`${importPickedFile.name}${importPickedFile.size ? ` • ${Math.max(1, Math.round(importPickedFile.size / 1024))} KB` : ''}`}
+              </Text>
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.overlayOption, !importPickedFile || importBusy ? styles.overlayOptionDisabled : null]}
+              onPress={doImportSelectedFile}
+              accessibilityLabel="Import selected file"
+              disabled={!importPickedFile || importBusy}
+            >
+              <MaterialIcons name="file-download" size={18} color={(!importPickedFile || importBusy) ? '#9ca3af' : '#374151'} />
+              <Text style={[styles.overlayOptionText, !importPickedFile || importBusy ? styles.overlayOptionDisabledText : null]}>
+                {importBusy ? 'Importing...' : 'Import selected file'}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.overlayActions}>
+              <TouchableOpacity style={styles.overlayCancel} onPress={() => setImportModalVisible(false)}>
                 <Text style={styles.overlayCancelText}>Cancel</Text>
               </TouchableOpacity>
             </View>
@@ -726,7 +922,7 @@ export default function AdminControlsScreen() {
             <View style={styles.dirGridRow}>
               <TouchableOpacity
                 style={[styles.dirTile, showStudentsPreview ? styles.dirTileActive : null]}
-                onPress={() => setShowStudentsPreview((s) => !s)}
+                onPress={() => toggleDirectoryPreview('students')}
                 accessibilityLabel="Toggle Students preview"
               >
                 <View style={styles.dirTileTop}>
@@ -743,7 +939,7 @@ export default function AdminControlsScreen() {
 
               <TouchableOpacity
                 style={[styles.dirTile, showFacultyPreview ? styles.dirTileActive : null]}
-                onPress={() => setShowFacultyPreview((s) => !s)}
+                onPress={() => toggleDirectoryPreview('faculty')}
                 accessibilityLabel="Toggle Faculty preview"
               >
                 <View style={styles.dirTileTop}>
@@ -760,7 +956,7 @@ export default function AdminControlsScreen() {
 
               <TouchableOpacity
                 style={[styles.dirTile, { marginRight: 0 }, showParentsPreview ? styles.dirTileActive : null]}
-                onPress={() => setShowParentsPreview((s) => !s)}
+                onPress={() => toggleDirectoryPreview('parents')}
                 accessibilityLabel="Toggle Parents preview"
               >
                 <View style={styles.dirTileTop}>
@@ -859,9 +1055,9 @@ export default function AdminControlsScreen() {
             {[
               { key: 'AdminMemos', label: 'Compose Memo', icon: 'campaign' },
               { key: 'AdminChatMonitor', label: 'Chat Monitor', icon: 'forum' },
-              { key: 'ManagePermissions', label: 'Permissions', icon: 'admin-panel-settings' },
+              canOpenAccessControls ? { key: 'ManagePermissions', label: 'Manage Permissions', icon: 'admin-panel-settings' } : null,
               { key: 'PrivacyDefaults', label: 'Privacy Defaults', icon: 'privacy-tip' },
-            ].map((t) => (
+            ].filter(Boolean).map((t) => (
               <TouchableOpacity
                 key={t.key}
                 onPress={() => navigation.navigate(t.key)}
@@ -1048,6 +1244,7 @@ const styles = StyleSheet.create({
       default: null,
     }),
   },
+  headerIconBtnDisabled: { opacity: 0.45 },
   headerBadge: { position: 'absolute', top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   headerBadgeText: { color: '#fff', fontWeight: '800', fontSize: 10 },
   headerIconLabel: { marginTop: 2, fontSize: 9, fontWeight: '700', color: '#475569', textAlign: 'center' },
@@ -1158,6 +1355,9 @@ const styles = StyleSheet.create({
   overlaySub: { marginTop: 6, color: '#6b7280' },
   overlayOption: { marginTop: 12, flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: '#eef2f7', backgroundColor: '#f8fafc' },
   overlayOptionText: { marginLeft: 10, fontWeight: '700', color: '#111827' },
+  overlayOptionDisabled: { opacity: 0.6 },
+  overlayOptionDisabledText: { color: '#6b7280' },
+  overlayMetaText: { marginTop: 10, color: '#6b7280', fontSize: 12 },
   overlayActions: { marginTop: 16, flexDirection: 'row', justifyContent: 'flex-end' },
   overlayCancel: { paddingVertical: 10, paddingHorizontal: 12 },
   overlayCancelText: { color: '#2563eb', fontWeight: '700' },
