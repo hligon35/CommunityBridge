@@ -5,6 +5,7 @@ import { useData } from '../DataContext';
 import { logPress } from '../utils/logger';
 import { isAdminRole, isStaffRole, normalizeUserRole } from '../core/tenant/models';
 import { useTenant } from '../core/tenant/TenantContext';
+import useIsTabletLayout from '../hooks/useIsTabletLayout';
 
 const chatsIcon = require('../../assets/icons/chats.png');
 const controlsIcon = require('../../assets/icons/dashboard.png');
@@ -22,7 +23,8 @@ function NavImageIcon({ source, active, size = 24 }) {
 
 export default function BottomNav({ navigationRef, currentRoute }) {
   // don't show mobile bottom nav on web
-  if (Platform.OS === 'web') return null;
+  const isTabletLayout = useIsTabletLayout();
+  if (Platform.OS === 'web' || isTabletLayout) return null;
   const { user } = useAuth();
   const { urgentMemos = [], unreadThreadCount = 0 } = useData();
   const tenant = useTenant();

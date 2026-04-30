@@ -2,6 +2,11 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const multer = require('multer');
+const {
+  DEFAULT_SUMMARY_FILENAME,
+  buildTherapySessionSummary,
+  renderSessionSummaryText,
+} = require('./session-summary');
 
 const PORT = Number(process.env.PORT || 3006);
 
@@ -112,6 +117,9 @@ let orgSettings = {
 };
 let attendanceRecords = [];
 let moodEntries = [];
+let therapySessions = [];
+let therapySessionEvents = [];
+let therapySessionSummaries = [];
 
 // Stable mock users keyed by normalized email.
 const usersByEmail = new Map();
@@ -269,6 +277,230 @@ app.post('/api/children/:childId/mood', (req, res) => {
   };
   moodEntries.unshift(item);
   return res.json({ ok: true, item });
+});
+
+function normalizeTherapySessionType(value) {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (normalized === 'AM' || normalized === 'PM') return normalized;
+  return 'CUSTOM';
+}
+
+function normalizeTherapyEventType(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  const allowed = new Set(['behavior', 'program', 'mood', 'meal', 'toileting', 'note', 'milestone', 'session_marker']);
+  return allowed.has(normalized) ? normalized : '';
+}
+
+function buildTherapySessionResponse(item) {
+  if (!item) return null;
+  return { ...item };
+}
+
+function buildTherapySessionEvent(entry, session) {
+  const payload = entry && typeof entry === 'object' ? entry : {};
+  const eventType = normalizeTherapyEventType(payload.eventType || payload.type);
+  if (!eventType) return null;
+  return {
+    id: nanoId(),
+    sessionId: session.id,
+    childId: session.childId,
+    therapistId: session.therapistId,
+    eventType,
+    eventCode: String(payload.eventCode || payload.code || payload.label || eventType).trim().toLowerCase().replace(/\s+/g, '_'),
+    label: String(payload.label || payload.title || payload.eventCode || payload.code || eventType).trim(),
+    value: payload.value !== undefined ? payload.value : (payload.score !== undefined ? payload.score : null),
+    intensity: String(payload.intensity || '').trim() || null,
+    frequencyDelta: Number.isFinite(Number(payload.frequencyDelta)) ? Math.trunc(Number(payload.frequencyDelta)) : 1,
+    metadata: payload.metadata && typeof payload.metadata === 'object' ? { ...payload.metadata } : {},
+    occurredAt: String(payload.occurredAt || nowISO()).trim(),
+    source: String(payload.source || 'tap-grid').trim(),
+    clientEventId: String(payload.clientEventId || '').trim() || null,
+    createdAt: nowISO(),
+  };
+}
+
+function buildTherapySessionSummaryResponse(item) {
+  if (!item) return null;
+  return { ...item, fileName: DEFAULT_SUMMARY_FILENAME };
+}
+
+function generateTherapySessionSummaryMock(sessionId, overrideSummary, approvedAt = null) {
+  const session = therapySessions.find((entry) => entry.id === sessionId) || null;
+  if (!session) return null;
+  const events = therapySessionEvents.filter((entry) => entry.sessionId === sessionId).sort((left, right) => String(left.occurredAt).localeCompare(String(right.occurredAt)));
+  const summary = buildTherapySessionSummary({
+    sessionId: session.id,
+    sessionDate: session.sessionDate,
+    childId: session.childId,
+    childName: session.childName,
+    events,
+    existingSummary: overrideSummary || null,
+  });
+  if (approvedAt) {
+    summary.therapistEdited = true;
+    summary.approvedAt = approvedAt;
+    summary.approvedByTherapistId = session.therapistId;
+  }
+  const existingIndex = therapySessionSummaries.findIndex((entry) => entry.sessionId === sessionId);
+  const item = {
+    id: existingIndex >= 0 ? therapySessionSummaries[existingIndex].id : nanoId(),
+    sessionId,
+    childId: session.childId,
+    therapistId: session.therapistId,
+    status: approvedAt ? 'approved' : 'draft',
+    version: existingIndex >= 0 ? Number(therapySessionSummaries[existingIndex].version || 1) + 1 : 1,
+    summary,
+    summaryText: renderSessionSummaryText(summary),
+    generatedAt: existingIndex >= 0 ? therapySessionSummaries[existingIndex].generatedAt : nowISO(),
+    updatedAt: nowISO(),
+    approvedAt: approvedAt || null,
+  };
+  if (existingIndex >= 0) therapySessionSummaries[existingIndex] = item;
+  else therapySessionSummaries.unshift(item);
+  return item;
+}
+
+app.post('/api/therapy-sessions', (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const childId = String(body.childId || '').trim();
+  if (!childId) return res.status(400).json({ ok: false, error: 'childId required' });
+  const existing = therapySessions.find((entry) => entry.childId === childId && entry.status === 'active');
+  if (existing) return res.status(409).json({ ok: false, error: 'An active session already exists for this child.', item: buildTherapySessionResponse(existing) });
+  const item = {
+    id: nanoId(),
+    childId,
+    childName: String(body.childName || 'Student').trim(),
+    therapistId: String(body.therapistId || 'mock-therapist').trim(),
+    therapistRole: String(body.therapistRole || 'therapist').trim(),
+    organizationId: String(body.organizationId || '').trim() || null,
+    programId: String(body.programId || '').trim() || null,
+    campusId: String(body.campusId || '').trim() || null,
+    sessionDate: normalizeDateKey(body.sessionDate || body.startedAt || nowISO()),
+    sessionType: normalizeTherapySessionType(body.sessionType),
+    startedAt: String(body.startedAt || nowISO()).trim(),
+    endedAt: null,
+    status: 'active',
+    summaryGeneratedAt: null,
+    approvedAt: null,
+    createdAt: nowISO(),
+    updatedAt: nowISO(),
+  };
+  therapySessions.unshift(item);
+  return res.status(201).json({ ok: true, item: buildTherapySessionResponse(item) });
+});
+
+app.get('/api/therapy-sessions/active', (req, res) => {
+  const childId = String(req.query?.childId || '').trim();
+  if (!childId) return res.status(400).json({ ok: false, error: 'childId required' });
+  const item = therapySessions.find((entry) => entry.childId === childId && entry.status === 'active') || null;
+  return res.json({ ok: true, item: buildTherapySessionResponse(item) });
+});
+
+app.post('/api/therapy-sessions/:sessionId/events', (req, res) => {
+  const session = therapySessions.find((entry) => entry.id === String(req.params?.sessionId || '').trim());
+  if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+  const item = buildTherapySessionEvent(req.body?.event || req.body, session);
+  if (!item) return res.status(400).json({ ok: false, error: 'Valid event payload required' });
+  therapySessionEvents.push(item);
+  session.updatedAt = nowISO();
+  return res.status(201).json({ ok: true, item });
+});
+
+app.get('/api/therapy-sessions/:sessionId/events', (req, res) => {
+  const sessionId = String(req.params?.sessionId || '').trim();
+  const session = therapySessions.find((entry) => entry.id === sessionId);
+  if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+  const limit = Math.max(1, Math.min(Number(req.query?.limit) || 40, 200));
+  const items = therapySessionEvents
+    .filter((entry) => entry.sessionId === sessionId)
+    .sort((left, right) => String(right.occurredAt).localeCompare(String(left.occurredAt)))
+    .slice(0, limit);
+  return res.json({ ok: true, sessionId, items });
+});
+
+app.post('/api/therapy-sessions/:sessionId/events/bulk', (req, res) => {
+  const session = therapySessions.find((entry) => entry.id === String(req.params?.sessionId || '').trim());
+  if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+  const items = (Array.isArray(req.body?.events) ? req.body.events : []).map((entry) => buildTherapySessionEvent(entry, session)).filter(Boolean);
+  if (!items.length) return res.status(400).json({ ok: false, error: 'No valid events supplied' });
+  therapySessionEvents.push(...items);
+  session.updatedAt = nowISO();
+  return res.status(201).json({ ok: true, items });
+});
+
+app.post('/api/therapy-sessions/:sessionId/end', (req, res) => {
+  const session = therapySessions.find((entry) => entry.id === String(req.params?.sessionId || '').trim());
+  if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+  session.endedAt = String(req.body?.endedAt || nowISO()).trim();
+  session.status = 'summary_draft';
+  session.summaryGeneratedAt = nowISO();
+  session.updatedAt = nowISO();
+  const summary = generateTherapySessionSummaryMock(session.id);
+  return res.json({ ok: true, item: buildTherapySessionResponse(session), summary: buildTherapySessionSummaryResponse(summary) });
+});
+
+app.post('/api/therapy-sessions/:sessionId/generate-summary', (req, res) => {
+  const session = therapySessions.find((entry) => entry.id === String(req.params?.sessionId || '').trim());
+  if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+  session.summaryGeneratedAt = nowISO();
+  session.status = 'summary_draft';
+  session.updatedAt = nowISO();
+  const summary = generateTherapySessionSummaryMock(session.id);
+  return res.json({ ok: true, summary: buildTherapySessionSummaryResponse(summary) });
+});
+
+app.get('/api/therapy-sessions/:sessionId/summary', (req, res) => {
+  const item = therapySessionSummaries.find((entry) => entry.sessionId === String(req.params?.sessionId || '').trim()) || null;
+  if (!item) return res.status(404).json({ ok: false, error: 'Summary not found' });
+  return res.json({ ok: true, item: buildTherapySessionSummaryResponse(item) });
+});
+
+app.put('/api/therapy-sessions/:sessionId/summary', (req, res) => {
+  const session = therapySessions.find((entry) => entry.id === String(req.params?.sessionId || '').trim());
+  if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+  const overrideSummary = req.body && typeof req.body.summary === 'object' ? req.body.summary : (req.body && typeof req.body === 'object' ? req.body : null);
+  if (!overrideSummary || typeof overrideSummary !== 'object') return res.status(400).json({ ok: false, error: 'summary object required' });
+  session.status = 'summary_draft';
+  session.updatedAt = nowISO();
+  const item = generateTherapySessionSummaryMock(session.id, overrideSummary);
+  return res.json({ ok: true, item: buildTherapySessionSummaryResponse(item) });
+});
+
+app.post('/api/therapy-sessions/:sessionId/summary/approve', (req, res) => {
+  const session = therapySessions.find((entry) => entry.id === String(req.params?.sessionId || '').trim());
+  if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+  const existing = therapySessionSummaries.find((entry) => entry.sessionId === session.id) || null;
+  if (!existing) return res.status(404).json({ ok: false, error: 'Summary not found' });
+  const approvedAt = nowISO();
+  const overrideSummary = req.body && typeof req.body.summary === 'object' ? req.body.summary : existing.summary;
+  const item = generateTherapySessionSummaryMock(session.id, { ...(overrideSummary || {}), therapistEdited: true, approvedByTherapistId: session.therapistId, approvedAt }, approvedAt);
+  session.approvedAt = approvedAt;
+  session.status = 'submitted';
+  session.updatedAt = nowISO();
+  return res.json({ ok: true, item: buildTherapySessionSummaryResponse(item) });
+});
+
+app.get('/api/children/:childId/session-summaries', (req, res) => {
+  const childId = String(req.params?.childId || '').trim();
+  if (!childId) return res.status(400).json({ ok: false, error: 'Missing childId' });
+  const limit = Math.max(1, Math.min(Number(req.query?.limit) || 20, 100));
+  const items = therapySessionSummaries.filter((entry) => entry.childId === childId && entry.status === 'approved').slice(0, limit);
+  return res.json({ ok: true, childId, items: items.map((item) => buildTherapySessionSummaryResponse(item)) });
+});
+
+app.get('/api/children/:childId/session-summaries/latest', (req, res) => {
+  const childId = String(req.params?.childId || '').trim();
+  if (!childId) return res.status(400).json({ ok: false, error: 'Missing childId' });
+  const item = therapySessionSummaries.find((entry) => entry.childId === childId && entry.status === 'approved') || null;
+  return res.json({ ok: true, childId, item: buildTherapySessionSummaryResponse(item) });
+});
+
+app.get('/api/therapy-sessions/:sessionId/artifacts/session-summary.txt', (req, res) => {
+  const item = therapySessionSummaries.find((entry) => entry.sessionId === String(req.params?.sessionId || '').trim()) || null;
+  if (!item) return res.status(404).json({ ok: false, error: 'Summary not found' });
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', `inline; filename="${DEFAULT_SUMMARY_FILENAME}"`);
+  return res.send(String(item.summaryText || ''));
 });
 
 app.post('/api/arrival/ping', (req, res) => {

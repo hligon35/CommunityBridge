@@ -8,6 +8,10 @@ import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { useTenant } from '../core/tenant/TenantContext';
 import { avatarSourceFor } from '../utils/idVisibility';
+const { logPress } = require('../utils/logger');
+const { isSpecialAccessUser } = require('../utils/authState');
+const { getEffectiveChatIdentity } = require('../utils/demoIdentity');
+const { isChildLinkedToTherapist, resolveSelectedDashboardChild, resolveTherapyWorkspaceTarget } = require('../features/sessionTracking/utils/dashboardSessionTarget');
 
 const moodGoodIcon = require('../../assets/icons/good.png');
 const moodModerateIcon = require('../../assets/icons/moderate.png');
@@ -53,18 +57,14 @@ function getNextTherapistSession(children) {
   return candidates[0] || null;
 }
 
-function findRelevantChildren(role, userId, children) {
+function findRelevantChildren(role, userId, children, options = {}) {
   const allChildren = Array.isArray(children) ? children : [];
+  const allowSpecialAccessFallback = options && options.allowSpecialAccessFallback === true;
   if (!userId) return [];
   if (role === 'therapist') {
-    return allChildren.filter((child) => {
-      const assigned = [child?.amTherapist, child?.pmTherapist, child?.bcaTherapist];
-      return assigned.some((entry) => {
-        if (!entry) return false;
-        if (typeof entry === 'string') return entry === userId;
-        return entry?.id === userId;
-      });
-    });
+    const linkedChildren = allChildren.filter((child) => isChildLinkedToTherapist(child, userId));
+    if (linkedChildren.length || !allowSpecialAccessFallback) return linkedChildren;
+    return allChildren;
   }
   return allChildren.filter((child) => Array.isArray(child?.parents) && child.parents.some((parent) => parent?.id === userId));
 }
@@ -93,18 +93,19 @@ export default function RoleDashboardScreen({ navigation }) {
   const { children = [], urgentMemos = [], directoryLoading = false, directoryError = '', fetchAndSync } = useData();
   const tenant = useTenant();
   const role = String(user?.role || 'parent').trim().toLowerCase();
+  const effectiveUser = useMemo(() => getEffectiveChatIdentity(user), [user]);
+  const allowSpecialAccessFallback = isSpecialAccessUser(user?.email);
   const isTherapist = role === 'therapist';
   const labels = tenant?.labels || {};
   const dashboardPreset = tenant?.dashboardPreset || {};
   const childProfileMode = tenant?.childProfileMode || {};
-  const relevantChildren = useMemo(() => findRelevantChildren(role, user?.id, children), [children, role, user?.id]);
+  const relevantChildren = useMemo(
+    () => findRelevantChildren(role, effectiveUser?.id, children, { allowSpecialAccessFallback }),
+    [children, role, effectiveUser?.id, allowSpecialAccessFallback]
+  );
   const [selectedChildId, setSelectedChildId] = useState(null);
 
   useEffect(() => {
-    if (isTherapist) {
-      setSelectedChildId(null);
-      return;
-    }
     if (!relevantChildren.length) {
       setSelectedChildId(null);
       return;
@@ -116,9 +117,8 @@ export default function RoleDashboardScreen({ navigation }) {
   }, [isTherapist, relevantChildren, selectedChildId]);
 
   const selectedChild = useMemo(() => {
-    if (isTherapist) return null;
-    return relevantChildren.find((child) => child?.id === selectedChildId) || relevantChildren[0] || null;
-  }, [isTherapist, relevantChildren, selectedChildId]);
+    return resolveSelectedDashboardChild(relevantChildren, selectedChildId);
+  }, [relevantChildren, selectedChildId]);
 
   const activeChildren = useMemo(() => {
     if (isTherapist) return relevantChildren;
@@ -126,7 +126,19 @@ export default function RoleDashboardScreen({ navigation }) {
   }, [isTherapist, relevantChildren, selectedChild]);
 
   const firstRelevantChild = relevantChildren[0] || null;
+  const sessionTargetChild = selectedChild || firstRelevantChild;
   const nextTherapistSession = useMemo(() => getNextTherapistSession(relevantChildren), [relevantChildren]);
+
+  function openSessionCard(sessionAction) {
+    logPress('Dashboard:SessionCard', {
+      sessionAction,
+      hasTargetChild: !!sessionTargetChild,
+      targetChildId: sessionTargetChild?.id || null,
+      role,
+    });
+    const { routeName, params } = resolveTherapyWorkspaceTarget(sessionAction, sessionTargetChild?.id || null, true);
+    navigation.navigate(routeName, params);
+  }
 
   const careTeamCount = useMemo(() => {
     if (isTherapist) return Math.max(1, activeChildren.length);
@@ -226,6 +238,30 @@ export default function RoleDashboardScreen({ navigation }) {
         ? (firstRelevantChild ? () => navigation.navigate('ChildDetail', { childId: firstRelevantChild.id }) : undefined)
         : () => navigation.getParent()?.navigate('MyChild', { childId: selectedChild?.id || null }),
     },
+    reports: {
+      key: 'reports',
+      title: 'Reports',
+      value: sessionTargetChild?.name || 'Open reports',
+      hint: 'Behavior, mood, attendance, and mastery reporting.',
+      icon: 'query-stats',
+      onPress: () => navigation.navigate('Reports', { childId: sessionTargetChild?.id || null }),
+    },
+    'session-tracker': {
+      key: 'session-tracker',
+      title: 'Tap Tracker',
+      value: sessionTargetChild?.name || 'Open tracker',
+      hint: sessionTargetChild ? 'Launch the live session tracker for the selected learner.' : 'Assign a learner to open the live tracker.',
+      icon: 'touch-app',
+      onPress: () => openSessionCard('track'),
+    },
+    'summary-review': {
+      key: 'summary-review',
+      title: 'Summary Review',
+      value: sessionTargetChild?.name || 'Review draft',
+      hint: sessionTargetChild ? 'Open the therapist summary review panel for the selected learner.' : 'Assign a learner to review a draft summary.',
+      icon: 'fact-check',
+      onPress: () => openSessionCard('summary'),
+    },
     'items-needed': {
       key: 'items-needed',
       title: 'Items Needed',
@@ -275,7 +311,7 @@ export default function RoleDashboardScreen({ navigation }) {
     ? activePreset
     : ['next-session', 'mood-score', 'progress-report', 'items-needed', 'care-team', 'billing', 'resources'];
   const orderedPresetKeys = isTherapist
-    ? ['next-session', 'items-needed', ...presetKeys.filter((key) => !['next-session', 'items-needed'].includes(key))]
+    ? ['session-tracker', 'summary-review', 'reports', 'next-session', 'items-needed', ...presetKeys.filter((key) => !['session-tracker', 'summary-review', 'reports', 'next-session', 'items-needed'].includes(key))]
     : presetKeys;
   const featureFlags = tenant?.featureFlags || {};
   const cardFlagGates = {
@@ -319,9 +355,9 @@ export default function RoleDashboardScreen({ navigation }) {
                   {relevantChildren.map((child, index) => (
                     <TouchableOpacity
                       key={child?.id || `${child?.name || 'child'}-${index}`}
-                      style={styles.familyCard}
+                      style={[styles.familyCard, child?.id === selectedChildId ? styles.familyCardSelected : null]}
                       activeOpacity={0.88}
-                      onPress={() => navigation.navigate('ChildDetail', { childId: child?.id || null })}
+                      onPress={() => setSelectedChildId(child?.id || null)}
                     >
                       <Image source={avatarSourceFor(child) || childCarouselImageFor(child, index)} style={styles.familyCardImage} resizeMode="cover" />
                       <Text style={styles.familyCardName} numberOfLines={1}>{child?.name || 'Child'}</Text>
@@ -373,19 +409,16 @@ export default function RoleDashboardScreen({ navigation }) {
                   )}
                 </View>
                 <Text style={styles.cardTitle}>{card.title}</Text>
-                  <Text style={styles.cardValue}>{card.value}</Text>
+                <Text style={styles.cardValue}>{card.value}</Text>
+                {card.hint ? <Text style={styles.cardHint}>{card.hint}</Text> : null}
               </>
             );
 
-            if (card.onPress) {
-              return (
-                <TouchableOpacity key={card.key} style={[styles.card, isTherapist ? styles.cardTherapist : null, card.fullWidth ? styles.cardFullWidth : null]} onPress={card.onPress} activeOpacity={0.88}>
-                  {cardContent}
-                </TouchableOpacity>
-              );
-            }
-
-            return (
+            return card.onPress ? (
+              <TouchableOpacity key={card.key} style={[styles.card, isTherapist ? styles.cardTherapist : null, card.fullWidth ? styles.cardFullWidth : null]} onPress={card.onPress} activeOpacity={0.88}>
+                {cardContent}
+              </TouchableOpacity>
+            ) : (
               <View key={card.key} style={[styles.card, isTherapist ? styles.cardTherapist : null, card.fullWidth ? styles.cardFullWidth : null]}>
                 {cardContent}
               </View>

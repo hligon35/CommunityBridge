@@ -84,6 +84,11 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { registerFirebaseMfaRoutes } = require('./firebase-mfa-routes');
 const { registerOrganizationIntakeRoutes } = require('./organization-intake-routes');
+const {
+  DEFAULT_SUMMARY_FILENAME,
+  buildTherapySessionSummary,
+  renderSessionSummaryText,
+} = require('./session-summary');
 
 function parseCsvEnv(value) {
   return String(value || '')
@@ -922,6 +927,58 @@ CREATE TABLE IF NOT EXISTS mood_entries (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS therapy_sessions (
+  id TEXT PRIMARY KEY,
+  child_id TEXT NOT NULL,
+  child_name TEXT,
+  therapist_id TEXT NOT NULL,
+  therapist_role TEXT,
+  organization_id TEXT,
+  program_id TEXT,
+  campus_id TEXT,
+  session_date TEXT NOT NULL,
+  session_type TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  status TEXT NOT NULL,
+  summary_generated_at TEXT,
+  approved_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS therapy_session_events (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  child_id TEXT NOT NULL,
+  therapist_id TEXT,
+  event_type TEXT NOT NULL,
+  event_code TEXT NOT NULL,
+  label TEXT,
+  value_json TEXT,
+  intensity TEXT,
+  frequency_delta INTEGER,
+  metadata_json TEXT,
+  occurred_at TEXT NOT NULL,
+  source TEXT,
+  client_event_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS therapy_session_summaries (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL UNIQUE,
+  child_id TEXT NOT NULL,
+  therapist_id TEXT,
+  status TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  summary_json TEXT NOT NULL,
+  summary_text TEXT NOT NULL,
+  generated_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  approved_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
   id TEXT PRIMARY KEY,
   actor_id TEXT,
@@ -943,6 +1000,11 @@ try {
   db.exec('CREATE INDEX IF NOT EXISTS attendance_records_recorded_for_idx ON attendance_records (recorded_for)');
   db.exec('CREATE INDEX IF NOT EXISTS mood_entries_child_id_idx ON mood_entries (child_id)');
   db.exec('CREATE INDEX IF NOT EXISTS mood_entries_recorded_at_idx ON mood_entries (recorded_at DESC)');
+  db.exec('CREATE INDEX IF NOT EXISTS therapy_sessions_child_id_idx ON therapy_sessions (child_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS therapy_sessions_status_idx ON therapy_sessions (status)');
+  db.exec('CREATE INDEX IF NOT EXISTS therapy_session_events_session_id_idx ON therapy_session_events (session_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS therapy_session_events_child_id_idx ON therapy_session_events (child_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS therapy_session_summaries_child_id_idx ON therapy_session_summaries (child_id)');
 } catch (_) {
   // ignore
 }
@@ -1831,6 +1893,174 @@ function normalizeDocumentScopeMap(value) {
   return out;
 }
 
+function normalizeTherapySessionType(value) {
+  const normalized = safeString(value).trim().toUpperCase();
+  if (normalized === 'AM' || normalized === 'PM') return normalized;
+  return 'CUSTOM';
+}
+
+function normalizeTherapyEventType(value) {
+  const normalized = safeString(value).trim().toLowerCase();
+  const allowed = new Set(['behavior', 'program', 'mood', 'meal', 'toileting', 'note', 'milestone', 'session_marker']);
+  return allowed.has(normalized) ? normalized : '';
+}
+
+function normalizeTherapyEvent(entry, session, actor) {
+  const payload = entry && typeof entry === 'object' ? entry : {};
+  const eventType = normalizeTherapyEventType(payload.eventType || payload.type);
+  if (!eventType) return null;
+  const eventCode = safeString(payload.eventCode || payload.code || payload.label || eventType).trim().toLowerCase().replace(/\s+/g, '_');
+  if (!eventCode) return null;
+  const metadata = payload.metadata && typeof payload.metadata === 'object' ? { ...payload.metadata } : {};
+  if (payload.note != null && metadata.note == null) metadata.note = safeString(payload.note).trim();
+  if (payload.score != null && metadata.score == null) metadata.score = payload.score;
+  if (payload.status != null && metadata.status == null) metadata.status = payload.status;
+  if (payload.mealType != null && metadata.type == null) metadata.type = payload.mealType;
+  const occurredAt = safeString(payload.occurredAt).trim() || nowISO();
+  const frequencyDeltaRaw = Number(payload.frequencyDelta);
+  return {
+    id: nanoId(),
+    sessionId: session.id,
+    childId: session.child_id,
+    therapistId: safeString(actor?.id || actor?.uid).trim() || safeString(session.therapist_id).trim(),
+    eventType,
+    eventCode,
+    label: safeString(payload.label || payload.title || payload.eventCode || payload.code || eventType).trim() || eventCode,
+    value: payload.value !== undefined ? payload.value : (payload.score !== undefined ? payload.score : null),
+    intensity: safeString(payload.intensity).trim() || null,
+    frequencyDelta: Number.isFinite(frequencyDeltaRaw) ? Math.trunc(frequencyDeltaRaw) : 1,
+    metadata,
+    occurredAt,
+    source: safeString(payload.source).trim() || 'tap-grid',
+    clientEventId: safeString(payload.clientEventId).trim() || null,
+    createdAt: nowISO(),
+  };
+}
+
+function buildTherapySessionResponse(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    childId: row.child_id,
+    childName: safeString(row.child_name).trim(),
+    therapistId: safeString(row.therapist_id).trim(),
+    therapistRole: safeString(row.therapist_role).trim(),
+    organizationId: safeString(row.organization_id).trim(),
+    programId: safeString(row.program_id).trim(),
+    campusId: safeString(row.campus_id).trim(),
+    sessionDate: row.session_date,
+    sessionType: row.session_type,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    status: row.status,
+    summaryGeneratedAt: row.summary_generated_at,
+    approvedAt: row.approved_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function buildTherapySessionEventResponse(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    childId: row.child_id,
+    therapistId: safeString(row.therapist_id).trim(),
+    eventType: row.event_type,
+    eventCode: row.event_code,
+    label: safeString(row.label).trim(),
+    value: safeJsonParse(safeString(row.value_json), null),
+    intensity: safeString(row.intensity).trim() || null,
+    frequencyDelta: Number(row.frequency_delta) || 0,
+    metadata: safeJsonParse(safeString(row.metadata_json), {}),
+    occurredAt: row.occurred_at,
+    source: safeString(row.source).trim() || 'tap-grid',
+    clientEventId: safeString(row.client_event_id).trim() || null,
+    createdAt: row.created_at,
+  };
+}
+
+function buildTherapySessionSummaryResponse(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    childId: row.child_id,
+    therapistId: safeString(row.therapist_id).trim(),
+    status: row.status,
+    version: Number(row.version) || 1,
+    summary: safeJsonParse(safeString(row.summary_json), null),
+    summaryText: safeString(row.summary_text),
+    generatedAt: row.generated_at,
+    updatedAt: row.updated_at,
+    approvedAt: row.approved_at || null,
+    fileName: DEFAULT_SUMMARY_FILENAME,
+  };
+}
+
+function getChildDisplayNameByIdSqlite(childId) {
+  try {
+    const rows = db.prepare('SELECT data_json FROM directory_children ORDER BY updated_at DESC').all();
+    for (const row of rows || []) {
+      const item = safeJsonParse(String(row && row.data_json ? row.data_json : ''), null);
+      if (safeString(item?.id).trim() === safeString(childId).trim()) return safeString(item?.name).trim();
+    }
+  } catch (_) {
+    // ignore
+  }
+  return '';
+}
+
+function getTherapySessionRowSqlite(sessionId) {
+  return db.prepare('SELECT * FROM therapy_sessions WHERE id = ?').get(sessionId);
+}
+
+function getTherapySessionSummaryRowSqlite(sessionId) {
+  return db.prepare('SELECT * FROM therapy_session_summaries WHERE session_id = ?').get(sessionId);
+}
+
+function upsertTherapySessionSummarySqlite({ session, summary, status = 'draft', approvedAt = null }) {
+  const existing = getTherapySessionSummaryRowSqlite(session.id);
+  const now = nowISO();
+  const nextVersion = (Number(existing?.version) || 0) + 1;
+  const summaryText = renderSessionSummaryText(summary);
+  const row = {
+    id: existing?.id || nanoId(),
+    sessionId: session.id,
+    childId: session.child_id,
+    therapistId: safeString(session.therapist_id).trim(),
+    status,
+    version: nextVersion,
+    summaryJson: JSON.stringify(summary),
+    summaryText,
+    generatedAt: existing?.generated_at || now,
+    updatedAt: now,
+    approvedAt: approvedAt || null,
+  };
+  db.prepare(
+    'INSERT INTO therapy_session_summaries (id, session_id, child_id, therapist_id, status, version, summary_json, summary_text, generated_at, updated_at, approved_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)\n' +
+    'ON CONFLICT(session_id) DO UPDATE SET child_id=excluded.child_id, therapist_id=excluded.therapist_id, status=excluded.status, version=excluded.version, summary_json=excluded.summary_json, summary_text=excluded.summary_text, updated_at=excluded.updated_at, approved_at=excluded.approved_at'
+  ).run(row.id, row.sessionId, row.childId, row.therapistId, row.status, row.version, row.summaryJson, row.summaryText, row.generatedAt, row.updatedAt, row.approvedAt);
+  return getTherapySessionSummaryRowSqlite(session.id);
+}
+
+function generateTherapySessionSummarySqlite(sessionId, overrideSummary) {
+  const session = getTherapySessionRowSqlite(sessionId);
+  if (!session) return null;
+  const eventRows = db.prepare('SELECT * FROM therapy_session_events WHERE session_id = ? ORDER BY occurred_at ASC, created_at ASC').all(sessionId);
+  const events = (eventRows || []).map((row) => buildTherapySessionEventResponse(row));
+  const summary = buildTherapySessionSummary({
+    sessionId: session.id,
+    sessionDate: session.session_date,
+    childId: session.child_id,
+    childName: safeString(session.child_name).trim() || getChildDisplayNameByIdSqlite(session.child_id),
+    events,
+    existingSummary: overrideSummary,
+  });
+  return upsertTherapySessionSummarySqlite({ session, summary, status: overrideSummary ? 'draft' : (session.approved_at ? 'approved' : 'draft'), approvedAt: session.approved_at || null });
+}
+
 function readOrgSettingsItemSqlite() {
   try {
     const row = db.prepare('SELECT data_json FROM org_settings WHERE id = ?').get('default');
@@ -2469,6 +2699,256 @@ app.post('/api/children/:childId/mood', authMiddleware, requireChildCareWriteAcc
     ).run(item.id, item.childId, item.score, item.note || null, item.actorId || null, item.actorRole || null, item.recordedAt, item.createdAt);
 
     return res.json({ ok: true, item });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.post('/api/therapy-sessions', authMiddleware, requireChildCareWriteAccess, (req, res) => {
+  try {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const childId = safeString(body.childId).trim();
+    if (!childId) return res.status(400).json({ ok: false, error: 'childId required' });
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(childId)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+
+    const existing = db.prepare('SELECT * FROM therapy_sessions WHERE child_id = ? AND status = ? ORDER BY started_at DESC LIMIT 1').get(childId, 'active');
+    if (existing) return res.status(409).json({ ok: false, error: 'An active session already exists for this child.', item: buildTherapySessionResponse(existing) });
+
+    const now = nowISO();
+    const item = {
+      id: nanoId(),
+      childId,
+      childName: safeString(body.childName).trim() || getChildDisplayNameByIdSqlite(childId),
+      therapistId: safeString(req.user && (req.user.id || req.user.uid)).trim(),
+      therapistRole: safeString(req.user && req.user.role).trim(),
+      organizationId: safeString(body.organizationId).trim() || null,
+      programId: safeString(body.programId).trim() || null,
+      campusId: safeString(body.campusId).trim() || null,
+      sessionDate: normalizeDateKey(body.sessionDate || body.startedAt || now),
+      sessionType: normalizeTherapySessionType(body.sessionType),
+      startedAt: safeString(body.startedAt).trim() || now,
+      endedAt: null,
+      status: 'active',
+      summaryGeneratedAt: null,
+      approvedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    db.prepare(
+      'INSERT INTO therapy_sessions (id, child_id, child_name, therapist_id, therapist_role, organization_id, program_id, campus_id, session_date, session_type, started_at, ended_at, status, summary_generated_at, approved_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+    ).run(item.id, item.childId, item.childName || null, item.therapistId, item.therapistRole || null, item.organizationId, item.programId, item.campusId, item.sessionDate, item.sessionType, item.startedAt, item.endedAt, item.status, item.summaryGeneratedAt, item.approvedAt, item.createdAt, item.updatedAt);
+
+    recordAuditLog({ actorId: req.user?.id, action: 'therapy_session.started', targetType: 'therapy_session', targetId: item.id, details: { childId: item.childId, sessionType: item.sessionType } });
+    return res.status(201).json({ ok: true, item: buildTherapySessionResponse(getTherapySessionRowSqlite(item.id)) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.get('/api/therapy-sessions/active', authMiddleware, (req, res) => {
+  try {
+    const childId = safeString(req.query && req.query.childId).trim();
+    if (!childId) return res.status(400).json({ ok: false, error: 'childId required' });
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(childId)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+    const row = db.prepare('SELECT * FROM therapy_sessions WHERE child_id = ? AND status = ? ORDER BY started_at DESC LIMIT 1').get(childId, 'active');
+    return res.json({ ok: true, item: buildTherapySessionResponse(row) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.post('/api/therapy-sessions/:sessionId/events', authMiddleware, requireChildCareWriteAccess, (req, res) => {
+  try {
+    const sessionId = safeString(req.params && req.params.sessionId).trim();
+    const session = getTherapySessionRowSqlite(sessionId);
+    if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(session.child_id)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+    const item = normalizeTherapyEvent(req.body && req.body.event ? req.body.event : req.body, session, req.user);
+    if (!item) return res.status(400).json({ ok: false, error: 'Valid event payload required' });
+
+    db.prepare('INSERT INTO therapy_session_events (id, session_id, child_id, therapist_id, event_type, event_code, label, value_json, intensity, frequency_delta, metadata_json, occurred_at, source, client_event_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(item.id, item.sessionId, item.childId, item.therapistId || null, item.eventType, item.eventCode, item.label || null, JSON.stringify(item.value), item.intensity || null, item.frequencyDelta, JSON.stringify(item.metadata || {}), item.occurredAt, item.source || null, item.clientEventId, item.createdAt);
+
+    db.prepare('UPDATE therapy_sessions SET updated_at = ? WHERE id = ?').run(nowISO(), sessionId);
+    return res.status(201).json({ ok: true, item: buildTherapySessionEventResponse(db.prepare('SELECT * FROM therapy_session_events WHERE id = ?').get(item.id)) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.get('/api/therapy-sessions/:sessionId/events', authMiddleware, (req, res) => {
+  try {
+    const sessionId = safeString(req.params && req.params.sessionId).trim();
+    const session = getTherapySessionRowSqlite(sessionId);
+    if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(session.child_id)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+    const limit = Math.max(1, Math.min(Number(req.query && req.query.limit) || 40, 200));
+    const rows = db.prepare('SELECT * FROM therapy_session_events WHERE session_id = ? ORDER BY occurred_at DESC, created_at DESC LIMIT ?').all(sessionId, limit);
+    return res.json({ ok: true, sessionId, items: (rows || []).map((row) => buildTherapySessionEventResponse(row)) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.post('/api/therapy-sessions/:sessionId/events/bulk', authMiddleware, requireChildCareWriteAccess, (req, res) => {
+  try {
+    const sessionId = safeString(req.params && req.params.sessionId).trim();
+    const session = getTherapySessionRowSqlite(sessionId);
+    if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(session.child_id)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+    const entries = (Array.isArray(req.body?.events) ? req.body.events : []).map((entry) => normalizeTherapyEvent(entry, session, req.user)).filter(Boolean);
+    if (!entries.length) return res.status(400).json({ ok: false, error: 'No valid events supplied' });
+
+    const insert = db.prepare('INSERT INTO therapy_session_events (id, session_id, child_id, therapist_id, event_type, event_code, label, value_json, intensity, frequency_delta, metadata_json, occurred_at, source, client_event_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    const tx = db.transaction(() => {
+      entries.forEach((item) => {
+        insert.run(item.id, item.sessionId, item.childId, item.therapistId || null, item.eventType, item.eventCode, item.label || null, JSON.stringify(item.value), item.intensity || null, item.frequencyDelta, JSON.stringify(item.metadata || {}), item.occurredAt, item.source || null, item.clientEventId, item.createdAt);
+      });
+    });
+    tx();
+    db.prepare('UPDATE therapy_sessions SET updated_at = ? WHERE id = ?').run(nowISO(), sessionId);
+    return res.status(201).json({ ok: true, items: entries.map((item) => buildTherapySessionEventResponse(db.prepare('SELECT * FROM therapy_session_events WHERE id = ?').get(item.id))) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.post('/api/therapy-sessions/:sessionId/end', authMiddleware, requireChildCareWriteAccess, (req, res) => {
+  try {
+    const sessionId = safeString(req.params && req.params.sessionId).trim();
+    const session = getTherapySessionRowSqlite(sessionId);
+    if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(session.child_id)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+    const endedAt = safeString(req.body?.endedAt).trim() || nowISO();
+    db.prepare('UPDATE therapy_sessions SET ended_at = ?, status = ?, summary_generated_at = ?, updated_at = ? WHERE id = ?').run(endedAt, 'summary_draft', endedAt, nowISO(), sessionId);
+    const summaryRow = generateTherapySessionSummarySqlite(sessionId, null);
+    return res.json({ ok: true, item: buildTherapySessionResponse(getTherapySessionRowSqlite(sessionId)), summary: buildTherapySessionSummaryResponse(summaryRow) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.post('/api/therapy-sessions/:sessionId/generate-summary', authMiddleware, requireChildCareWriteAccess, (req, res) => {
+  try {
+    const sessionId = safeString(req.params && req.params.sessionId).trim();
+    const session = getTherapySessionRowSqlite(sessionId);
+    if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(session.child_id)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+    const summaryRow = generateTherapySessionSummarySqlite(sessionId, null);
+    db.prepare('UPDATE therapy_sessions SET status = ?, summary_generated_at = ?, updated_at = ? WHERE id = ?').run('summary_draft', nowISO(), nowISO(), sessionId);
+    return res.json({ ok: true, summary: buildTherapySessionSummaryResponse(summaryRow) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.get('/api/therapy-sessions/:sessionId/summary', authMiddleware, (req, res) => {
+  try {
+    const sessionId = safeString(req.params && req.params.sessionId).trim();
+    const session = getTherapySessionRowSqlite(sessionId);
+    if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(session.child_id)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+    const summary = getTherapySessionSummaryRowSqlite(sessionId);
+    if (!summary) return res.status(404).json({ ok: false, error: 'Summary not found' });
+    return res.json({ ok: true, item: buildTherapySessionSummaryResponse(summary) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.put('/api/therapy-sessions/:sessionId/summary', authMiddleware, requireChildCareWriteAccess, (req, res) => {
+  try {
+    const sessionId = safeString(req.params && req.params.sessionId).trim();
+    const session = getTherapySessionRowSqlite(sessionId);
+    if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(session.child_id)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+    const overrideSummary = req.body && typeof req.body.summary === 'object' ? req.body.summary : (req.body && typeof req.body === 'object' ? req.body : null);
+    if (!overrideSummary || typeof overrideSummary !== 'object') return res.status(400).json({ ok: false, error: 'summary object required' });
+    const summaryRow = generateTherapySessionSummarySqlite(sessionId, overrideSummary);
+    db.prepare('UPDATE therapy_sessions SET status = ?, updated_at = ? WHERE id = ?').run('summary_draft', nowISO(), sessionId);
+    return res.json({ ok: true, item: buildTherapySessionSummaryResponse(summaryRow) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.post('/api/therapy-sessions/:sessionId/summary/approve', authMiddleware, requireChildCareWriteAccess, (req, res) => {
+  try {
+    const sessionId = safeString(req.params && req.params.sessionId).trim();
+    const session = getTherapySessionRowSqlite(sessionId);
+    if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(session.child_id)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+    const existing = getTherapySessionSummaryRowSqlite(sessionId);
+    if (!existing) return res.status(404).json({ ok: false, error: 'Summary not found' });
+    const overrideSummary = req.body && typeof req.body.summary === 'object' ? req.body.summary : safeJsonParse(safeString(existing.summary_json), null);
+    const approvedAt = nowISO();
+    const summary = buildTherapySessionSummary({
+      sessionId: session.id,
+      sessionDate: session.session_date,
+      childId: session.child_id,
+      childName: safeString(session.child_name).trim() || getChildDisplayNameByIdSqlite(session.child_id),
+      events: db.prepare('SELECT * FROM therapy_session_events WHERE session_id = ? ORDER BY occurred_at ASC, created_at ASC').all(sessionId).map((row) => buildTherapySessionEventResponse(row)),
+      existingSummary: { ...(overrideSummary || {}), therapistEdited: true, approvedByTherapistId: safeString(req.user?.id).trim(), approvedAt },
+    });
+    const summaryRow = upsertTherapySessionSummarySqlite({ session: { ...session, approved_at: approvedAt }, summary, status: 'approved', approvedAt });
+    db.prepare('UPDATE therapy_sessions SET status = ?, approved_at = ?, updated_at = ? WHERE id = ?').run('submitted', approvedAt, nowISO(), sessionId);
+    recordAuditLog({ actorId: req.user?.id, action: 'therapy_session.summary_approved', targetType: 'therapy_session', targetId: sessionId, details: { childId: session.child_id } });
+    return res.json({ ok: true, item: buildTherapySessionSummaryResponse(summaryRow) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.get('/api/children/:childId/session-summaries', authMiddleware, (req, res) => {
+  try {
+    const childId = safeString(req.params && req.params.childId).trim();
+    if (!childId) return res.status(400).json({ ok: false, error: 'Missing childId' });
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(childId)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+    const limit = Math.max(1, Math.min(Number(req.query && req.query.limit) || 20, 100));
+    const rows = db.prepare('SELECT * FROM therapy_session_summaries WHERE child_id = ? AND status = ? ORDER BY COALESCE(approved_at, updated_at) DESC LIMIT ?').all(childId, 'approved', limit);
+    return res.json({ ok: true, childId, items: (rows || []).map((row) => buildTherapySessionSummaryResponse(row)) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.get('/api/children/:childId/session-summaries/latest', authMiddleware, (req, res) => {
+  try {
+    const childId = safeString(req.params && req.params.childId).trim();
+    if (!childId) return res.status(400).json({ ok: false, error: 'Missing childId' });
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(childId)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+    const row = db.prepare('SELECT * FROM therapy_session_summaries WHERE child_id = ? AND status = ? ORDER BY COALESCE(approved_at, updated_at) DESC LIMIT 1').get(childId, 'approved');
+    return res.json({ ok: true, childId, item: buildTherapySessionSummaryResponse(row) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.get('/api/therapy-sessions/:sessionId/artifacts/session-summary.txt', authMiddleware, (req, res) => {
+  try {
+    const sessionId = safeString(req.params && req.params.sessionId).trim();
+    const session = getTherapySessionRowSqlite(sessionId);
+    if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+    const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(session.child_id)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+    const row = getTherapySessionSummaryRowSqlite(sessionId);
+    if (!row) return res.status(404).json({ ok: false, error: 'Summary not found' });
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `inline; filename="${DEFAULT_SUMMARY_FILENAME}"`);
+    return res.send(safeString(row.summary_text));
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || String(e) });
   }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useData } from '../DataContext';
@@ -7,26 +7,43 @@ import { avatarSourceFor } from '../utils/idVisibility';
 import { MaterialIcons } from '@expo/vector-icons';
 import MoodTrackerCard from '../components/MoodTrackerCard';
 import { isAdminRole, isStaffRole } from '../core/tenant/models';
+import SessionSummarySnapshot from '../components/SessionSummarySnapshot';
+import { resolveTherapyWorkspaceTarget } from '../features/sessionTracking/utils/dashboardSessionTarget';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
+const { PREVIEW_CHILD } = require('../features/sessionTracking/utils/previewWorkspace');
 
 export default function ChildDetailScreen() {
   const route = useRoute();
   const navigation = useNavigation();
   const { user } = useAuth();
-  const { childId } = route.params || {};
+  const { childId, sessionAction, sessionPreview } = route.params || {};
   const { children = [], fetchAndSync } = useData();
   const canOpenRelatedChats = isAdminRole(user?.role);
   const canRecordMood = isAdminRole(user?.role) || isStaffRole(user?.role);
+  const canManageSession = canRecordMood;
 
   const child = (children || []).find((c) => c.id === childId) || null;
+  const isSessionPreview = Boolean(sessionPreview) && !child;
+  const displayChild = child || (isSessionPreview ? PREVIEW_CHILD : null);
+  useEffect(() => {
+    if (!sessionAction) return;
+    const { routeName, params } = resolveTherapyWorkspaceTarget(sessionAction, child?.id || null, isSessionPreview);
+    navigation.replace(routeName, params);
+  }, [sessionAction, navigation, child?.id, isSessionPreview]);
 
-  
 
-  if (!child) {
+  if (!displayChild) {
     return (
       <View style={styles.empty}><Text style={{ color: '#666' }}>Child not found</Text></View>
     );
+  }
+
+  function openTherapyRoute(routeName) {
+    navigation.navigate(routeName, {
+      childId: child?.id || null,
+      sessionPreview: isSessionPreview,
+    });
   }
 
   return (
@@ -34,28 +51,55 @@ export default function ChildDetailScreen() {
       <ScrollView contentContainerStyle={{ padding: 16 }} style={{ flex: 1 }}>
 
       <View style={styles.header}>
-        <Image source={avatarSourceFor(child)} style={styles.avatar} />
+        <Image source={avatarSourceFor(displayChild)} style={styles.avatar} />
         <View style={{ marginLeft: 12 }}>
-          <Text style={styles.name}>{child.name}</Text>
-          <Text style={styles.meta}>{child.age} • {child.room}</Text>
+          <Text style={styles.name}>{displayChild.name}</Text>
+          <Text style={styles.meta}>{displayChild.age} • {displayChild.room}</Text>
         </View>
       </View>
 
-      {child.carePlan ? (
+      {displayChild.carePlan ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Care Plan</Text>
-          <Text style={styles.sectionText}>{child.carePlan}</Text>
+          <Text style={styles.sectionText}>{displayChild.carePlan}</Text>
         </View>
       ) : null}
 
-      <MoodTrackerCard
-        childId={child?.id}
-        latestEntry={child?.latestMoodEntry}
-        editable={canRecordMood}
-        onRecorded={() => fetchAndSync({ force: true })}
-      />
+      {!isSessionPreview ? (
+        <MoodTrackerCard
+          childId={child?.id}
+          latestEntry={child?.latestMoodEntry}
+          editable={canRecordMood}
+          onRecorded={() => fetchAndSync({ force: true })}
+        />
+      ) : null}
 
-      {canOpenRelatedChats ? (
+      {canManageSession ? (
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Therapy Workspace</Text>
+          <Text style={styles.sectionText}>The therapist workflow now runs through dedicated screens so tracking, summary review, and reporting all share the same session state and preview behavior.</Text>
+          {isSessionPreview ? <Text style={styles.previewBanner}>Preview mode is available from each therapist tool without saving any learner data.</Text> : null}
+          <View style={styles.launchGrid}>
+            <TouchableOpacity style={styles.launchCard} onPress={() => openTherapyRoute('TapTracker')}>
+              <MaterialIcons name="touch-app" size={20} color="#2563eb" />
+              <Text style={styles.launchTitle}>Tap Tracker</Text>
+              <Text style={styles.launchHint}>Open live event capture and therapist notes.</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.launchCard} onPress={() => openTherapyRoute('SummaryReview')}>
+              <MaterialIcons name="fact-check" size={20} color="#2563eb" />
+              <Text style={styles.launchTitle}>Summary Review</Text>
+              <Text style={styles.launchHint}>Edit and approve the session summary draft.</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.launchCard} onPress={() => openTherapyRoute('Reports')}>
+              <MaterialIcons name="query-stats" size={20} color="#2563eb" />
+              <Text style={styles.launchTitle}>Reports</Text>
+              <Text style={styles.launchHint}>Review behavior, mood, attendance, and mastery trends.</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
+
+      {!isSessionPreview && canOpenRelatedChats ? (
         <View style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'flex-end' }}>
           <TouchableOpacity style={{ padding: 8, backgroundColor: '#2563eb', borderRadius: 8 }} onPress={() => {
             const firstParent = (child.parents || [])[0];
@@ -68,7 +112,7 @@ export default function ChildDetailScreen() {
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Parents</Text>
-            {(child.parents || []).map((p) => (
+            {(displayChild.parents || []).map((p) => (
               <TouchableOpacity key={p.id} style={[styles.personRow, { justifyContent: 'space-between' }]} onPress={() => navigation.navigate('ParentDetail', { parentId: p.id })}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Image source={avatarSourceFor(p)} style={styles.smallAvatar} />
@@ -85,14 +129,14 @@ export default function ChildDetailScreen() {
             ))}
           </View>
 
-      {child.notes ? (
+      {!isSessionPreview && child.notes ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Notes</Text>
           <Text style={styles.sectionText}>{child.notes}</Text>
         </View>
       ) : null}
 
-      {Array.isArray(child.upcoming) && child.upcoming.length ? (
+      {!isSessionPreview && Array.isArray(child.upcoming) && child.upcoming.length ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Upcoming</Text>
           {child.upcoming.map((u) => (
@@ -104,7 +148,7 @@ export default function ChildDetailScreen() {
         </View>
       ) : null}
 
-      <View style={styles.section}>
+      {!isSessionPreview ? <View style={styles.section}>
         <Text style={styles.sectionTitle}>Therapists</Text>
         {child.amTherapist ? (
           <TouchableOpacity style={styles.personRow} onPress={() => navigation.navigate('FacultyDetail', { facultyId: child.amTherapist.id })}>
@@ -133,7 +177,7 @@ export default function ChildDetailScreen() {
             </View>
           </TouchableOpacity>
         ) : null}
-      </View>
+      </View> : null}
 
       <View style={{ height: 32 }} />
       </ScrollView>
@@ -149,9 +193,15 @@ const styles = StyleSheet.create({
   name: { fontSize: 20, fontWeight: '700' },
   meta: { color: '#6b7280', marginTop: 4 },
   section: { marginTop: 12 },
+  sectionCard: { marginTop: 12, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc' },
   sectionTitle: { fontWeight: '700', marginBottom: 6 },
   sectionText: { color: '#374151' },
   personRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   smallAvatar: { width: 44, height: 44, borderRadius: 22 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  previewBanner: { marginTop: 8, marginBottom: 4, color: '#1d4ed8', backgroundColor: '#eff6ff', borderRadius: 10, padding: 10, lineHeight: 18 },
+  launchGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 10 },
+  launchCard: { width: '48%', minHeight: 116, borderRadius: 14, borderWidth: 1, borderColor: '#dbeafe', backgroundColor: '#ffffff', padding: 12, marginBottom: 10 },
+  launchTitle: { marginTop: 10, fontWeight: '800', color: '#0f172a' },
+  launchHint: { marginTop: 6, color: '#475569', lineHeight: 18 },
 });

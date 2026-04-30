@@ -1851,6 +1851,342 @@ export async function saveMoodEntry(childId, payload) {
   return { ok: true, item: json.item || null };
 }
 
+export async function startTherapySession(payload) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/therapy-sessions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not start therapy session.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, item: json.item || null };
+}
+
+export async function getActiveTherapySession(childId) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const resolvedChildId = String(childId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/therapy-sessions/active?childId=${encodeURIComponent(resolvedChildId)}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load active therapy session.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, item: json.item || null };
+}
+
+export async function appendTherapySessionEvent(sessionId, payload) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const resolvedSessionId = String(sessionId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/therapy-sessions/${encodeURIComponent(resolvedSessionId)}/events`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not append session event.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, item: json.item || null };
+}
+
+export async function appendTherapySessionEventsBulk(sessionId, events) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const resolvedSessionId = String(sessionId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/therapy-sessions/${encodeURIComponent(resolvedSessionId)}/events/bulk`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ events: Array.isArray(events) ? events : [] }),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not append session events.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, items: Array.isArray(json.items) ? json.items : [] };
+}
+
+export async function getTherapySessionEvents(sessionId, limit = 40) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const resolvedSessionId = String(sessionId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/therapy-sessions/${encodeURIComponent(resolvedSessionId)}/events?limit=${encodeURIComponent(String(limit))}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load therapy session events.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, sessionId: json.sessionId || resolvedSessionId, items: Array.isArray(json.items) ? json.items : [] };
+}
+
+export async function endTherapySession(sessionId, payload) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const resolvedSessionId = String(sessionId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/therapy-sessions/${encodeURIComponent(resolvedSessionId)}/end`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not end therapy session.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, item: json.item || null, summary: json.summary || null };
+}
+
+export async function generateTherapySessionSummary(sessionId) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const resolvedSessionId = String(sessionId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/therapy-sessions/${encodeURIComponent(resolvedSessionId)}/generate-summary`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not generate therapy session summary.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, item: json.summary || null };
+}
+
+export async function getTherapySessionSummary(sessionId) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const resolvedSessionId = String(sessionId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/therapy-sessions/${encodeURIComponent(resolvedSessionId)}/summary`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load therapy session summary.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, item: json.item || null };
+}
+
+export async function updateTherapySessionSummary(sessionId, payload) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const resolvedSessionId = String(sessionId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/therapy-sessions/${encodeURIComponent(resolvedSessionId)}/summary`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not save therapy session summary.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, item: json.item || null };
+}
+
+export async function approveTherapySessionSummary(sessionId, payload) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const resolvedSessionId = String(sessionId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/therapy-sessions/${encodeURIComponent(resolvedSessionId)}/summary/approve`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not approve therapy session summary.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, item: json.item || null };
+}
+
+export async function getChildSessionSummaries(childId, limit = 20) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const resolvedChildId = String(childId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/children/${encodeURIComponent(resolvedChildId)}/session-summaries?limit=${encodeURIComponent(String(limit))}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load child session summaries.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, childId: json.childId || resolvedChildId, items: Array.isArray(json.items) ? json.items : [] };
+}
+
+export async function getLatestChildSessionSummary(childId) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const resolvedChildId = String(childId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/children/${encodeURIComponent(resolvedChildId)}/session-summaries/latest`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load latest child session summary.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, childId: json.childId || resolvedChildId, item: json.item || null };
+}
+
+export async function getTherapySessionSummaryText(sessionId) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const resolvedSessionId = String(sessionId || '').trim();
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/therapy-sessions/${encodeURIComponent(resolvedSessionId)}/artifacts/session-summary.txt`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    const err = new Error(text || resp.statusText || 'Could not load session summary text.');
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, text: await resp.text() };
+}
+
 export async function getPermissionsConfig() {
   const u = requireUser();
   const apiBase = String(BASE_URL || '').replace(/\/$/, '');
@@ -2141,6 +2477,19 @@ export default {
   getAttendanceHistory,
   getMoodHistory,
   saveMoodEntry,
+  startTherapySession,
+  getActiveTherapySession,
+  appendTherapySessionEvent,
+  appendTherapySessionEventsBulk,
+  getTherapySessionEvents,
+  endTherapySession,
+  generateTherapySessionSummary,
+  getTherapySessionSummary,
+  updateTherapySessionSummary,
+  approveTherapySessionSummary,
+  getChildSessionSummaries,
+  getLatestChildSessionSummary,
+  getTherapySessionSummaryText,
   getPermissionsConfig,
   updatePermissionsConfig,
   getAuditLogs,

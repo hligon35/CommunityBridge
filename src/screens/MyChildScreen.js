@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, Linking, Modal, TouchableWithoutFeedback, Alert, Platform } from 'react-native';
+import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, Linking, Modal, TouchableWithoutFeedback, Alert, Platform, ActivityIndicator } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import MoodTrackerCard from '../components/MoodTrackerCard';
 import ImageToggle from '../components/ImageToggle';
+import SessionSummarySnapshot from '../components/SessionSummarySnapshot';
 import { childHasParent, findLinkedParentId } from '../utils/directoryLinking';
 import { avatarSourceFor } from '../utils/idVisibility';
 import { useTenant } from '../core/tenant/TenantContext';
 import { isAdminRole, isStaffRole } from '../core/tenant/models';
+import { getLatestChildSessionSummary } from '../Api';
 
 export default function MyChildScreen() {
+  const navigation = useNavigation();
   const route = useRoute();
   const { children, parents, urgentMemos, timeChangeProposals, proposeTimeChange, respondToProposal, respondToUrgentMemo, fetchAndSync } = useData();
   const { user } = useAuth();
@@ -72,6 +75,8 @@ export default function MyChildScreen() {
   const childProposals = (timeChangeProposals || []).filter((p) => p.childId === child.id);
   const [proposePreset, setProposePreset] = useState('10m_later');
   const [expandedReviewSection, setExpandedReviewSection] = useState(null);
+  const [latestApprovedSummary, setLatestApprovedSummary] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   async function submitProposal(offsetMillis) {
     try {
@@ -147,6 +152,41 @@ export default function MyChildScreen() {
       content: child?.interferingBehaviorLevels || child?.behaviorNotes || 'No interfering behavior levels have been recorded yet.',
     },
   ]), [child]);
+
+  useEffect(() => {
+    let disposed = false;
+
+    async function loadLatestSummary() {
+      if (!child?.id) {
+        if (!disposed) setLatestApprovedSummary(null);
+        return;
+      }
+      setSummaryLoading(true);
+      try {
+        const result = await getLatestChildSessionSummary(child.id);
+        if (!disposed) setLatestApprovedSummary(result?.item || null);
+      } catch (_) {
+        if (!disposed) setLatestApprovedSummary(null);
+      } finally {
+        if (!disposed) setSummaryLoading(false);
+      }
+    }
+
+    loadLatestSummary();
+    return () => {
+      disposed = true;
+    };
+  }, [child?.id]);
+
+  const latestApprovedSummarySubtitle = useMemo(() => {
+    const source = latestApprovedSummary?.approvedAt || latestApprovedSummary?.updatedAt || latestApprovedSummary?.generatedAt || '';
+    if (!source) return '';
+    try {
+      return `Approved ${new Date(source).toLocaleString()}`;
+    } catch (_) {
+      return '';
+    }
+  }, [latestApprovedSummary]);
 
   const linkedParents = useMemo(() => {
     if (!Array.isArray(parents) || !child?.id) return [];
@@ -299,29 +339,49 @@ export default function MyChildScreen() {
       )}
 
       <View style={styles.scheduleWrap}>
-        <Text style={styles.scheduleGroupTitle}>Daily Review</Text>
-
-        <View style={styles.reviewAccordionList}>
-          {dailyReviewSections.map((section) => {
-            const isExpanded = expandedReviewSection === section.key;
-            return (
-              <TouchableOpacity
-                key={section.key}
-                style={styles.reviewAccordionCard}
-                activeOpacity={0.9}
-                onPress={() => setExpandedReviewSection(isExpanded ? null : section.key)}
-              >
-                <View style={styles.reviewAccordionHeader}>
-                  <Text style={styles.reviewAccordionTitle}>{section.title}</Text>
-                  <MaterialIcons name={isExpanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={28} color="#667085" />
-                </View>
-                {isExpanded ? (
-                  <Text style={styles.reviewAccordionContent}>{section.content}</Text>
-                ) : null}
-              </TouchableOpacity>
-            );
-          })}
+        <View style={styles.scheduleHeaderRow}>
+          <Text style={styles.scheduleGroupTitle}>Daily Review</Text>
+          {child?.id ? (
+            <TouchableOpacity style={styles.reportsLinkButton} onPress={() => navigation.navigate('Reports', { childId: child.id })}>
+              <Text style={styles.reportsLinkButtonText}>Open Reports</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
+
+        {summaryLoading ? (
+          <View style={styles.summaryLoadingWrap}>
+            <ActivityIndicator size="small" color="#2563eb" />
+          </View>
+        ) : latestApprovedSummary?.summary ? (
+          <SessionSummarySnapshot
+            summary={latestApprovedSummary}
+            title="Approved Therapist Summary"
+            subtitle={latestApprovedSummarySubtitle}
+            emptyText="No approved therapist summary is available yet."
+          />
+        ) : (
+          <View style={styles.reviewAccordionList}>
+            {dailyReviewSections.map((section) => {
+              const isExpanded = expandedReviewSection === section.key;
+              return (
+                <TouchableOpacity
+                  key={section.key}
+                  style={styles.reviewAccordionCard}
+                  activeOpacity={0.9}
+                  onPress={() => setExpandedReviewSection(isExpanded ? null : section.key)}
+                >
+                  <View style={styles.reviewAccordionHeader}>
+                    <Text style={styles.reviewAccordionTitle}>{section.title}</Text>
+                    <MaterialIcons name={isExpanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={28} color="#667085" />
+                  </View>
+                  {isExpanded ? (
+                    <Text style={styles.reviewAccordionContent}>{section.content}</Text>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Pending Notifications</Text>
@@ -592,7 +652,11 @@ const styles = StyleSheet.create({
   careTeamWrap: { marginTop: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12 },
   careTeamTitle: { textAlign: 'center', fontWeight: '800', fontSize: 16, color: '#111827' },
   scheduleWrap: { marginTop: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12 },
+  scheduleHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   scheduleGroupTitle: { textAlign: 'center', fontWeight: '800', fontSize: 16, color: '#111827' },
+  reportsLinkButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#dbeafe' },
+  reportsLinkButtonText: { color: '#1d4ed8', fontWeight: '800', fontSize: 12 },
+  summaryLoadingWrap: { paddingVertical: 24, alignItems: 'center', justifyContent: 'center' },
   reviewAccordionList: { marginTop: 8 },
   reviewAccordionCard: {
     backgroundColor: '#ffffff',

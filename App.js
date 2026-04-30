@@ -40,6 +40,9 @@ import ParentDirectoryScreen from './src/screens/ParentDirectoryScreen';
 import ParentDetailScreen from './src/screens/ParentDetailScreen';
 import ChildDetailScreen from './src/screens/ChildDetailScreen';
 import FacultyDetailScreen from './src/screens/FacultyDetailScreen';
+import TapTrackerScreen from './src/screens/TapTrackerScreen';
+import SummaryReviewScreen from './src/screens/SummaryReviewScreen';
+import ReportsScreen from './src/screens/ReportsScreen';
 import ManagePermissionsScreen from './src/screens/ManagePermissionsScreen';
 import PrivacyDefaultsScreen from './src/screens/PrivacyDefaultsScreen';
 import AdminAlertsScreen from './src/screens/AdminAlertsScreen';
@@ -60,6 +63,8 @@ import { CommonActions } from '@react-navigation/native';
 import { TenantProvider } from './src/core/tenant/TenantContext';
 import { isAdminRole, isStaffRole, normalizeUserRole } from './src/core/tenant/models';
 import { humanizeScreenLabel } from './src/utils/screenLabels';
+import TabletNavigationShell from './src/components/TabletNavigationShell';
+import useIsTabletLayout from './src/hooks/useIsTabletLayout';
 
 initSentry();
 
@@ -70,6 +75,17 @@ const HEADER_LOGO_WIDTH = 168;
 const HEADER_LOGO_HEIGHT = 80;
 const HEADER_HEIGHT = 96;
 const SHOW_STACK_HEADERS = Platform.OS !== 'web';
+
+function getPrimaryMainRoute(state) {
+  try {
+    const appState = state?.routes?.[state.index || 0]?.state;
+    const rootState = appState?.routes?.find((route) => route.name === 'Main')?.state || appState;
+    const primaryRoute = rootState?.routes?.[rootState.index || 0];
+    return primaryRoute?.name || 'Home';
+  } catch (_) {
+    return 'Home';
+  }
+}
 
 const MyClassStackNav = createNativeStackNavigator();
 function MyClassStack() {
@@ -108,6 +124,9 @@ function ControlsStack() {
       <ControlsStackNav.Screen name="ParentDirectory" component={ParentDirectoryScreen} options={{ title: 'Parent Directory' }} />
       <ControlsStackNav.Screen name="ParentDetail" component={ParentDetailScreen} options={{ title: 'Parent' }} />
       <ControlsStackNav.Screen name="ChildDetail" component={ChildDetailScreen} options={{ title: 'Student' }} />
+      <ControlsStackNav.Screen name="TapTracker" component={TapTrackerScreen} options={{ title: 'Tap Tracker' }} />
+      <ControlsStackNav.Screen name="SummaryReview" component={SummaryReviewScreen} options={{ title: 'Summary Review' }} />
+      <ControlsStackNav.Screen name="Reports" component={ReportsScreen} options={{ title: 'Reports' }} />
       <ControlsStackNav.Screen name="FacultyDetail" component={FacultyDetailScreen} options={{ title: 'Faculty' }} />
       <ControlsStackNav.Screen name="AdminMemos" component={AdminMemosScreen} options={{ title: 'Compose Memo' }} />
       <ControlsStackNav.Screen name="AdminChatMonitor" component={AdminChatMonitorScreen} options={{ title: 'Chat Monitor' }} />
@@ -119,6 +138,7 @@ function ControlsStack() {
       
       <ControlsStackNav.Screen name="ExportData" component={ExportDataScreen} options={{ title: 'Export Data' }} />
       <ControlsStackNav.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
+      <ControlsStackNav.Screen name="ScheduleCalendar" component={ScheduleCalendarScreen} options={{ title: 'Schedule' }} />
       <ControlsStackNav.Screen name="ProgramDirectory" component={ProgramDirectoryScreen} options={{ title: 'Program Directory' }} />
       <ControlsStackNav.Screen name="CampusDirectory" component={CampusDirectoryScreen} options={{ title: 'Campus Directory' }} />
       <ControlsStackNav.Screen name="ProgramDocuments" component={ProgramDocumentsScreen} options={{ title: 'Program Documents' }} />
@@ -146,6 +166,9 @@ function CommunityStack() {
       <CommunityStackNav.Screen name="CareTeam" component={CareTeamScreen} options={{ title: 'My Care Team' }} />
       <CommunityStackNav.Screen name="ScheduleCalendar" component={ScheduleCalendarScreen} options={{ title: 'Schedule' }} />
       <CommunityStackNav.Screen name="ChildDetail" component={ChildDetailScreen} options={{ title: 'Child Profile' }} />
+      <CommunityStackNav.Screen name="TapTracker" component={TapTrackerScreen} options={{ title: 'Tap Tracker' }} />
+      <CommunityStackNav.Screen name="SummaryReview" component={SummaryReviewScreen} options={{ title: 'Summary Review' }} />
+      <CommunityStackNav.Screen name="Reports" component={ReportsScreen} options={{ title: 'Reports' }} />
       <CommunityStackNav.Screen name="ParentDetail" component={ParentDetailScreen} options={{ title: 'Parent' }} />
       <CommunityStackNav.Screen name="FacultyDetail" component={FacultyDetailScreen} options={{ title: 'Faculty' }} />
     </CommunityStackNav.Navigator>
@@ -166,6 +189,7 @@ function MyChildStack() {
       })}
     >
       <MyChildStackNav.Screen name="MyChildMain" component={MyChildScreen} options={{ title: 'My Child' }} />
+      <MyChildStackNav.Screen name="Reports" component={ReportsScreen} options={{ title: 'Reports' }} />
     </MyChildStackNav.Navigator>
   );
 }
@@ -211,11 +235,14 @@ function SettingsStack() {
 }
 
 function MainShell({ currentRoute }) {
+  const isTabletLayout = useIsTabletLayout();
   return (
     <TenantProvider>
       <DataProvider>
-        <MainRoutes />
-        <BottomNav navigationRef={navigationRef} currentRoute={currentRoute} />
+        <TabletNavigationShell currentRoute={currentRoute}>
+          <MainRoutes />
+        </TabletNavigationShell>
+        {!isTabletLayout ? <BottomNav navigationRef={navigationRef} currentRoute={currentRoute} /> : null}
         <UrgentMemoOverlay />
         <ArrivalDetector />
         <DevRoleSwitcher />
@@ -339,24 +366,10 @@ function AppNavigator() {
   return (
     <NavigationContainer
       ref={navigationRef}
-      onStateChange={() => {
+      onStateChange={(state) => {
         try {
-          const r = navigationRef.getCurrentRoute();
-          if (r && r.name) {
-            // Map nested route names back to top-level stack keys so BottomNav highlights correctly
-            const map = {
-              Main: 'Home',
-              CommunityMain: 'Home',
-              PostThread: 'Home',
-              ChatsList: 'Chats',
-              ChatThread: 'Chats',
-              NewThread: 'Chats',
-              MyChildMain: 'MyChild',
-              SettingsMain: 'Settings',
-              MyClassMain: 'MyClass',
-              ControlsMain: 'Controls',
-            };
-            const next = map[r.name] || r.name;
+          const next = getPrimaryMainRoute(state);
+          if (next) {
             setCurrentRoute((prev) => (prev === next ? prev : next));
             setDebugContext({ route: next });
             logger.debug('nav', 'Route change', { route: next });
