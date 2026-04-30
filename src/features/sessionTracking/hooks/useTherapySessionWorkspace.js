@@ -21,7 +21,7 @@ import {
   summarizeSessionStamp,
 } from '../utils/previewWorkspace';
 
-export function useTherapySessionWorkspace({ child, preview = false, canManageSession = true, fetchAndSync }) {
+export function useTherapySessionWorkspace({ child, preview = false, canManageSession = true, fetchAndSync, initialDraftSummary = null }) {
   const [activeSession, setActiveSession] = useState(null);
   const [draftSummary, setDraftSummary] = useState(null);
   const [latestApprovedSummary, setLatestApprovedSummary] = useState(null);
@@ -102,6 +102,11 @@ export function useTherapySessionWorkspace({ child, preview = false, canManageSe
       setSummaryNarrative(typeof narrative === 'string' ? narrative : '');
     }
   }, [draftSummary, preview]);
+
+  useEffect(() => {
+    if (preview || !initialDraftSummary) return;
+    setDraftSummary(initialDraftSummary);
+  }, [initialDraftSummary, preview]);
 
   useEffect(() => {
     if (preview) {
@@ -281,8 +286,9 @@ export function useTherapySessionWorkspace({ child, preview = false, canManageSe
     if (preview) {
       await flushQueuedEvents();
       setPreviewActiveSessionState(null);
-      setPreviewDraftSummaryState(createPreviewDraftSummary(summaryNarrative, previewRecentEvents));
-      return;
+      const nextDraft = createPreviewDraftSummary(summaryNarrative, previewRecentEvents);
+      setPreviewDraftSummaryState(nextDraft);
+      return { draftSummary: nextDraft };
     }
     if (!activeSession?.id || savingSession || syncingQueuedEvents) return;
     setSavingSession(true);
@@ -292,9 +298,10 @@ export function useTherapySessionWorkspace({ child, preview = false, canManageSe
       const sessionId = result?.item?.id || activeSession.id;
       const summaryResult = sessionId ? await getTherapySessionSummary(sessionId) : { item: result?.summary || null };
       setActiveSession(null);
-      setDraftSummary(summaryResult?.item || result?.summary || null);
+      const nextDraft = summaryResult?.item || result?.summary || null;
+      setDraftSummary(nextDraft);
       setSessionNote('');
-      Alert.alert('Session ended', 'The draft summary is ready for review.');
+      return { draftSummary: nextDraft };
     } catch (e) {
       Alert.alert('Could not end session', String(e?.message || e || 'Please try again.'));
     } finally {
@@ -349,7 +356,8 @@ export function useTherapySessionWorkspace({ child, preview = false, canManageSe
       setLatestApprovedSummary(result?.item || null);
       await refreshApprovedSummary();
       fetchAndSync?.({ force: true })?.catch?.(() => {});
-      Alert.alert('Summary approved', 'The approved session summary is now available to parents.');
+      Alert.alert('Submitted', 'The session report was submitted successfully.');
+      return { submitted: true, item: result?.item || null };
     } catch (e) {
       Alert.alert('Could not approve summary', String(e?.message || e || 'Please try again.'));
     } finally {

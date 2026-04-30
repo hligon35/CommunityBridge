@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useData } from '../DataContext';
@@ -14,13 +14,13 @@ export default function SummaryReviewScreen() {
   const route = useRoute();
   const navigation = useNavigation();
   const { user } = useAuth();
-  const { childId, sessionPreview } = route.params || {};
+  const { childId, sessionPreview, draftSummary } = route.params || {};
   const { children = [], fetchAndSync } = useData();
   const canManageSession = isAdminRole(user?.role) || isStaffRole(user?.role);
   const child = (children || []).find((entry) => entry.id === childId) || null;
   const preview = Boolean(sessionPreview) || !child;
   const displayChild = child || PREVIEW_CHILD;
-  const workspace = useTherapySessionWorkspace({ child, preview, canManageSession, fetchAndSync });
+  const workspace = useTherapySessionWorkspace({ child, preview, canManageSession, fetchAndSync, initialDraftSummary: draftSummary || null });
 
   const subtitle = useMemo(() => {
     if (preview) return 'Interactive preview';
@@ -34,18 +34,13 @@ export default function SummaryReviewScreen() {
           <View style={styles.headerRow}>
             <Image source={avatarSourceFor(displayChild)} style={styles.avatar} />
             <View style={styles.headerTextWrap}>
-              <Text style={styles.title}>Summary Review</Text>
+              <Text style={styles.title}>Session Report</Text>
               <Text style={styles.name}>{displayChild.name}</Text>
               {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
             </View>
           </View>
-          <View style={styles.linkRow}>
-            <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('TapTracker', { childId: child?.id || null, sessionPreview: preview })}>
-              <Text style={styles.secondaryButtonText}>Open Tap Tracker</Text>
-            </TouchableOpacity>
-          </View>
         </View>
-        <TherapySessionPanel workspace={workspace} mode="summary" title="Session Summary Review" />
+        <TherapySessionPanel workspace={workspace} mode="summary" title="Session Report" onSubmitted={() => navigation.navigate('CommunityMain')} />
       </ScrollView>
     </ScreenWrapper>
   );
@@ -61,7 +56,4 @@ const styles = StyleSheet.create({
   title: { color: '#2563eb', fontWeight: '800', textTransform: 'uppercase', fontSize: 12 },
   name: { fontSize: 22, fontWeight: '800', color: '#0f172a', marginTop: 4 },
   subtitle: { marginTop: 4, color: '#64748b' },
-  linkRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 14 },
-  secondaryButton: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#e2e8f0' },
-  secondaryButtonText: { color: '#0f172a', fontWeight: '700' },
 });

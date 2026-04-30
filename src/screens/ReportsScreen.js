@@ -31,6 +31,7 @@ export default function ReportsScreen() {
   const { children = [], parents = [], urgentMemos = [] } = useData();
   const reportChildren = useMemo(() => findReportChildren(user, children, parents), [user, children, parents]);
   const [selectedChildId, setSelectedChildId] = useState(route?.params?.childId || reportChildren[0]?.id || null);
+  const [reportScope, setReportScope] = useState('clinical');
 
   useEffect(() => {
     if (route?.params?.childId && route.params.childId !== selectedChildId) {
@@ -63,6 +64,16 @@ export default function ReportsScreen() {
 
         <View style={styles.filterCard}>
           <Text style={styles.sectionTitle}>Learner Filter</Text>
+          <View style={styles.scopeRow}>
+            {[
+              { key: 'clinical', label: 'Clinical Reports' },
+              { key: 'operational', label: 'Operational Reports' },
+            ].map((scope) => (
+              <TouchableOpacity key={scope.key} style={[styles.scopeChip, reportScope === scope.key ? styles.scopeChipActive : null]} onPress={() => setReportScope(scope.key)}>
+                <Text style={[styles.scopeChipText, reportScope === scope.key ? styles.scopeChipTextActive : null]}>{scope.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
           <View style={styles.filterRow}>
             {reportChildren.map((child) => (
               <TouchableOpacity key={child.id} style={[styles.filterChip, child.id === selectedChild?.id ? styles.filterChipActive : null]} onPress={() => setSelectedChildId(child.id)}>
@@ -75,41 +86,59 @@ export default function ReportsScreen() {
         {loading ? <View style={styles.loadingWrap}><ActivityIndicator color="#2563eb" /></View> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <View style={styles.metricRow}>
-          <ReportMetricCard label="Sessions" value={String((sessionSummariesByChild[selectedChild?.id] || []).length)} hint="Approved and draft summaries in the selected range." />
-          <ReportMetricCard label="Attendance" value={`${childReports.attendanceSummary.present} present`} hint={`${childReports.attendanceSummary.absent} absent • ${childReports.attendanceSummary.tardy} tardy`} />
-          <ReportMetricCard label="School-wide" value={`${schoolWide.totalSessions} summaries`} hint={`${schoolWide.activeLearners} active learners in scope`} />
-        </View>
-
-        <MiniBarChart title="Behavior Trends" items={childReports.behaviorTrends} accentColor="#dc2626" emptyText="No behavior trend data yet." />
-        <MiniBarChart title="Mood Trends" items={childReports.moodTrends} accentColor="#16a34a" emptyText="No mood trend data yet." />
-        <MiniBarChart title="Monthly Summary" items={childReports.monthlySummary.map((item) => ({ label: item.month, value: item.sessions }))} accentColor="#7c3aed" emptyText="No monthly summaries yet." />
-        <MiniBarChart title="Reinforcer Effectiveness" items={childReports.reinforcerEffectiveness.map((item) => ({ label: item.reinforcer, value: item.momentum }))} accentColor="#f59e0b" emptyText="No reinforcer effectiveness data yet." />
-        <HeatmapGrid title="Behavior Heatmap" items={childReports.behaviorHeatmap} emptyText="No heatmap data for the selected learner yet." />
-
-        <View style={styles.tableCard}>
-          <Text style={styles.sectionTitle}>Program Mastery</Text>
-          {(childReports.programMastery || []).length ? childReports.programMastery.map((row) => (
-            <View key={row.program} style={styles.tableRow}>
-              <Text style={styles.tablePrimary}>{row.program}</Text>
-              <Text style={styles.tableMeta}>{row.sessions} sessions • {row.milestones} milestones</Text>
-            </View>
-          )) : <Text style={styles.empty}>No program mastery data yet.</Text>}
-        </View>
-
-        {isAdmin ? (
+        {reportScope === 'clinical' ? (
           <>
-            <HeatmapGrid title="School-Wide Behavior Heatmap" items={schoolWide.behaviorHeatmap} emptyText="No school-wide heatmap data yet." />
-            <MiniBarChart title="Parent Engagement" items={schoolWide.parentEngagement} accentColor="#0ea5e9" emptyText="No parent communication activity yet." />
+            <View style={styles.metricRow}>
+              <ReportMetricCard label="Sessions" value={String((sessionSummariesByChild[selectedChild?.id] || []).length)} hint="Approved and draft summaries in the selected range." />
+              <ReportMetricCard label="Attendance" value={`${childReports.attendanceSummary.present} present`} hint={`${childReports.attendanceSummary.absent} absent • ${childReports.attendanceSummary.tardy} tardy`} />
+              <ReportMetricCard label="School-wide" value={`${schoolWide.totalSessions} summaries`} hint={`${schoolWide.activeLearners} active learners in scope`} />
+            </View>
+            <MiniBarChart title="Behavior Trends" items={childReports.behaviorTrends} accentColor="#dc2626" emptyText="No behavior trend data yet." />
+            <MiniBarChart title="Mood Trends" items={childReports.moodTrends} accentColor="#16a34a" emptyText="No mood trend data yet." />
+            <MiniBarChart title="Monthly Summary" items={childReports.monthlySummary.map((item) => ({ label: item.month, value: item.sessions }))} accentColor="#7c3aed" emptyText="No monthly summaries yet." />
+            <MiniBarChart title="Reinforcer Effectiveness" items={childReports.reinforcerEffectiveness.map((item) => ({ label: item.reinforcer, value: item.momentum }))} accentColor="#f59e0b" emptyText="No reinforcer effectiveness data yet." />
+            <HeatmapGrid title="Behavior Heatmap" items={childReports.behaviorHeatmap} emptyText="No heatmap data for the selected learner yet." />
+
             <View style={styles.tableCard}>
-              <Text style={styles.sectionTitle}>School-Wide Program Mastery</Text>
-              {(schoolWide.masteryTable || []).length ? schoolWide.masteryTable.map((row) => (
+              <Text style={styles.sectionTitle}>Program Mastery</Text>
+              {(childReports.programMastery || []).length ? childReports.programMastery.map((row) => (
                 <View key={row.program} style={styles.tableRow}>
                   <Text style={styles.tablePrimary}>{row.program}</Text>
                   <Text style={styles.tableMeta}>{row.sessions} sessions • {row.milestones} milestones</Text>
                 </View>
-              )) : <Text style={styles.empty}>No school-wide mastery data yet.</Text>}
+              )) : <Text style={styles.empty}>No program mastery data yet.</Text>}
             </View>
+          </>
+        ) : null}
+
+        {reportScope === 'operational' ? (
+          <>
+            <View style={styles.metricRow}>
+              <ReportMetricCard label="Attendance" value={`${childReports.attendanceSummary.present} present`} hint={`${childReports.attendanceSummary.absent} absent • ${childReports.attendanceSummary.tardy} tardy`} />
+              <ReportMetricCard label="Utilization" value={`${schoolWide.activeLearners} learners`} hint={`${schoolWide.totalSessions} summaries logged`} />
+              <ReportMetricCard label="Communication" value={`${schoolWide.parentEngagement.length} channels`} hint="Operational engagement surfaces." />
+            </View>
+            <MiniBarChart title="Parent Engagement" items={schoolWide.parentEngagement} accentColor="#0ea5e9" emptyText="No parent communication activity yet." />
+            <HeatmapGrid title="School-Wide Behavior Heatmap" items={schoolWide.behaviorHeatmap} emptyText="No school-wide heatmap data yet." />
+            <View style={styles.tableCard}>
+              <Text style={styles.sectionTitle}>Operational Reports</Text>
+              {[
+                { program: 'Attendance', sessions: childReports.attendanceSummary.present, milestones: childReports.attendanceSummary.absent },
+                { program: 'Session Verification', sessions: schoolWide.totalSessions, milestones: schoolWide.activeLearners },
+                { program: 'Staff Hours', sessions: schoolWide.parentEngagement.length, milestones: schoolWide.totalSessions },
+              ].map((row) => (
+                <View key={row.program} style={styles.tableRow}>
+                  <Text style={styles.tablePrimary}>{row.program}</Text>
+                  <Text style={styles.tableMeta}>{row.sessions} tracked • {row.milestones} supporting metric</Text>
+                </View>
+              ))}
+            </View>
+            {isAdmin ? (
+              <View style={styles.tableCard}>
+                <Text style={styles.sectionTitle}>Admin-only Exports & Billing</Text>
+                <Text style={styles.empty}>Use the admin Export Center and Billing & Authorizations screens for operational handoff and reimbursement workflow.</Text>
+              </View>
+            ) : null}
           </>
         ) : null}
       </ScrollView>
@@ -126,6 +155,11 @@ const styles = StyleSheet.create({
   subtitle: { marginTop: 8, color: '#475569', lineHeight: 20 },
   filterCard: { borderRadius: 16, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff', padding: 14, marginTop: 14 },
   sectionTitle: { fontSize: 15, fontWeight: '800', color: '#111827', marginBottom: 8 },
+  scopeRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 10 },
+  scopeChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#f1f5f9', marginRight: 8, marginBottom: 8 },
+  scopeChipActive: { backgroundColor: '#2563eb' },
+  scopeChipText: { color: '#0f172a', fontWeight: '700' },
+  scopeChipTextActive: { color: '#fff' },
   filterRow: { flexDirection: 'row', flexWrap: 'wrap' },
   filterChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#f1f5f9', marginRight: 8, marginBottom: 8 },
   filterChipActive: { backgroundColor: '#2563eb' },

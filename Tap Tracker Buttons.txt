@@ -1,0 +1,1023 @@
+{
+
+"programs": {
+
+"skillAcquisition": {
+
+"school": [
+
+"Independent",
+
+"Correct with prompt",
+
+"Incorrect",
+
+"No response",
+
+"Refusal",
+
+"Partial correct",
+
+"DTT trial",
+
+"NET trial",
+
+"Prompt used: Gesture",
+
+"Prompt used: Verbal",
+
+"Prompt used: Model",
+
+"Prompt used: Partial Physical",
+
+"Prompt used: Full Physical",
+
+"Reinforcement delivered"
+
+],
+
+"inHome": [
+
+"Independent",
+
+"Correct with prompt",
+
+"Incorrect",
+
+"No response",
+
+"Refusal",
+
+"Partial correct",
+
+"NET trial",
+
+"Daily living skill trial",
+
+"Prompt used: Gesture",
+
+"Prompt used: Verbal",
+
+"Prompt used: Model",
+
+"Prompt used: Partial Physical",
+
+"Prompt used: Full Physical",
+
+"Reinforcement delivered"
+
+]
+
+},
+
+"maintenance": {
+
+"school": [
+
+"Independent correct",
+
+"Needed prompt",
+
+"Incorrect",
+
+"Generalized to new staff",
+
+"Generalized to new setting",
+
+"Generalized to new materials"
+
+],
+
+"inHome": [
+
+"Independent correct",
+
+"Needed prompt",
+
+"Incorrect",
+
+"Generalized to parent",
+
+"Generalized to sibling",
+
+"Generalized to home routines"
+
+]
+
+},
+
+"generalization": {
+
+"school": [
+
+"Across staff",
+
+"Across settings",
+
+"Across materials",
+
+"Across peers",
+
+"Across time of day"
+
+],
+
+"inHome": [
+
+"Across parents",
+
+"Across siblings",
+
+"Across rooms",
+
+"Across community settings",
+
+"Across daily routines"
+
+]
+
+},
+
+"promptFading": {
+
+"school": [
+
+"Physical → Partial Physical",
+
+"Partial Physical → Model",
+
+"Model → Gesture",
+
+"Gesture → Verbal",
+
+"Verbal → Independent",
+
+"No fade possible"
+
+],
+
+"inHome": [
+
+"Physical → Partial Physical",
+
+"Partial Physical → Model",
+
+"Model → Gesture",
+
+"Gesture → Verbal",
+
+"Verbal → Independent",
+
+"No fade possible"
+
+]
+
+}
+
+},
+
+"interferingBehaviors": {
+
+"aggression": {
+
+"school": [
+
+"Hit",
+
+"Kick",
+
+"Bite",
+
+"Pinch",
+
+"Scratch",
+
+"Throw object",
+
+"Spit",
+
+"Grab/pull hair",
+
+"Attempted aggression",
+
+"Low intensity",
+
+"Moderate intensity",
+
+"High intensity"
+
+],
+
+"inHome": [
+
+"Hit",
+
+"Kick",
+
+"Bite",
+
+"Pinch",
+
+"Scratch",
+
+"Throw household item",
+
+"Spit",
+
+"Grab/pull hair",
+
+"Aggression toward sibling",
+
+"Aggression toward parent",
+
+"Low intensity",
+
+"Moderate intensity",
+
+"High intensity"
+
+]
+
+},
+
+"elopement": {
+
+"school": [
+
+"Left seat",
+
+"Left area",
+
+"Ran from staff",
+
+"Attempted to exit building",
+
+"Exited building",
+
+"Required blocking",
+
+"Required chase"
+
+],
+
+"inHome": [
+
+"Left room",
+
+"Ran to restricted area",
+
+"Attempted to leave house",
+
+"Exited house",
+
+"Required blocking",
+
+"Required physical redirection"
+
+]
+
+},
+
+"tantrum": {
+
+"school": [
+
+"Crying",
+
+"Screaming",
+
+"Dropping to floor",
+
+"Kicking",
+
+"Throwing items",
+
+"Duration <1 min",
+
+"Duration 1–5 min",
+
+"Duration >5 min"
+
+],
+
+"inHome": [
+
+"Crying",
+
+"Screaming",
+
+"Dropping to floor",
+
+"Kicking",
+
+"Throwing household items",
+
+"Duration <1 min",
+
+"Duration 1–5 min",
+
+"Duration >5 min"
+
+]
+
+},
+
+"precursor": {
+
+"school": [
+
+"Whining",
+
+"Pacing",
+
+"Increased vocal volume",
+
+"Tense posture",
+
+"Mild refusal",
+
+"Avoidance",
+
+"Early noncompliance"
+
+],
+
+"inHome": [
+
+"Whining",
+
+"Pacing",
+
+"Increased vocal volume",
+
+"Tense posture",
+
+"Mild refusal",
+
+"Avoidance",
+
+"Early noncompliance",
+
+"Seeking preferred item excessively"
+
+]
+
+}
+
+},
+
+"promptLevels": {
+
+"independent": {
+
+"school": ["Independent correct", "Independent incorrect", "Independent refusal"],
+
+"inHome": ["Independent correct", "Independent incorrect", "Independent refusal"]
+
+},
+
+"gestural": {
+
+"school": ["Pointing", "Motion cue", "Eye gaze cue"],
+
+"inHome": ["Pointing", "Motion cue", "Eye gaze cue"]
+
+},
+
+"verbal": {
+
+"school": ["Partial verbal", "Full verbal", "Repeated verbal"],
+
+"inHome": ["Partial verbal", "Full verbal", "Repeated verbal"]
+
+},
+
+"fullPhysical": {
+
+"school": ["Hand-over-hand", "Partial physical", "Safety physical guidance"],
+
+"inHome": ["Hand-over-hand", "Partial physical", "Safety physical guidance"]
+
+}
+
+},
+
+"reinforcement": {
+
+"primary": {
+
+"school": [
+
+"Edible delivered",
+
+"Sensory delivered",
+
+"Tangible delivered",
+
+"Break delivered",
+
+"For correct response",
+
+"For compliance",
+
+"For behavior reduction"
+
+],
+
+"inHome": [
+
+"Edible delivered",
+
+"Sensory delivered",
+
+"Tangible delivered",
+
+"Access to preferred toy",
+
+"Break delivered",
+
+"For correct response",
+
+"For compliance",
+
+"For transition success"
+
+]
+
+},
+
+"secondary": {
+
+"school": ["Praise", "High-five", "Social attention", "Token delivered", "Preferred activity"],
+
+"inHome": ["Praise", "High-five", "Social attention", "Token delivered", "Access to preferred activity"]
+
+},
+
+"token": {
+
+"school": [
+
+"Token delivered",
+
+"Token removed",
+
+"Token board progress",
+
+"Board completed → reward delivered"
+
+],
+
+"inHome": [
+
+"Token delivered",
+
+"Token removed",
+
+"Token board progress",
+
+"Board completed → reward delivered"
+
+]
+
+}
+
+},
+
+{
+
+"mealsToiletingMood": {
+
+"breakfast": {
+
+"school": [
+
+"Ate all",
+
+"Ate most",
+
+"Ate some",
+
+"Refused",
+
+"Prompted",
+
+"Utensil assistance",
+
+"Food sensitivity issue"
+
+],
+
+"inHome": [
+
+"Ate all",
+
+"Ate most",
+
+"Ate some",
+
+"Refused",
+
+"Prompted",
+
+"Parent-assisted",
+
+"Food sensitivity issue"
+
+]
+
+},
+
+"snack": {
+
+"school": ["Ate all", "Ate most", "Ate some", "Refused", "Prompted", "Utensil assistance"],
+
+"inHome": ["Ate all", "Ate most", "Ate some", "Refused", "Prompted", "Parent-assisted"]
+
+},
+
+"lunch": {
+
+"school": ["Ate all", "Ate most", "Ate some", "Refused", "Prompted", "Food sensitivity issue"],
+
+"inHome": ["Ate all", "Ate most", "Ate some", "Refused", "Prompted", "Food sensitivity issue"]
+
+},
+
+"dinner": {
+
+"inHome": [
+
+"Ate all",
+
+"Ate most",
+
+"Ate some",
+
+"Refused",
+
+"Prompted",
+
+"Parent-assisted",
+
+"Food sensitivity issue"
+
+]
+
+},
+
+"toiletingSuccess": {
+
+"school": [
+
+"Urinated",
+
+"Bowel movement",
+
+"Initiated independently",
+
+"Prompted success",
+
+"Used visual schedule",
+
+"Wiped independently",
+
+"Washed hands independently"
+
+],
+
+"inHome": [
+
+"Urinated",
+
+"Bowel movement",
+
+"Initiated independently",
+
+"Prompted success",
+
+"Used home routine",
+
+"Wiped independently",
+
+"Parent assisted"
+
+]
+
+},
+
+"toiletingAccident": {
+
+"school": [
+
+"Urine accident",
+
+"Bowel accident",
+
+"Attempted but incomplete",
+
+"Notified staff",
+
+"No awareness",
+
+"Clothing change required"
+
+],
+
+"inHome": [
+
+"Urine accident",
+
+"Bowel accident",
+
+"Attempted but incomplete",
+
+"Notified parent",
+
+"No awareness",
+
+"Clothing change required"
+
+]
+
+},
+
+{
+
+"moodScore": [
+
+{
+
+"value": 1,
+
+"label": "Severely Dysregulated",
+
+"description": "Crying, screaming, meltdown behavior; unable to participate; requires continuous support."
+
+},
+
+{
+
+"value": 2,
+
+"label": "Highly Dysregulated",
+
+"description": "Intense frustration or distress; refusal; may show aggression or elopement attempts."
+
+},
+
+{
+
+"value": 3,
+
+"label": "Dysregulated",
+
+"description": "Irritable, resistant, or avoidant; difficulty transitioning; frequent prompting needed."
+
+},
+
+{
+
+"value": 4,
+
+"label": "Low Engagement",
+
+"description": "Withdrawn, low motivation, slow to respond; participates with effort."
+
+},
+
+{
+
+"value": 5,
+
+"label": "Neutral",
+
+"description": "Calm baseline; participates with typical prompting; stable but not expressive."
+
+},
+
+{
+
+"value": 6,
+
+"label": "Mildly Positive",
+
+"description": "Cooperative, responsive, mild positive affect; steady participation."
+
+},
+
+{
+
+"value": 7,
+
+"label": "Positive",
+
+"description": "Engaged, smiling, motivated; transitions well; good participation."
+
+},
+
+{
+
+"value": 8,
+
+"label": "Highly Positive",
+
+"description": "Enthusiastic, interactive, strong engagement; initiates communication."
+
+},
+
+{
+
+"value": 9,
+
+"label": "Very Happy",
+
+"description": "High energy, joyful, eager to participate; strong social responsiveness."
+
+},
+
+{
+
+"value": 10,
+
+"label": "Exceptionally Regulated",
+
+"description": "Peak engagement; flexible, resilient, and thriving across tasks and transitions."
+
+}
+
+]
+
+}
+
+}
+
+}
+
+"notesCommunication": {
+
+"abcNote": {
+
+"school": {
+
+"antecedent": [
+
+"Demand placed",
+
+"Transition",
+
+"Denied access",
+
+"Peer interaction",
+
+"Unstructured time",
+
+"Sensory trigger",
+
+"Attention removed"
+
+],
+
+"behavior": [
+
+"Aggression",
+
+"Tantrum",
+
+"Elopement",
+
+"Noncompliance",
+
+"Property destruction",
+
+"Self-stimulatory behavior",
+
+"Self-injury"
+
+],
+
+"consequence": [
+
+"Redirected",
+
+"Prompted alternative behavior",
+
+"Provided break",
+
+"Reinforced alternative",
+
+"Blocked behavior",
+
+"Ignored",
+
+"Safety intervention"
+
+]
+
+},
+
+"inHome": {
+
+"antecedent": [
+
+"Parent demand",
+
+"Sibling interaction",
+
+"Denied preferred item",
+
+"Transition to routine",
+
+"Sensory trigger",
+
+"Attention removed"
+
+],
+
+"behavior": [
+
+"Aggression",
+
+"Tantrum",
+
+"Elopement attempt",
+
+"Noncompliance",
+
+"Property destruction",
+
+"Self-stimulatory behavior",
+
+"Self-injury"
+
+],
+
+"consequence": [
+
+"Redirected",
+
+"Prompted alternative behavior",
+
+"Provided break",
+
+"Reinforced alternative",
+
+"Blocked behavior",
+
+"Ignored",
+
+"Parent intervention"
+
+]
+
+}
+
+},
+
+"parentCommunication": {
+
+"school": [
+
+"Daily summary sent",
+
+"Behavior update",
+
+"Incident communicated",
+
+"Skill progress shared",
+
+"Toileting update",
+
+"Meal update",
+
+"Transportation update"
+
+],
+
+"inHome": [
+
+"Daily summary",
+
+"Behavior update",
+
+"Incident communicated",
+
+"Skill progress shared",
+
+"Toileting update",
+
+"Meal update",
+
+"Parent requested follow-up"
+
+]
+
+},
+
+"attendanceNote": {
+
+"school": [
+
+"Present",
+
+"Late arrival",
+
+"Early pickup",
+
+"Absent excused",
+
+"Absent unexcused",
+
+"Transportation issue"
+
+],
+
+"inHome": [
+
+"Session started",
+
+"Late start",
+
+"Early end",
+
+"Parent canceled",
+
+"Therapist canceled",
+
+"No-show"
+
+]
+
+},
+
+"safetyIncident": {
+
+"school": [
+
+"Minor injury",
+
+"Major injury",
+
+"Peer conflict",
+
+"Property damage",
+
+"Emergency procedure",
+
+"Nurse notified",
+
+"Parent notified"
+
+],
+
+"inHome": [
+
+"Minor injury",
+
+"Major injury",
+
+"Property damage",
+
+"Emergency procedure",
+
+"Parent notified"
+
+]
+
+},
+
+"bcbaReview": {
+
+"school": [
+
+"Program update needed",
+
+"Behavior plan review needed",
+
+"Data audit completed",
+
+"Observation completed",
+
+"Feedback provided"
+
+],
+
+"inHome": [
+
+"Program update needed",
+
+"Behavior plan review needed",
+
+"Parent training needed",
+
+"Observation completed",
+
+"Feedback provided"
+
+]
+
+}
+
+}
+
+}

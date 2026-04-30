@@ -1,10 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-const INTENSITY_OPTIONS = Object.freeze(['Precursor', 'Low', 'Moderate', 'High', 'Hazardous']);
-
 export default function BehaviorTapGrid({ groups = [], queuedEvents = [], disabled = false, onQueueEvent, onUndoLast }) {
-  const [intensityPicker, setIntensityPicker] = useState(null);
   const [variantPicker, setVariantPicker] = useState(null);
   const [textPromptState, setTextPromptState] = useState(null);
   const [textPromptValue, setTextPromptValue] = useState('');
@@ -34,14 +31,6 @@ export default function BehaviorTapGrid({ groups = [], queuedEvents = [], disabl
     setTextPromptValue('');
   }
 
-  function handleLongPress(preset) {
-    if (!preset?.payload || preset.payload.eventType !== 'behavior') {
-      queuePreset(preset);
-      return;
-    }
-    setIntensityPicker(preset);
-  }
-
   function handlePress(preset) {
     if (preset?.variantPrompt?.options?.length) {
       setVariantPicker(preset);
@@ -55,7 +44,7 @@ export default function BehaviorTapGrid({ groups = [], queuedEvents = [], disabl
       <View style={styles.headerRow}>
         <View style={styles.instructionsCard}>
           <Text style={styles.instructionsTitle}>Live Tap Tracker</Text>
-          <Text style={styles.instructionsText}>Tap to queue an event. Long-press behavior cards to choose intensity before sync.</Text>
+          <Text style={styles.instructionsText}>Tap a button to open the event menu and define the event before it is queued.</Text>
         </View>
         <TouchableOpacity style={[styles.undoButton, (!queuedEvents.length || disabled) ? styles.undoButtonDisabled : null]} disabled={!queuedEvents.length || disabled} onPress={onUndoLast}>
           <Text style={styles.undoButtonText}>Undo Last</Text>
@@ -87,44 +76,15 @@ export default function BehaviorTapGrid({ groups = [], queuedEvents = [], disabl
                 activeOpacity={0.88}
                 disabled={disabled}
                 onPress={() => handlePress(preset)}
-                onLongPress={() => handleLongPress(preset)}
-                delayLongPress={220}
               >
                 <Text style={styles.tileLabel}>{preset.label}</Text>
                 <Text style={styles.tileDescription}>{preset.description}</Text>
-                {preset?.variantPrompt?.options?.length ? <Text style={styles.tileMetaHint}>Tap to choose detail</Text> : null}
+                <Text style={styles.tileMetaHint}>Tap to choose detail</Text>
               </TouchableOpacity>
             ))}
           </View>
         </View>
       ))}
-
-      <Modal transparent visible={!!intensityPicker} animationType="fade" onRequestClose={() => setIntensityPicker(null)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{intensityPicker?.label || 'Behavior intensity'}</Text>
-            <Text style={styles.modalSubtitle}>Choose intensity for this event.</Text>
-            <View style={styles.modalOptions}>
-              {INTENSITY_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={styles.modalOption}
-                  onPress={() => {
-                    const preset = intensityPicker;
-                    setIntensityPicker(null);
-                    if (preset) queuePreset(preset, option);
-                  }}
-                >
-                  <Text style={styles.modalOptionText}>{option}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <TouchableOpacity style={styles.modalCancel} onPress={() => setIntensityPicker(null)}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       <Modal transparent visible={!!variantPicker} animationType="fade" onRequestClose={() => setVariantPicker(null)}>
         <View style={styles.modalOverlay}>

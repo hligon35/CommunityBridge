@@ -1673,6 +1673,186 @@ export async function mergeDirectory(payload) {
   return { ok: true };
 }
 
+export async function getStaffWorkspace(facultyId) {
+  requireUser();
+  const normalizedId = String(facultyId || '').trim();
+  if (!normalizedId) return { ok: true, item: null };
+  const snap = await getDoc(doc(db, 'staffWorkspaces', normalizedId)).catch(() => null);
+  if (!snap?.exists?.()) return { ok: true, item: null };
+  const data = snap.data() || {};
+  return {
+    ok: true,
+    item: {
+      id: snap.id,
+      ...data,
+      createdAt: isoFromMaybeTimestamp(data.createdAt),
+      updatedAt: isoFromMaybeTimestamp(data.updatedAt),
+    },
+  };
+}
+
+export async function listStaffWorkspaces(facultyIds = []) {
+  requireUser();
+  const ids = Array.from(new Set((Array.isArray(facultyIds) ? facultyIds : []).map((value) => String(value || '').trim()).filter(Boolean)));
+  if (!ids.length) return { ok: true, items: [] };
+  const docs = await Promise.all(ids.map((id) => getDoc(doc(db, 'staffWorkspaces', id)).catch(() => null)));
+  return {
+    ok: true,
+    items: docs
+      .filter((entry) => entry?.exists?.())
+      .map((entry) => {
+        const data = entry.data() || {};
+        return {
+          id: entry.id,
+          ...data,
+          createdAt: isoFromMaybeTimestamp(data.createdAt),
+          updatedAt: isoFromMaybeTimestamp(data.updatedAt),
+        };
+      }),
+  };
+}
+
+export async function updateStaffWorkspace(facultyId, payload) {
+  requireUser();
+  const normalizedId = String(facultyId || '').trim();
+  if (!normalizedId) throw new Error('Faculty id is required.');
+  const current = payload && typeof payload === 'object' ? payload : {};
+  const toWrite = {
+    credentials: current.credentials && typeof current.credentials === 'object' ? current.credentials : {},
+    availability: current.availability && typeof current.availability === 'object' ? current.availability : {},
+    documents: Array.isArray(current.documents) ? current.documents : [],
+    updatedAt: serverTimestamp(),
+    createdAt: current.createdAt || serverTimestamp(),
+  };
+  await setDoc(doc(db, 'staffWorkspaces', normalizedId), toWrite, { merge: true });
+  return {
+    ok: true,
+    item: {
+      ...toWrite,
+      id: normalizedId,
+      createdAt: current.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  };
+}
+
+export async function createExportJob(payload) {
+  const user = requireUser();
+  const clean = payload && typeof payload === 'object' ? payload : {};
+  const toWrite = {
+    title: String(clean.title || 'Export Job').trim() || 'Export Job',
+    category: String(clean.category || 'reports').trim() || 'reports',
+    format: String(clean.format || 'csv').trim() || 'csv',
+    scope: String(clean.scope || 'office').trim() || 'office',
+    status: 'queued',
+    summary: String(clean.summary || '').trim(),
+    recordsCount: Number.isFinite(Number(clean.recordsCount)) ? Math.max(0, Math.floor(Number(clean.recordsCount))) : 0,
+    requesterUid: String(user.uid || '').trim(),
+    artifactName: String(clean.artifactName || '').trim(),
+    artifactUrl: String(clean.artifactUrl || '').trim(),
+    artifactPath: String(clean.artifactPath || '').trim(),
+    artifactMimeType: String(clean.artifactMimeType || '').trim(),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    generatedAt: serverTimestamp(),
+  };
+  const refDoc = await addDoc(collection(db, 'exportJobs'), toWrite);
+  return {
+    ok: true,
+    item: {
+      id: refDoc.id,
+      ...toWrite,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      generatedAt: new Date().toISOString(),
+    },
+  };
+}
+
+export async function updateExportJob(jobId, payload) {
+  requireUser();
+  const normalizedId = String(jobId || '').trim();
+  if (!normalizedId) throw new Error('Export job id is required.');
+  const clean = payload && typeof payload === 'object' ? payload : {};
+  const next = {
+    updatedAt: serverTimestamp(),
+  };
+  ['status', 'summary', 'artifactName', 'artifactUrl', 'artifactPath', 'artifactMimeType'].forEach((key) => {
+    if (clean[key] != null) next[key] = String(clean[key]).trim();
+  });
+  if (clean.recordsCount != null) {
+    next.recordsCount = Number.isFinite(Number(clean.recordsCount)) ? Math.max(0, Math.floor(Number(clean.recordsCount))) : 0;
+  }
+  if (clean.generatedAt != null) {
+    next.generatedAt = clean.generatedAt === 'serverTimestamp' ? serverTimestamp() : clean.generatedAt;
+  }
+  await setDoc(doc(db, 'exportJobs', normalizedId), next, { merge: true });
+  return { ok: true, id: normalizedId };
+}
+
+export async function listExportJobs(limitCount = 20) {
+  const user = requireUser();
+  const safeLimit = Number.isFinite(Number(limitCount)) ? Math.max(1, Math.min(100, Math.floor(Number(limitCount)))) : 20;
+  const snap = await getDocs(query(collection(db, 'exportJobs'), where('requesterUid', '==', String(user.uid || '').trim()), orderBy('createdAt', 'desc'), limit(safeLimit))).catch(() => null);
+  const items = snap ? snap.docs.map((entry) => {
+    const data = entry.data() || {};
+    return {
+      id: entry.id,
+      ...data,
+      createdAt: isoFromMaybeTimestamp(data.createdAt),
+      updatedAt: isoFromMaybeTimestamp(data.updatedAt),
+      generatedAt: isoFromMaybeTimestamp(data.generatedAt),
+    };
+  }) : [];
+  return { ok: true, items };
+}
+
+export async function getProgramWorkspace(programId) {
+  requireUser();
+  const normalizedId = String(programId || '').trim();
+  if (!normalizedId) return { ok: true, item: null };
+  const snap = await getDoc(doc(db, 'programEditorWorkspaces', normalizedId)).catch(() => null);
+  if (!snap?.exists?.()) return { ok: true, item: null };
+  const data = snap.data() || {};
+  return {
+    ok: true,
+    item: {
+      id: snap.id,
+      ...data,
+      createdAt: isoFromMaybeTimestamp(data.createdAt),
+      updatedAt: isoFromMaybeTimestamp(data.updatedAt),
+    },
+  };
+}
+
+export async function updateProgramWorkspace(programId, payload) {
+  requireUser();
+  const normalizedId = String(programId || '').trim();
+  if (!normalizedId) throw new Error('Program id is required.');
+  const clean = payload && typeof payload === 'object' ? payload : {};
+  const next = {
+    organizationId: String(clean.organizationId || '').trim(),
+    targetName: String(clean.targetName || '').trim(),
+    promptHierarchy: String(clean.promptHierarchy || '').trim(),
+    masteryCriteria: String(clean.masteryCriteria || '').trim(),
+    generalizationPlan: String(clean.generalizationPlan || '').trim(),
+    reviewedAt: clean.reviewedAt || null,
+    updatedAt: serverTimestamp(),
+    createdAt: clean.createdAt || serverTimestamp(),
+  };
+  await setDoc(doc(db, 'programEditorWorkspaces', normalizedId), next, { merge: true });
+  return {
+    ok: true,
+    item: {
+      id: normalizedId,
+      ...next,
+      reviewedAt: next.reviewedAt || null,
+      createdAt: clean.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  };
+}
+
 export async function getOrgSettings() {
   const u = requireUser();
   const apiBase = String(BASE_URL || '').replace(/\/$/, '');
@@ -2470,6 +2650,14 @@ export default {
   getDirectory,
   getDirectoryMe,
   mergeDirectory,
+  getStaffWorkspace,
+  listStaffWorkspaces,
+  updateStaffWorkspace,
+  createExportJob,
+  updateExportJob,
+  listExportJobs,
+  getProgramWorkspace,
+  updateProgramWorkspace,
   getOrgSettings,
   updateOrgSettings,
   getAttendanceForDate,

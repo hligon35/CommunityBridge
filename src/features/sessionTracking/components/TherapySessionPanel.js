@@ -6,7 +6,7 @@ import BehaviorTapGrid from './BehaviorTapGrid';
 import LiveEventFeed from './LiveEventFeed';
 const { summarizeSessionStamp } = require('../utils/previewWorkspace');
 
-export default function TherapySessionPanel({ workspace, mode = 'combined', title = 'Therapy Session Workspace' }) {
+export default function TherapySessionPanel({ workspace, mode = 'combined', title = 'Therapy Session Workspace', trackerPaused = false, hideTrackerFeed = false, onSubmitted }) {
   const showTracker = mode === 'combined' || mode === 'tracker';
   const showSummary = mode === 'combined' || mode === 'summary';
   const feedItems = [
@@ -37,26 +37,11 @@ export default function TherapySessionPanel({ workspace, mode = 'combined', titl
               <BehaviorTapGrid
                 groups={THERAPY_EVENT_GROUPS}
                 queuedEvents={workspace.queuedEvents}
-                disabled={workspace.savingSession || workspace.syncingQueuedEvents}
+                disabled={trackerPaused || workspace.savingSession || workspace.syncingQueuedEvents}
                 onQueueEvent={workspace.queueSessionEvent}
                 onUndoLast={workspace.undoLastQueuedEvent}
               />
-              <LiveEventFeed items={feedItems} />
-              <TextInput
-                value={workspace.sessionNote}
-                onChangeText={workspace.setSessionNote}
-                placeholder="Add therapist note before ending the session"
-                multiline
-                style={styles.noteInput}
-              />
-              <View style={styles.actionRow}>
-                <TouchableOpacity style={styles.secondaryButton} onPress={workspace.handleSaveNote} disabled={!workspace.sessionNote.trim() || workspace.savingSession}>
-                  <Text style={styles.secondaryButtonText}>Save Note</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.primaryButton} onPress={workspace.handleEndSession} disabled={workspace.savingSession}>
-                  <Text style={styles.primaryButtonText}>End Session</Text>
-                </TouchableOpacity>
-              </View>
+              {!hideTrackerFeed ? <LiveEventFeed items={feedItems} /> : null}
             </>
           ) : (
             <>
@@ -78,14 +63,6 @@ export default function TherapySessionPanel({ workspace, mode = 'combined', titl
         <View style={showTracker ? styles.summaryTop : null}>
           {workspace.draftSummary?.summary ? (
             <View>
-              <Text style={styles.subtitle}>Draft Summary Review</Text>
-              <TextInput
-                value={workspace.summaryNarrative}
-                onChangeText={workspace.setSummaryNarrative}
-                placeholder="Refine the therapist narrative before approval"
-                multiline
-                style={styles.noteInput}
-              />
               <SessionSummarySnapshot
                 summary={{
                   ...workspace.draftSummary,
@@ -97,29 +74,30 @@ export default function TherapySessionPanel({ workspace, mode = 'combined', titl
                     },
                   },
                 }}
-                title="Draft Summary"
-                subtitle="Review before approving"
-                emptyText="Draft summary unavailable."
+                title="Session Report"
+                subtitle="Review before submitting"
+                emptyText="Session report unavailable."
+              />
+              <Text style={[styles.subtitle, { marginTop: 14 }]}>Notes</Text>
+              <TextInput
+                value={workspace.summaryNarrative}
+                onChangeText={workspace.setSummaryNarrative}
+                placeholder="Add session notes"
+                multiline
+                style={styles.noteInput}
               />
               <View style={styles.actionRow}>
-                <TouchableOpacity style={styles.secondaryButton} onPress={workspace.handleSaveDraft} disabled={workspace.savingSession}>
-                  <Text style={styles.secondaryButtonText}>Save Draft</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.primaryButton} onPress={workspace.handleApproveSummary} disabled={workspace.savingSession}>
-                  <Text style={styles.primaryButtonText}>Approve Summary</Text>
+                <TouchableOpacity style={styles.primaryButton} onPress={async () => {
+                  const result = await workspace.handleApproveSummary();
+                  if (result?.submitted && typeof onSubmitted === 'function') onSubmitted(result);
+                }} disabled={workspace.savingSession}>
+                  <Text style={styles.primaryButtonText}>Submit</Text>
                 </TouchableOpacity>
               </View>
             </View>
           ) : (
             <Text style={styles.bodyText}>End a session to generate a summary draft for review.</Text>
           )}
-
-          <SessionSummarySnapshot
-            summary={workspace.latestApprovedSummary}
-            title="Latest Approved Session Summary"
-            subtitle={workspace.preview ? 'Preview example' : workspace.summarySubtitle}
-            emptyText="No approved therapist summary is available for this learner yet."
-          />
         </View>
       ) : null}
     </View>

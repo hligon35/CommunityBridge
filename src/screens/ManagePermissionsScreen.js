@@ -18,6 +18,26 @@ const DEFAULT_CAPS = [
   { id: 'settings:system', label: 'System settings' },
   { id: 'export:data', label: 'Export data' },
 ];
+const PERMISSION_GROUPS = [
+  {
+    key: 'office',
+    label: 'Office',
+    description: 'Organization settings, imports, exports, compliance, and scheduling controls.',
+    roles: ['Admin', 'Staff'],
+  },
+  {
+    key: 'clinical',
+    label: 'Clinical',
+    description: 'BCBA and therapist workflows, child editing, and clinical communication.',
+    roles: ['Therapist', 'Teacher'],
+  },
+  {
+    key: 'family',
+    label: 'Family',
+    description: 'Parent-facing communication and constrained account access.',
+    roles: ['Parent'],
+  },
+];
 const ROLE_OPTIONS = [
   { value: 'parent', label: 'Parent', adminOnly: false },
   { value: 'faculty', label: 'Faculty', adminOnly: false },
@@ -90,6 +110,7 @@ export default function ManagePermissionsScreen(){
     Staff: false,
   });
   const [userSectionsOpen, setUserSectionsOpen] = useState({});
+  const [selectedPermissionGroup, setSelectedPermissionGroup] = useState('office');
   const [organizations, setOrganizations] = useState([]);
   const [programsByOrg, setProgramsByOrg] = useState({});
   const [campusesByOrg, setCampusesByOrg] = useState({});
@@ -112,6 +133,13 @@ export default function ManagePermissionsScreen(){
     });
     return map;
   }, [campusesByOrg]);
+  const visiblePermissionGroup = useMemo(() => {
+    return PERMISSION_GROUPS.find((group) => group.key === selectedPermissionGroup) || PERMISSION_GROUPS[0];
+  }, [selectedPermissionGroup]);
+  const visiblePermissionRoles = useMemo(() => {
+    const roles = visiblePermissionGroup?.roles || DEFAULT_ROLES;
+    return roles.filter((role) => DEFAULT_ROLES.includes(role));
+  }, [visiblePermissionGroup]);
 
   useEffect(() => {
     (async () => {
@@ -521,6 +549,7 @@ export default function ManagePermissionsScreen(){
 
             <Text style={styles.fieldLabel}>Reset password</Text>
             <TextInput value={draft.password} onChangeText={(value) => updateUserDraft(userItem.id, 'password', value)} style={styles.input} placeholder="Leave blank to keep current password" secureTextEntry />
+            <Text style={styles.helperText}>Use this only for office-managed account recovery. End users should still use the standard reset-password flow from login.</Text>
 
             <View style={styles.userActionRow}>
               <TouchableOpacity style={[styles.actionButton, styles.saveButton]} onPress={() => saveUser(userItem)} disabled={busy}>
@@ -611,7 +640,26 @@ export default function ManagePermissionsScreen(){
           {sectionsOpen.permissions ? (
             canManagePermissions ? (
               <View style={styles.sectionBody}>
-                {DEFAULT_ROLES.map((role) => renderRole(role))}
+                <View style={styles.infoCard}>
+                  <Text style={styles.infoTitle}>adminPermissions</Text>
+                  <Text style={styles.infoBody}>The permission matrix is grouped by office, clinical, and family access so the document’s split admin model maps to existing roles without duplicating accounts.</Text>
+                </View>
+                <View style={styles.groupChipWrap}>
+                  {PERMISSION_GROUPS.map((group) => {
+                    const selected = group.key === visiblePermissionGroup.key;
+                    return (
+                      <TouchableOpacity
+                        key={group.key}
+                        onPress={() => setSelectedPermissionGroup(group.key)}
+                        style={[styles.groupChip, selected ? styles.groupChipSelected : null]}
+                      >
+                        <Text style={[styles.groupChipLabel, selected ? styles.groupChipLabelSelected : null]}>{group.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={styles.groupDescription}>{visiblePermissionGroup.description}</Text>
+                {visiblePermissionRoles.map((role) => renderRole(role))}
               </View>
             ) : (
               <View style={styles.sectionBody}>
@@ -658,6 +706,12 @@ const styles = StyleSheet.create({
   roleChipSelected: { backgroundColor: '#dbeafe', borderColor: '#2563eb' },
   roleChipLabel: { color: '#334155', fontWeight: '600' },
   roleChipLabelSelected: { color: '#1d4ed8' },
+  groupChipWrap: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 },
+  groupChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: '#bfdbfe', backgroundColor: '#eff6ff', marginRight: 8, marginBottom: 8 },
+  groupChipSelected: { backgroundColor: '#1d4ed8', borderColor: '#1d4ed8' },
+  groupChipLabel: { color: '#1d4ed8', fontWeight: '700' },
+  groupChipLabelSelected: { color: '#fff' },
+  groupDescription: { color: '#475569', lineHeight: 20, marginBottom: 12 },
   helperText: { color: '#64748b', lineHeight: 20, marginBottom: 8 },
   userActionRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14 },
   actionButton: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },

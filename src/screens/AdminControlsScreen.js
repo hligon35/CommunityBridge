@@ -14,6 +14,7 @@ import { useAuth } from '../AuthContext';
 import { isAdminRole, isSuperAdminRole } from '../core/tenant/models';
 import { SETTINGS_KEYS, readJsonSetting, writeBooleanSetting, writeJsonSetting } from '../utils/appSettings';
 import ImageToggle from '../components/ImageToggle';
+import useIsTabletLayout from '../hooks/useIsTabletLayout';
 
 const APP_BUNDLE_ID = (() => {
   try {
@@ -41,6 +42,7 @@ export default function AdminControlsScreen() {
   const { messages, children, parents = [], therapists = [], urgentMemos = [], fetchAndSync } = useData();
   const { user } = useAuth();
   const tenant = useTenant() || {};
+  const isTabletLayout = useIsTabletLayout();
   const tenantFlags = tenant.featureFlags || {};
   const canManagePermissions = isSuperAdminRole(user?.role);
   const isWeb = Platform.OS === 'web';
@@ -110,6 +112,38 @@ export default function AdminControlsScreen() {
     (therapists || []).forEach((f) => { if (f && f.id) map.set(f.id, f); });
     return map.size;
   }, [therapists]);
+  const pendingAlertCount = (urgentMemos || []).filter((m) => !m.status || m.status === 'pending').length;
+  const currentRoleLabel = String(user?.role || 'admin').trim() || 'admin';
+  const adminNavSplitSections = [
+    {
+      key: 'office',
+      title: 'Office Operations',
+      subtitle: 'Scheduling, staff controls, compliance, imports, and organization settings.',
+      items: [
+        canOpenAccessControls ? { key: 'ManagePermissions', label: 'User Roles & Permissions', description: 'Control account access, reset passwords, and edit scoped admin access.', icon: 'admin-panel-settings' } : null,
+        { key: 'ScheduleCalendar', label: 'Scheduling', description: 'Open day, week, staff, and student scheduling views.', icon: 'calendar-month' },
+        { key: 'InsuranceBilling', label: 'Billing & Authorizations', description: 'Review authorizations, verification flow, and billing handoff status.', icon: 'receipt-long' },
+        { key: 'ImportCenter', label: 'Import Center', description: 'Choose and validate JSON directory imports with audit visibility.', icon: 'upload-file', disabled: !hasCapability('children:edit') },
+        { key: 'ExportData', label: 'Export Center', description: 'Prepare PDF, CSV, and Excel-style exports.', icon: 'file-download', disabled: !hasCapability('export:data') },
+        { key: 'AdminAlerts', label: 'Compliance & Alerts', description: 'Track expirations, urgent memos, and operational blockers.', icon: 'notification-important', badge: pendingAlertCount },
+        { key: 'PrivacyDefaults', label: 'Organization Settings', description: 'Adjust privacy defaults, arrivals, and profile-level system behavior.', icon: 'settings-applications', disabled: !hasCapability('settings:system') },
+        { key: 'AdminMemos', label: 'Broadcast Center', description: 'Send office announcements and operational updates.', icon: 'campaign' },
+      ].filter(Boolean),
+    },
+    {
+      key: 'clinical',
+      title: 'Clinical Operations',
+      subtitle: 'BCBA-oriented learner workflow, reports, and treatment review entry points.',
+      items: [
+        { key: 'Reports', label: 'Data & Reports', description: 'Review clinical and operational reporting in one place.', icon: 'analytics' },
+        { key: 'TapTracker', label: 'Tap Tracker', description: 'Launch the iPad session workflow for live session capture.', icon: 'touch-app' },
+        { key: 'SummaryReview', label: 'Summary Review', description: 'Approve session summaries and parent-facing notes.', icon: 'fact-check' },
+        tenantFlags.attendanceModule !== false ? { key: 'Attendance', label: 'Attendance', description: 'Inspect attendance status and verification details.', icon: 'event-available' } : null,
+        tenantFlags.programDirectory !== false ? { key: 'ProgramDirectory', label: 'Programs & Goals', description: 'Open the program library and learner program lists.', icon: 'assignment' } : null,
+        { key: 'AdminChatMonitor', label: 'Communication Threads', description: 'Monitor BCBA, therapist, and family communication flows.', icon: 'forum' },
+      ].filter(Boolean),
+    },
+  ];
 
   // Navigation helpers
   const openMemos = () => navigation.navigate('AdminMemos');
@@ -303,7 +337,6 @@ export default function AdminControlsScreen() {
     }
   }
 
-  const pendingAlertCount = (urgentMemos || []).filter((m) => !m.status || m.status === 'pending').length;
   const [showIds, setShowIds] = useState(false);
 
   const [orgAddress, setOrgAddress] = useState('');
@@ -1062,47 +1095,70 @@ export default function AdminControlsScreen() {
                 </ScrollView>
               </View>
             ) : null}
-        {/* Admin Tools - core admin entry points */}
-        <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8 }}>Admin Tools</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-            {[
-              { key: 'AdminMemos', label: 'Compose Memo', icon: 'campaign' },
-              { key: 'AdminChatMonitor', label: 'Chat Monitor', icon: 'forum' },
-              canOpenAccessControls ? { key: 'ManagePermissions', label: 'Manage Permissions', icon: 'admin-panel-settings' } : null,
-              { key: 'PrivacyDefaults', label: 'Privacy Defaults', icon: 'privacy-tip' },
-            ].filter(Boolean).map((t) => (
-              <TouchableOpacity
-                key={t.key}
-                onPress={() => navigation.navigate(t.key)}
-                style={{
-                  width: '48%',
-                  marginRight: '2%',
-                  marginBottom: 10,
-                  backgroundColor: '#fff',
-                  borderWidth: 1,
-                  borderColor: '#e5e7eb',
-                  borderRadius: 14,
-                  padding: 14,
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-                accessibilityLabel={`Open ${t.label}`}
-              >
-                <View>
-                  <MaterialIcons name={t.icon} size={24} color="#2563eb" />
-                  {t.badge ? (
-                    <View style={{ position: 'absolute', top: -6, right: -10, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#dc2626', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
-                      <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{t.badge > 99 ? '99+' : t.badge}</Text>
+        {!isTabletLayout ? <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: '#0f172a' }}>Admin Workspace</Text>
+          <Text style={{ marginTop: 4, marginBottom: 10, color: '#64748b' }}>
+            Signed in as {currentRoleLabel}. The admin redesign now splits office operations from clinical workflow entry points.
+          </Text>
+          {adminNavSplitSections.map((section) => (
+            <View
+              key={section.key}
+              style={{
+                marginBottom: 14,
+                borderWidth: 1,
+                borderColor: '#dbe4f0',
+                borderRadius: 16,
+                backgroundColor: '#f8fbff',
+                padding: 12,
+              }}
+            >
+              <Text style={{ fontSize: 15, fontWeight: '800', color: '#0f172a' }}>{section.title}</Text>
+              <Text style={{ marginTop: 4, marginBottom: 10, color: '#64748b', lineHeight: 18 }}>{section.subtitle}</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                {section.items.map((item) => (
+                  <TouchableOpacity
+                    key={item.key}
+                    onPress={() => {
+                      if (item.disabled) {
+                        Alert.alert('Permission required', 'Your account does not currently have access to this admin area.');
+                        return;
+                      }
+                      navigation.navigate(item.key);
+                    }}
+                    style={{
+                      width: '48%',
+                      marginBottom: 10,
+                      backgroundColor: item.disabled ? '#f8fafc' : '#fff',
+                      borderWidth: 1,
+                      borderColor: item.disabled ? '#e2e8f0' : '#dbe4f0',
+                      borderRadius: 14,
+                      padding: 14,
+                      minHeight: 124,
+                      opacity: item.disabled ? 0.7 : 1,
+                    }}
+                    accessibilityLabel={`Open ${item.label}`}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <MaterialIcons name={item.icon} size={24} color={item.disabled ? '#94a3b8' : '#2563eb'} />
+                      {item.badge ? (
+                        <View style={{ minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#dc2626', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
+                          <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{item.badge > 99 ? '99+' : item.badge}</Text>
+                        </View>
+                      ) : null}
                     </View>
-                  ) : null}
-                </View>
-                <Text style={{ marginTop: 8, fontWeight: '700', color: '#0f172a', textAlign: 'center' }}>{t.label}</Text>
-              </TouchableOpacity>
-            ))}
+                    <Text style={{ marginTop: 10, fontWeight: '700', color: '#0f172a' }}>{item.label}</Text>
+                    <Text style={{ marginTop: 6, color: '#64748b', fontSize: 12, lineHeight: 18 }}>{item.description}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ))}
+        </View> : (
+          <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#0f172a' }}>Dashboard</Text>
+            <Text style={{ marginTop: 4, color: '#64748b' }}>Use the left navigation rail for Students, Staff, Scheduling, Programs & Goals, Data & Reports, Billing, Compliance, Communication, and Settings.</Text>
           </View>
-        </View>
+        )}
 
         {/* Program / Campus modules (feature-flagged) */}
         {(() => {

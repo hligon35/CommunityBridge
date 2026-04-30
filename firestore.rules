@@ -47,6 +47,18 @@ service cloud.firestore {
         (userDoc().data.role == 'admin' || userDoc().data.role == 'administrator');
     }
 
+    function isScopedAdmin() {
+      return signedIn() && userDoc().exists() &&
+        (userDoc().data.role == 'admin' ||
+         userDoc().data.role == 'administrator' ||
+         userDoc().data.role == 'superAdmin' ||
+         userDoc().data.role == 'superadmin' ||
+         userDoc().data.role == 'orgAdmin' ||
+         userDoc().data.role == 'orgadmin' ||
+         userDoc().data.role == 'campusAdmin' ||
+         userDoc().data.role == 'campusadmin');
+    }
+
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
 
@@ -173,6 +185,25 @@ service cloud.firestore {
 
     match /orgSettings/{id} {
       allow read, write: if false;
+    }
+
+    match /staffWorkspaces/{uid} {
+      allow read: if mfaVerified() && (isScopedAdmin() || request.auth.uid == uid);
+      allow create, update: if mfaVerified() && (isScopedAdmin() || request.auth.uid == uid);
+      allow delete: if isScopedAdmin();
+    }
+
+    match /exportJobs/{jobId} {
+      allow read: if mfaVerified() && (isScopedAdmin() || resource.data.requesterUid == request.auth.uid);
+      allow create: if mfaVerified() && request.resource.data.requesterUid == request.auth.uid;
+      allow update: if mfaVerified() && (isScopedAdmin() || resource.data.requesterUid == request.auth.uid);
+      allow delete: if isScopedAdmin();
+    }
+
+    match /programEditorWorkspaces/{programId} {
+      allow read: if mfaVerified() && signedIn();
+      allow create, update: if mfaVerified() && isScopedAdmin();
+      allow delete: if isScopedAdmin();
     }
 
     match /meta/{id} {

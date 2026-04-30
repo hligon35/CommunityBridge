@@ -1,9 +1,11 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, Linking } from 'react-native';
+import * as FileSystem from 'expo-file-system';
 import { useData } from '../DataContext';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useNavigation } from '@react-navigation/native';
+import * as Api from '../Api';
 
 function toCSV(rows) {
   if (!rows || !rows.length) return '';
@@ -15,17 +17,217 @@ function toCSV(rows) {
 
 export default function ExportDataScreen(){
   const navigation = useNavigation();
-  const { messages = [], children = [] } = useData();
+  const { messages = [], children = [], therapists = [], parents = [], urgentMemos = [] } = useData();
+  const [selectedCategory, setSelectedCategory] = useState('reports');
+  const [selectedFormat, setSelectedFormat] = useState('csv');
+  const [jobs, setJobs] = useState([]);
+  const [busy, setBusy] = useState(false);
+
+  const recordCount = useMemo(() => selectedCategory === 'billing' ? children.length : messages.length + children.length, [children.length, messages.length, selectedCategory]);
+
+  async function loadJobs() {
+    try {
+      const result = await Api.listExportJobs(12);
+      setJobs(Array.isArray(result?.items) ? result.items : []);
+    } catch (_) {
+      setJobs([]);
+    }
+  }
+
+  useEffect(() => {
+    loadJobs().catch(() => {});
+  }, []);
+
+  function buildRows() {
+    if (selectedCategory === 'billing') {
+      return children.map((child) => ({
+        learner: child?.name || 'Learner',
+        attendanceStatus: child?.attendanceStatus || 'pending',
+        insuranceStatus: child?.insuranceStatus || 'pending verification',
+        assignedStaff: [child?.amTherapist?.name, child?.pmTherapist?.name, child?.bcaTherapist?.name].filter(Boolean).join(' | '),
+      }));
+    }
+    if (selectedCategory === 'compliance') {
+      return therapists.map((staff) => ({
+        staff: staff?.name || staff?.email || 'Staff',
+        role: staff?.role || 'staff',
+        email: staff?.email || '',
+        phone: staff?.phone || '',
+        urgentMemos: urgentMemos.filter((memo) => (memo?.recipientIds || []).includes(staff?.id)).length,
+      }));
+    }
+    return messages.slice(0, 200).map((message) => ({
+      thread: message?.threadId || message?.id || 'thread',
+      sender: message?.sender?.name || message?.sender?.id || 'Unknown',
+      recipients: Array.isArray(message?.to) ? message.to.map((item) => item?.name || item?.id).filter(Boolean).join(' | ') : '',
+      createdAt: message?.createdAt || '',
+    }));
+  }
+
+  function getExportContent(rows) {
+    if (selectedFormat === 'excel') {
+      return {
+        fileExtension: 'csv',
+        mimeType: 'text/csv',
+        body: toCSV(rows),
+      };
+    }
+    if (selectedFormat === 'pdf') {
+      const summaryLines = rows.map((row) => Object.entries(row).map(([key, value]) => `${key}: ${value ?? ''}`).join('\n')).join('\n\n');
+      return {
+        fileExtension: 'html',
+        mimeType: 'text/html',
+        body: `<!doctype html><html><head><meta charset="utf-8" /><title>CommunityBridge Export</title><style>body{font-family:Georgia,serif;padding:24px;color:#0f172a;}h1{font-size:24px;}pre{white-space:pre-wrap;font-family:Georgia,serif;line-height:1.5;}</style></head><body><h1>${selectedCategory} export</h1><p>Generated ${new Date().toLocaleString()}</p><pre>${summaryLines.replace(/[<>&]/g, (character) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[character]))}</pre></body></html>`,
+      };
+    }
+    return {
+      fileExtension: 'csv',
+      mimeType: 'text/csv',
+      body: toCSV(rows),
+    };
+  }
+
+  async function createArtifactFile(fileName, body, mimeType) {
+    if (Platform.OS === 'web') {
+      const blob = new Blob([body], { type: mimeType });
+      const uri = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = uri;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      return { uri, cleanup: () => URL.revokeObjectURL(uri) };
+    }
+
+    const baseDir = `${FileSystem.cacheDirectory || FileSystem.documentDirectory}exports`;
+    await FileSystem.makeDirectoryAsync(baseDir, { intermediates: true }).catch(() => {});
+    const fileUri = `${baseDir}/${fileName}`;
+    await FileSystem.writeAsStringAsync(fileUri, body, { encoding: FileSystem.EncodingType.UTF8 });
+    return { uri: fileUri, cleanup: async () => {} };
+  }
 
   async function doExport(){
-    Alert.alert('Export unavailable', 'Sensitive data export is disabled in this build.');
+    try {
+      setBusy(true);
+      const title = selectedCategory === 'billing' ? 'Billing Export' : selectedCategory === 'compliance' ? 'Compliance Export' : 'Operational Report Export';
+      const rows = buildRows();
+      const content = getExportContent(rows);
+      const fileName = `${selectedCategory}-${Date.now()}.${content.fileExtension}`;
+      const job = await Api.createExportJob({
+        title,
+        category: selectedCategory,
+        format: selectedFormat,
+        scope: 'office',
+        recordsCount: rows.length || recordCount,
+        summary: `${title} queued from Export Center.`,
+      });
+      const artifact = await createArtifactFile(fileName, content.body, content.mimeType);
+      try {
+        const formData = new FormData();
+        formData.append('file', {
+          uri: artifact.uri,
+          name: fileName,
+          type: content.mimeType,
+        });
+        const uploaded = await Api.uploadMedia(formData);
+        await Api.updateExportJob(job?.item?.id, {
+          status: 'completed',
+          summary: `${title} generated successfully.`,
+          artifactName: fileName,
+          artifactMimeType: content.mimeType,
+          artifactUrl: uploaded?.url || '',
+          artifactPath: uploaded?.path || '',
+          generatedAt: 'serverTimestamp',
+          recordsCount: rows.length || recordCount,
+        });
+      } catch (e) {
+        await Api.updateExportJob(job?.item?.id, {
+          status: 'failed',
+          summary: String(e?.message || e || 'Export generation failed.'),
+        }).catch(() => {});
+        throw e;
+      } finally {
+        await artifact.cleanup?.();
+      }
+      await loadJobs();
+      Alert.alert('Export ready', `${title} was generated and added to recent export jobs.`);
+    } catch (e) {
+      Alert.alert('Export failed', String(e?.message || e || 'Could not queue export.'));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <ScreenWrapper style={styles.container}>
       <View style={styles.body}>
-        <Text style={styles.p}>Export a CSV snapshot of messages and children.</Text>
-        <TouchableOpacity style={[styles.exportBtn, styles.exportBtnDisabled]} onPress={doExport}><Text style={styles.exportText}>Export Disabled</Text></TouchableOpacity>
+        <Text style={styles.title}>Export Center</Text>
+        <Text style={styles.p}>Prepare office-facing data exports for reports, billing handoff, and compliance review.</Text>
+
+        <View style={styles.infoCard}>
+          <Text style={styles.infoTitle}>Available export targets</Text>
+          <Text style={styles.infoBody}>PDF, CSV, and Excel-style exports are represented here in the admin redesign. In this build, sensitive export generation remains disabled until server-backed export jobs are enabled.</Text>
+        </View>
+
+        <View style={styles.metricRow}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>Messages</Text>
+            <Text style={styles.metricValue}>{messages.length}</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>Students</Text>
+            <Text style={styles.metricValue}>{children.length}</Text>
+          </View>
+        </View>
+
+        <View style={styles.selectorRow}>
+          {[
+            { key: 'reports', label: 'Reports' },
+            { key: 'billing', label: 'Billing' },
+            { key: 'compliance', label: 'Compliance' },
+          ].map((item) => (
+            <TouchableOpacity key={item.key} style={[styles.selectorChip, selectedCategory === item.key ? styles.selectorChipActive : null]} onPress={() => setSelectedCategory(item.key)}>
+              <Text style={[styles.selectorChipText, selectedCategory === item.key ? styles.selectorChipTextActive : null]}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.selectorRow}>
+          {['csv', 'pdf', 'excel'].map((item) => (
+            <TouchableOpacity key={item} style={[styles.selectorChip, selectedFormat === item ? styles.selectorChipActive : null]} onPress={() => setSelectedFormat(item)}>
+              <Text style={[styles.selectorChipText, selectedFormat === item ? styles.selectorChipTextActive : null]}>{item.toUpperCase()}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TouchableOpacity style={[styles.exportBtn, busy ? styles.exportBtnDisabled : null]} onPress={doExport} disabled={busy}><Text style={styles.exportText}>{busy ? 'Queueing...' : 'Queue Export Job'}</Text></TouchableOpacity>
+
+        <View style={styles.jobsCard}>
+          <Text style={styles.infoTitle}>Recent Export Jobs</Text>
+          {jobs.length ? jobs.map((job) => (
+            <View key={job.id} style={styles.jobRow}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={styles.jobTitle}>{job.title || 'Export Job'}</Text>
+                <Text style={styles.jobMeta}>{String(job.category || 'reports').toUpperCase()} • {String(job.format || 'csv').toUpperCase()} • {job.recordsCount || 0} records</Text>
+                <Text style={styles.jobMeta}>{job.createdAt ? new Date(job.createdAt).toLocaleString() : 'Recently created'}</Text>
+              </View>
+              <View style={styles.jobActions}>
+                <View style={[styles.jobStatusPill, job.status === 'failed' ? styles.jobStatusPillFailed : null]}>
+                  <Text style={[styles.jobStatusText, job.status === 'failed' ? styles.jobStatusTextFailed : null]}>{String(job.status || 'ready').toUpperCase()}</Text>
+                </View>
+                {job.artifactUrl ? (
+                  <TouchableOpacity style={styles.downloadBtn} onPress={() => Linking.openURL(job.artifactUrl).catch(() => {})}>
+                    <Text style={styles.downloadBtnText}>Open</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+          )) : <Text style={styles.infoBody}>No export jobs have been queued yet.</Text>}
+        </View>
+
+        <TouchableOpacity style={styles.secondaryBtn} onPress={() => navigation.goBack()}>
+          <Text style={styles.secondaryText}>Back to Admin Workspace</Text>
+        </TouchableOpacity>
       </View>
     </ScreenWrapper>
   );
@@ -34,8 +236,34 @@ export default function ExportDataScreen(){
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   body: { padding: 16 },
-  p: { color: '#374151' },
+  title: { fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 8 },
+  p: { color: '#374151', lineHeight: 20 },
+  infoCard: { marginTop: 16, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#dbeafe', backgroundColor: '#eff6ff' },
+  infoTitle: { color: '#1d4ed8', fontWeight: '800', marginBottom: 4 },
+  infoBody: { color: '#1e3a8a', lineHeight: 20 },
+  metricRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 },
+  metricCard: { width: '48%', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
+  metricLabel: { color: '#64748b', fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
+  metricValue: { marginTop: 6, color: '#0f172a', fontSize: 24, fontWeight: '800' },
+  selectorRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 12 },
+  selectorChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#f1f5f9', marginRight: 8, marginBottom: 8 },
+  selectorChipActive: { backgroundColor: '#2563eb' },
+  selectorChipText: { color: '#0f172a', fontWeight: '700' },
+  selectorChipTextActive: { color: '#fff' },
   exportBtn: { marginTop: 16, backgroundColor: '#0066FF', padding: 12, borderRadius: 8, alignItems: 'center' },
   exportBtnDisabled: { opacity: 0.55 },
-  exportText: { color: '#fff', fontWeight: '700' }
+  exportText: { color: '#fff', fontWeight: '700' },
+  jobsCard: { marginTop: 16, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
+  jobRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  jobTitle: { color: '#0f172a', fontWeight: '800' },
+  jobMeta: { color: '#64748b', marginTop: 4 },
+  jobActions: { alignItems: 'flex-end' },
+  jobStatusPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: '#dcfce7' },
+  jobStatusText: { color: '#16a34a', fontWeight: '800', fontSize: 12 },
+  jobStatusPillFailed: { backgroundColor: '#fee2e2' },
+  jobStatusTextFailed: { color: '#dc2626' },
+  downloadBtn: { marginTop: 8, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#cbd5e1' },
+  downloadBtnText: { color: '#334155', fontWeight: '700' },
+  secondaryBtn: { marginTop: 10, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: '#cbd5e1', alignItems: 'center' },
+  secondaryText: { color: '#334155', fontWeight: '700' },
 });

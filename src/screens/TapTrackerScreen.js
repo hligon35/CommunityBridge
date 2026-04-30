@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
@@ -14,18 +15,59 @@ export default function TapTrackerScreen() {
   const route = useRoute();
   const navigation = useNavigation();
   const { user } = useAuth();
-  const { childId, sessionPreview } = route.params || {};
+  const { childId, sessionPreview, autoStartSession, sessionType } = route.params || {};
   const { children = [], fetchAndSync } = useData();
   const canManageSession = isAdminRole(user?.role) || isStaffRole(user?.role);
   const child = (children || []).find((entry) => entry.id === childId) || null;
   const preview = Boolean(sessionPreview) || !child;
   const displayChild = child || PREVIEW_CHILD;
   const workspace = useTherapySessionWorkspace({ child, preview, canManageSession, fetchAndSync });
+  const [paused, setPaused] = useState(false);
+  const [sessionSeconds, setSessionSeconds] = useState(0);
 
   const subtitle = useMemo(() => {
     if (preview) return 'Interactive preview';
     return [displayChild.age, displayChild.room].filter(Boolean).join(' • ');
   }, [displayChild.age, displayChild.room, preview]);
+
+  useEffect(() => {
+    if (!autoStartSession || workspace.activeSession || workspace.loadingSession || workspace.savingSession) return;
+    workspace.handleStartSession(sessionType || 'AM').catch?.(() => {});
+  }, [autoStartSession, sessionType, workspace]);
+
+  useEffect(() => {
+    if (!workspace.activeSession || paused) return undefined;
+    const startedAt = Date.parse(String(workspace.activeSession.startedAt || workspace.activeSession.createdAt || new Date().toISOString()));
+    const tick = () => setSessionSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [paused, workspace.activeSession]);
+
+  const sessionTimerLabel = useMemo(() => {
+    const hours = Math.floor(sessionSeconds / 3600);
+    const minutes = Math.floor((sessionSeconds % 3600) / 60);
+    const seconds = sessionSeconds % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }, [sessionSeconds]);
+
+  function confirmEndSession() {
+    Alert.alert('End session?', 'This will stop the timer and open the session report for review.', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes',
+        onPress: () => {
+          workspace.handleEndSession().then((result) => {
+            navigation.navigate('SummaryReview', {
+              childId: child?.id || null,
+              sessionPreview: preview,
+              draftSummary: result?.draftSummary || null,
+            });
+          }).catch(() => {});
+        },
+      },
+    ]);
+  }
 
   return (
     <ScreenWrapper style={styles.container}>
@@ -36,16 +78,20 @@ export default function TapTrackerScreen() {
             <View style={styles.headerTextWrap}>
               <Text style={styles.title}>Tap Tracker</Text>
               <Text style={styles.name}>{displayChild.name}</Text>
-              {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+              <Text style={styles.subtitle}>{[subtitle, displayChild.gender, displayChild.medicalConditions].filter(Boolean).join(' • ') || 'Session details'}</Text>
+            </View>
+            <View style={styles.sessionHeaderControls}>
+              <Text style={styles.timerText}>{workspace.activeSession ? sessionTimerLabel : '00:00:00'}</Text>
+              <TouchableOpacity style={styles.iconControl} onPress={() => setPaused((value) => !value)}>
+                <MaterialIcons name={paused ? 'play-arrow' : 'pause'} size={22} color="#0f172a" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconControl} onPress={confirmEndSession}>
+                <MaterialIcons name="stop" size={22} color="#dc2626" />
+              </TouchableOpacity>
             </View>
           </View>
-          <View style={styles.linkRow}>
-            <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('SummaryReview', { childId: child?.id || null, sessionPreview: preview })}>
-              <Text style={styles.secondaryButtonText}>Open Summary Review</Text>
-            </TouchableOpacity>
-          </View>
         </View>
-        <TherapySessionPanel workspace={workspace} mode="tracker" title="Live Behavior Tracking" />
+        <TherapySessionPanel workspace={workspace} mode="tracker" title="Live Behavior Tracking" trackerPaused={paused} hideTrackerFeed />
       </ScrollView>
     </ScreenWrapper>
   );
@@ -58,10 +104,10 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#e5e7eb' },
   headerTextWrap: { marginLeft: 12, flex: 1 },
+  sessionHeaderControls: { alignItems: 'center', justifyContent: 'center' },
   title: { color: '#2563eb', fontWeight: '800', textTransform: 'uppercase', fontSize: 12 },
   name: { fontSize: 22, fontWeight: '800', color: '#0f172a', marginTop: 4 },
   subtitle: { marginTop: 4, color: '#64748b' },
-  linkRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 14 },
-  secondaryButton: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#e2e8f0' },
-  secondaryButtonText: { color: '#0f172a', fontWeight: '700' },
+  timerText: { fontSize: 20, fontWeight: '800', color: '#0f172a', marginBottom: 10 },
+  iconControl: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#dbe4f0', marginTop: 8, backgroundColor: '#fff' },
 });

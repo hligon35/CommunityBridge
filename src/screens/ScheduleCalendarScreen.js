@@ -130,11 +130,51 @@ export default function ScheduleCalendarScreen() {
   }, [relevantChildren]);
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [displayMonth, setDisplayMonth] = useState(new Date(initialDate.getFullYear(), initialDate.getMonth(), 1));
+  const [viewMode, setViewMode] = useState(isTherapistSchedule ? 'staff' : 'day');
 
   const calendarDays = useMemo(() => buildCalendarDays(displayMonth), [displayMonth]);
   const selectedDayKey = formatDayKey(selectedDate);
   const entries = useMemo(() => getScheduleEntries(relevantChildren, selectedDate), [relevantChildren, selectedDate]);
   const nextUpcomingEntry = useMemo(() => getNextUpcomingEntry(relevantChildren), [relevantChildren]);
+  const groupedEntries = useMemo(() => {
+    if (viewMode === 'student') {
+      return relevantChildren.map((child) => ({
+        key: child?.id || child?.name,
+        title: child?.name || 'Child',
+        subtitle: `${child?.session || 'Session'}${child?.room ? ` • ${child.room}` : ''}`,
+      }));
+    }
+    if (viewMode === 'staff') {
+      const groups = new Map();
+      entries.forEach((entry) => {
+        const key = entry.therapistName || 'Unassigned';
+        const next = groups.get(key) || [];
+        next.push(entry);
+        groups.set(key, next);
+      });
+      return Array.from(groups.entries()).map(([key, value]) => ({
+        key,
+        title: key,
+        subtitle: `${value.length} session${value.length === 1 ? '' : 's'}`,
+      }));
+    }
+    if (viewMode === 'week') {
+      return Array.from({ length: 7 }).map((_, index) => {
+        const day = new Date(selectedDate);
+        day.setDate(selectedDate.getDate() - selectedDate.getDay() + index);
+        return {
+          key: formatDayKey(day),
+          title: day.toLocaleDateString([], { weekday: 'long' }),
+          subtitle: `${entries.length} planned entries`,
+        };
+      });
+    }
+    return entries.map((entry) => ({
+      key: entry.id,
+      title: entry.childName,
+      subtitle: `${entry.session}${entry.room ? ` • ${entry.room}` : ''}`,
+    }));
+  }, [entries, relevantChildren, selectedDate, viewMode]);
 
   return (
     <ScreenWrapper
@@ -162,6 +202,18 @@ export default function ScheduleCalendarScreen() {
         ) : null}
 
         <View style={styles.calendarCard}>
+          <View style={styles.modeRow}>
+            {[
+              { key: 'day', label: 'Day' },
+              { key: 'week', label: 'Week' },
+              { key: 'staff', label: 'Staff' },
+              { key: 'student', label: 'Student' },
+            ].map((mode) => (
+              <TouchableOpacity key={mode.key} style={[styles.modeChip, viewMode === mode.key ? styles.modeChipActive : null]} onPress={() => setViewMode(mode.key)}>
+                <Text style={[styles.modeChipText, viewMode === mode.key ? styles.modeChipTextActive : null]}>{mode.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
           <View style={styles.calendarHeader}>
             <TouchableOpacity
               onPress={() => setDisplayMonth(new Date(displayMonth.getFullYear(), displayMonth.getMonth() - 1, 1))}
@@ -206,10 +258,17 @@ export default function ScheduleCalendarScreen() {
 
         <View style={styles.scheduleSection}>
           <Text style={styles.scheduleTitle}>
-            {isTherapistSchedule ? 'Work schedule' : 'Schedule for'} {selectedDate.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
+            {viewMode === 'staff' ? 'Staff schedule overview' : viewMode === 'student' ? 'Student schedule overview' : isTherapistSchedule ? 'Work schedule' : 'Schedule for'} {selectedDate.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
           </Text>
 
-          {entries.length ? entries.map((entry) => (
+          {viewMode !== 'day' ? groupedEntries.map((group) => (
+            <View key={group.key} style={styles.entryCard}>
+              <Text style={styles.entryName}>{group.title}</Text>
+              <Text style={styles.entryMeta}>{group.subtitle}</Text>
+            </View>
+          )) : null}
+
+          {viewMode === 'day' && entries.length ? entries.map((entry) => (
             <View key={entry.id} style={styles.entryCard}>
               <Text style={styles.entryName}>{entry.childName}</Text>
               <Text style={styles.entryMeta}>{entry.session}{entry.room ? ` • ${entry.room}` : ''}</Text>
@@ -227,12 +286,12 @@ export default function ScheduleCalendarScreen() {
 
               {entry.therapistName ? <Text style={styles.therapistText}>Therapist: {entry.therapistName}</Text> : null}
             </View>
-          )) : (
+          )) : viewMode === 'day' ? (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyTitle}>No schedule for this day</Text>
               <Text style={styles.emptyText}>Select another day to view scheduled drop-off and pick-up times.</Text>
             </View>
-          )}
+          ) : null}
         </View>
       </ScrollView>
     </ScreenWrapper>
@@ -278,6 +337,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
     padding: 16,
+  },
+  modeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+  },
+  modeChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: '#eff6ff',
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  modeChipActive: {
+    backgroundColor: '#1d4ed8',
+  },
+  modeChipText: {
+    color: '#1d4ed8',
+    fontWeight: '700',
+  },
+  modeChipTextActive: {
+    color: '#fff',
   },
   calendarHeader: {
     flexDirection: 'row',

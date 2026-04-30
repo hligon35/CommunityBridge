@@ -41,6 +41,7 @@ import ParentDetailScreen from './src/screens/ParentDetailScreen';
 import ChildDetailScreen from './src/screens/ChildDetailScreen';
 import FacultyDetailScreen from './src/screens/FacultyDetailScreen';
 import TapTrackerScreen from './src/screens/TapTrackerScreen';
+import TapLogsScreen from './src/screens/TapLogsScreen';
 import SummaryReviewScreen from './src/screens/SummaryReviewScreen';
 import ReportsScreen from './src/screens/ReportsScreen';
 import ManagePermissionsScreen from './src/screens/ManagePermissionsScreen';
@@ -48,6 +49,7 @@ import PrivacyDefaultsScreen from './src/screens/PrivacyDefaultsScreen';
 import AdminAlertsScreen from './src/screens/AdminAlertsScreen';
 import AdminMemosScreen from './src/screens/AdminMemosScreen';
 import ExportDataScreen from './src/screens/ExportDataScreen';
+import ImportCenterScreen from './src/screens/ImportCenterScreen';
 import AttendanceScreen from './src/screens/modules/AttendanceScreen';
 import ProgramDirectoryScreen from './src/screens/modules/ProgramDirectoryScreen';
 import CampusDirectoryScreen from './src/screens/modules/CampusDirectoryScreen';
@@ -76,14 +78,14 @@ const HEADER_LOGO_HEIGHT = 80;
 const HEADER_HEIGHT = 96;
 const SHOW_STACK_HEADERS = Platform.OS !== 'web';
 
-function getPrimaryMainRoute(state) {
+function getDeepestRouteName(state) {
   try {
-    const appState = state?.routes?.[state.index || 0]?.state;
-    const rootState = appState?.routes?.find((route) => route.name === 'Main')?.state || appState;
-    const primaryRoute = rootState?.routes?.[rootState.index || 0];
-    return primaryRoute?.name || 'Home';
+    const route = state?.routes?.[state.index || 0];
+    if (!route) return null;
+    if (route.state) return getDeepestRouteName(route.state);
+    return route.name || null;
   } catch (_) {
-    return 'Home';
+    return null;
   }
 }
 
@@ -125,7 +127,8 @@ function ControlsStack() {
       <ControlsStackNav.Screen name="ParentDetail" component={ParentDetailScreen} options={{ title: 'Parent' }} />
       <ControlsStackNav.Screen name="ChildDetail" component={ChildDetailScreen} options={{ title: 'Student' }} />
       <ControlsStackNav.Screen name="TapTracker" component={TapTrackerScreen} options={{ title: 'Tap Tracker' }} />
-      <ControlsStackNav.Screen name="SummaryReview" component={SummaryReviewScreen} options={{ title: 'Summary Review' }} />
+      <ControlsStackNav.Screen name="TapLogs" component={TapLogsScreen} options={{ title: 'Tap Logs' }} />
+      <ControlsStackNav.Screen name="SummaryReview" component={SummaryReviewScreen} options={{ title: 'Session Report' }} />
       <ControlsStackNav.Screen name="Reports" component={ReportsScreen} options={{ title: 'Reports' }} />
       <ControlsStackNav.Screen name="FacultyDetail" component={FacultyDetailScreen} options={{ title: 'Faculty' }} />
       <ControlsStackNav.Screen name="AdminMemos" component={AdminMemosScreen} options={{ title: 'Compose Memo' }} />
@@ -135,7 +138,9 @@ function ControlsStack() {
       <ControlsStackNav.Screen name="ManagePermissions" component={ManagePermissionsScreen} options={{ title: 'Manage Permissions' }} />
       <ControlsStackNav.Screen name="PrivacyDefaults" component={PrivacyDefaultsScreen} options={{ title: 'Profile Settings' }} />
       <ControlsStackNav.Screen name="AdminAlerts" component={AdminAlertsScreen} options={{ title: 'Alerts' }} />
+      <ControlsStackNav.Screen name="InsuranceBilling" component={InsuranceBillingScreen} options={{ title: 'Billing & Authorizations' }} />
       
+      <ControlsStackNav.Screen name="ImportCenter" component={ImportCenterScreen} options={{ title: 'Import Center' }} />
       <ControlsStackNav.Screen name="ExportData" component={ExportDataScreen} options={{ title: 'Export Data' }} />
       <ControlsStackNav.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
       <ControlsStackNav.Screen name="ScheduleCalendar" component={ScheduleCalendarScreen} options={{ title: 'Schedule' }} />
@@ -167,7 +172,8 @@ function CommunityStack() {
       <CommunityStackNav.Screen name="ScheduleCalendar" component={ScheduleCalendarScreen} options={{ title: 'Schedule' }} />
       <CommunityStackNav.Screen name="ChildDetail" component={ChildDetailScreen} options={{ title: 'Child Profile' }} />
       <CommunityStackNav.Screen name="TapTracker" component={TapTrackerScreen} options={{ title: 'Tap Tracker' }} />
-      <CommunityStackNav.Screen name="SummaryReview" component={SummaryReviewScreen} options={{ title: 'Summary Review' }} />
+      <CommunityStackNav.Screen name="TapLogs" component={TapLogsScreen} options={{ title: 'Tap Logs' }} />
+      <CommunityStackNav.Screen name="SummaryReview" component={SummaryReviewScreen} options={{ title: 'Session Report' }} />
       <CommunityStackNav.Screen name="Reports" component={ReportsScreen} options={{ title: 'Reports' }} />
       <CommunityStackNav.Screen name="ParentDetail" component={ParentDetailScreen} options={{ title: 'Parent' }} />
       <CommunityStackNav.Screen name="FacultyDetail" component={FacultyDetailScreen} options={{ title: 'Faculty' }} />
@@ -255,14 +261,16 @@ function MainShell({ currentRoute }) {
 function MainRoutes() {
   const { user } = useAuth();
   const role = normalizeUserRole(user?.role);
+  const isBcbaWorkspace = role === 'bcba';
 
   const screens = [];
-  if (!isAdminRole(role)) {
+  if (!isAdminRole(role) && !isBcbaWorkspace) {
     screens.push({ name: 'Home', component: CommunityStack });
   }
   screens.push({ name: 'Chats', component: ChatsStack });
 
   if (isStaffRole(role)) {
+    if (isBcbaWorkspace) screens.push({ name: 'Controls', component: ControlsStack });
   } else if (isAdminRole(role)) {
     screens.push({ name: 'Controls', component: ControlsStack });
   } else {
@@ -272,7 +280,7 @@ function MainRoutes() {
   screens.push({ name: 'Settings', component: SettingsStack });
 
   return (
-    <RootStack.Navigator screenOptions={{ headerShown: false }} initialRouteName={isAdminRole(role) ? 'Controls' : 'Home'}>
+    <RootStack.Navigator screenOptions={{ headerShown: false }} initialRouteName={isAdminRole(role) || isBcbaWorkspace ? 'Controls' : 'Home'}>
       {screens.map(s => (
         <RootStack.Screen key={s.name} name={s.name} component={s.component} />
       ))}
@@ -368,7 +376,8 @@ function AppNavigator() {
       ref={navigationRef}
       onStateChange={(state) => {
         try {
-          const next = getPrimaryMainRoute(state);
+          const mainState = state?.routes?.find?.((route) => route.name === 'Main')?.state || state;
+          const next = getDeepestRouteName(mainState) || getDeepestRouteName(state) || 'Home';
           if (next) {
             setCurrentRoute((prev) => (prev === next ? prev : next));
             setDebugContext({ route: next });
