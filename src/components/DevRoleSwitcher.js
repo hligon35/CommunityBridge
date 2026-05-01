@@ -123,6 +123,9 @@ export default function DevRoleSwitcher() {
           <TouchableOpacity onPress={() => changeRole('therapist')} style={styles.menuBtn}>
             <Text>{THERAPY_ROLE_LABELS.therapist}</Text>
           </TouchableOpacity>
+          <TouchableOpacity onPress={() => changeRole('bcba')} style={styles.menuBtn}>
+            <Text>BCBA</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => changeRole('admin')} style={styles.menuBtn}>
             <Text>Admin</Text>
           </TouchableOpacity>

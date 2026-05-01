@@ -20,6 +20,7 @@ const { canManageTargetUser, filterManageableUsers } = require('../scripts/admin
 test('normalizeRoleOverride maps supported role aliases', () => {
   assert.equal(normalizeRoleOverride(' Administrator '), 'admin');
   assert.equal(normalizeRoleOverride('therapist'), 'therapist');
+  assert.equal(normalizeRoleOverride('bcba'), 'bcba');
   assert.equal(normalizeRoleOverride('parent'), 'parent');
   assert.equal(normalizeRoleOverride('unknown'), '');
 });

@@ -3,7 +3,6 @@
     "name": "CommunityBridge",
     "slug": "communitybridge",
     "version": "1.0.1",
-    "sdkVersion": "54.0.0",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.azlabsllc.communitybridge",

@@ -6,6 +6,7 @@ const DEV_MFA_WINDOW_MS = 4 * 60 * 60 * 1000;
 function normalizeRoleOverride(role) {
   const value = String(role || '').trim().toLowerCase();
   if (value === 'admin' || value === 'administrator') return 'admin';
+  if (value === 'bcba') return 'bcba';
   if (value === 'therapist') return 'therapist';
   if (value === 'parent') return 'parent';
   return '';
