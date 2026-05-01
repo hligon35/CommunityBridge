@@ -6,6 +6,7 @@ import { useAuth } from '../AuthContext';
 import * as Api from '../Api';
 import * as ImagePicker from 'expo-image-picker';
 import { avatarSourceFor } from '../utils/idVisibility';
+import { formatPhoneInput } from '../utils/inputFormat';
 
 const IMAGE_PICKER_MEDIA_TYPES = ImagePicker.MediaTypeOptions?.Images ?? ImagePicker.MediaType?.Images;
 
@@ -16,21 +17,6 @@ function passwordPolicy(pw) {
   const hasSpecial = /[^A-Za-z0-9]/.test(v);
   const score = [hasMinLen, hasUpper, hasSpecial].filter(Boolean).length;
   return { hasMinLen, hasUpper, hasSpecial, score };
-}
-
-function formatPhoneInput(input) {
-  const raw = String(input || '');
-  const trimmed = raw.trimStart();
-  const hasPlus = trimmed.startsWith('+');
-  const digits = raw.replace(/\D/g, '');
-  if (!digits) return hasPlus ? '+' : '';
-  if (hasPlus) return `+${digits}`;
-
-  // Light formatting for common 10-digit numbers; keep other lengths unformatted.
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
-  return digits;
 }
 
 function formatAddressInput(input) {
@@ -52,7 +38,7 @@ export default function EditProfileScreen({ navigation }) {
       name: String(user?.name || ''),
       email: String(user?.email || ''),
       avatar: String(user?.avatar || ''),
-      phone: String(user?.phone || ''),
+      phone: formatPhoneInput(user?.phone),
       address: String(user?.address || ''),
     };
   }, [user]);
@@ -205,7 +191,7 @@ export default function EditProfileScreen({ navigation }) {
             value={phone}
             onChangeText={(v) => setPhone(formatPhoneInput(v))}
             style={styles.input}
-            placeholder="+15551234567"
+            placeholder="555-123-4567"
             autoCapitalize="none"
             keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'phone-pad'}
           />

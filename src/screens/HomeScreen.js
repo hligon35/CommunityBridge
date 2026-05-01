@@ -14,6 +14,7 @@ import PostCard from '../components/PostCard';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
 import { applyCurrentUserPrivacySettings } from '../utils/appSettings';
+import { normalizeWebsiteInput, presetWebsiteInput } from '../utils/inputFormat';
 
 // PostCard is now a shared component in ../components/PostCard
 
@@ -165,6 +166,7 @@ export default function HomeScreen() {
 
   function onAttachPress() {
     // open modal offering link input or photo selection
+    setLinkInput((current) => presetWebsiteInput(current));
     setShowLinkModal(true);
   }
 
@@ -400,7 +402,15 @@ export default function HomeScreen() {
             </TouchableWithoutFeedback>
             <View style={styles.modalContent}>
               <Text style={{ fontWeight: '700', marginBottom: 8 }}>Attach</Text>
-              <TextInput placeholder="Paste a link" value={linkInput} onChangeText={setLinkInput} style={styles.modalInput} />
+              <TextInput
+                placeholder="https://example.com"
+                value={linkInput}
+                onFocus={() => setLinkInput((current) => presetWebsiteInput(current))}
+                onChangeText={(value) => setLinkInput(normalizeWebsiteInput(value))}
+                style={styles.modalInput}
+                autoCapitalize="none"
+                keyboardType="url"
+              />
               <View style={{ flexDirection: 'row', marginTop: 12 }}>
                 <TouchableOpacity style={styles.modalBtn} onPress={() => { setLinkMode(true); setShowLinkModal(false); }}>
                   <Text>Use Link</Text>

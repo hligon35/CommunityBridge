@@ -140,6 +140,14 @@ function getRecaptchaSecretKey() {
   return safeString(process.env.CB_RECAPTCHA_SECRET_KEY || process.env.BB_RECAPTCHA_SECRET_KEY).trim();
 }
 
+function getGooglePlacesApiKey() {
+  return safeString(
+    process.env.CB_GOOGLE_PLACES_API_KEY ||
+    process.env.BB_GOOGLE_PLACES_API_KEY ||
+    process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY
+  ).trim();
+}
+
 async function verifyRecaptchaToken({ token, remoteIp }) {
   const secret = getRecaptchaSecretKey();
   if (!secret) {
@@ -757,7 +765,11 @@ function registerOrganizationIntakeRoutes(app) {
   });
 
   app.get('/organizations-intake-config', async (req, res) => {
-    return res.status(200).json({ ok: true, recaptchaSiteKey: getRecaptchaSiteKey() || '' });
+    return res.status(200).json({
+      ok: true,
+      recaptchaSiteKey: getRecaptchaSiteKey() || '',
+      googlePlacesApiKey: getGooglePlacesApiKey() || '',
+    });
   });
 
   app.get('/organizations-intake-action', async (req, res) => {

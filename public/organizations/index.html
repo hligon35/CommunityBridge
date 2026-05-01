@@ -166,6 +166,18 @@
         border-color: rgba(37, 99, 235, 0.4);
       }
 
+      .fieldHint {
+        margin-top: -2px;
+        font-size: 12px;
+        line-height: 1.5;
+        color: #64748b;
+        font-weight: 500;
+      }
+
+      .pac-container {
+        z-index: 9999;
+      }
+
       .locationsHeader {
         display: flex;
         align-items: center;
@@ -359,7 +371,7 @@
           <section class="panel">
             <h2>Organization</h2>
             <p>Enter the main organization or headquarters information exactly as it should appear in CommunityBridge.</p>
-            <div class="grid two mt16">
+            <div class="grid two mt16" data-address-scope="organization">
               <label>
                 Organization name
                 <input type="text" name="organizationName" required placeholder="Centria Healthcare HQ" />
@@ -378,23 +390,24 @@
               </label>
               <label class="grid spanAll">
                 Address line 1
-                <input type="text" name="organizationAddress1" required placeholder="27777 Inkster Rd Suite 100" />
+                <input type="text" name="organizationAddress1" required placeholder="27777 Inkster Rd Suite 100" autocomplete="address-line1" data-address-role="line1" data-address-scope="organization" />
+                <span class="fieldHint">Start typing to search and auto-fill city, state, and ZIP.</span>
               </label>
               <label class="grid spanAll">
                 Address line 2
-                <input type="text" name="organizationAddress2" placeholder="Optional suite, building, or floor" />
+                <input type="text" name="organizationAddress2" placeholder="Optional suite, building, or floor" autocomplete="address-line2" data-address-role="line2" data-address-scope="organization" />
               </label>
               <label>
                 City
-                <input type="text" name="organizationCity" required placeholder="Farmington Hills" />
+                <input type="text" name="organizationCity" required placeholder="Farmington Hills" autocomplete="address-level2" data-address-role="city" data-address-scope="organization" />
               </label>
               <label>
                 State
-                <input type="text" name="organizationState" required maxlength="2" placeholder="MI" />
+                <input type="text" name="organizationState" required maxlength="2" placeholder="MI" autocomplete="address-level1" data-address-role="state" data-address-scope="organization" />
               </label>
               <label>
                 ZIP
-                <input type="text" name="organizationZipCode" required placeholder="48334" />
+                <input type="text" name="organizationZipCode" required placeholder="48334" autocomplete="postal-code" data-address-role="zipCode" data-address-scope="organization" />
               </label>
               <label>
                 Website
@@ -514,23 +527,24 @@
           </label>
           <label class="grid spanAll">
             Address line 1
-            <input type="text" data-field="address1" required placeholder="5505 N Post Rd" />
+            <input type="text" data-field="address1" required placeholder="5505 N Post Rd" autocomplete="address-line1" data-address-role="line1" />
+            <span class="fieldHint">Start typing to search and auto-fill city, state, and ZIP.</span>
           </label>
           <label class="grid spanAll">
             Address line 2
-            <input type="text" data-field="address2" placeholder="Optional suite, building, or floor" />
+            <input type="text" data-field="address2" placeholder="Optional suite, building, or floor" autocomplete="address-line2" data-address-role="line2" />
           </label>
           <label>
             City
-            <input type="text" data-field="city" required placeholder="Indianapolis" />
+            <input type="text" data-field="city" required placeholder="Indianapolis" autocomplete="address-level2" data-address-role="city" />
           </label>
           <label>
             State
-            <input type="text" data-field="state" required maxlength="2" placeholder="IN" />
+            <input type="text" data-field="state" required maxlength="2" placeholder="IN" autocomplete="address-level1" data-address-role="state" />
           </label>
           <label>
             ZIP
-            <input type="text" data-field="zipCode" required placeholder="46216" />
+            <input type="text" data-field="zipCode" required placeholder="46216" autocomplete="postal-code" data-address-role="zipCode" />
           </label>
           <label>
             Enrollment code
@@ -553,6 +567,9 @@
         var recaptchaWidgetId = null;
         var recaptchaToken = '';
         var recaptchaEnabled = false;
+        var googlePlacesEnabled = false;
+        var placesScriptPromise = null;
+        var addressAutocompleteInstances = [];
 
         function showCaptchaPlaceholder(message) {
           captchaPlaceholder.textContent = message;
@@ -566,6 +583,111 @@
 
         function setRecaptchaToken(token) {
           recaptchaToken = (token || '').toString().trim();
+        }
+
+        function clearAutocompleteInstances() {
+          addressAutocompleteInstances.forEach(function (listener) {
+            try {
+              if (listener && typeof listener.remove === 'function') listener.remove();
+            } catch (_) {}
+          });
+          addressAutocompleteInstances = [];
+          Array.prototype.slice.call(document.querySelectorAll('[data-address-role="line1"]')).forEach(function (input) {
+            if (input && input.dataset) delete input.dataset.autocompleteBound;
+          });
+        }
+
+        function loadGooglePlaces(apiKey) {
+          if (!apiKey) return Promise.resolve(null);
+          if (window.google && window.google.maps && window.google.maps.places) return Promise.resolve(window.google.maps);
+          if (placesScriptPromise) return placesScriptPromise;
+
+          placesScriptPromise = new Promise(function (resolve, reject) {
+            var existing = document.querySelector('script[data-google-places="true"]');
+            if (existing) {
+              existing.addEventListener('load', function () { resolve(window.google && window.google.maps ? window.google.maps : null); }, { once: true });
+              existing.addEventListener('error', function () { reject(new Error('Google Places failed to load.')); }, { once: true });
+              return;
+            }
+
+            var script = document.createElement('script');
+            script.async = true;
+            script.defer = true;
+            script.setAttribute('data-google-places', 'true');
+            script.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(apiKey) + '&libraries=places';
+            script.onload = function () { resolve(window.google && window.google.maps ? window.google.maps : null); };
+            script.onerror = function () { reject(new Error('Google Places failed to load.')); };
+            document.head.appendChild(script);
+          });
+
+          return placesScriptPromise;
+        }
+
+        function getPlaceComponentMap(place) {
+          var map = {};
+          var components = Array.isArray(place && place.address_components) ? place.address_components : [];
+          components.forEach(function (component) {
+            (component.types || []).forEach(function (type) {
+              if (!map[type]) map[type] = component;
+            });
+          });
+          return map;
+        }
+
+        function buildAddressFromPlace(place) {
+          var componentMap = getPlaceComponentMap(place);
+          var streetNumber = componentMap.street_number ? componentMap.street_number.long_name : '';
+          var route = componentMap.route ? componentMap.route.long_name : '';
+          var subpremise = componentMap.subpremise ? componentMap.subpremise.long_name : '';
+          var locality = componentMap.locality ? componentMap.locality.long_name : '';
+          var postalTown = componentMap.postal_town ? componentMap.postal_town.long_name : '';
+          var adminLevel2 = componentMap.administrative_area_level_2 ? componentMap.administrative_area_level_2.long_name : '';
+          var city = locality || postalTown || adminLevel2;
+          var state = componentMap.administrative_area_level_1 ? componentMap.administrative_area_level_1.short_name : '';
+          var postalCode = componentMap.postal_code ? componentMap.postal_code.long_name : '';
+          var postalCodeSuffix = componentMap.postal_code_suffix ? componentMap.postal_code_suffix.long_name : '';
+          var address1 = [streetNumber, route].filter(Boolean).join(' ').trim() || (place && place.name ? place.name : '');
+          return {
+            line1: address1,
+            line2: subpremise,
+            city: city,
+            state: state,
+            zipCode: [postalCode, postalCodeSuffix].filter(Boolean).join('-')
+          };
+        }
+
+        function fillAddressScope(scope, values) {
+          if (!scope || !values) return;
+          ['line1', 'line2', 'city', 'state', 'zipCode'].forEach(function (role) {
+            var input = scope.querySelector('[data-address-role="' + role + '"]');
+            if (!input || values[role] == null || values[role] === '') return;
+            input.value = values[role];
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          });
+        }
+
+        function bindAutocompleteForInput(input) {
+          if (!googlePlacesEnabled || !input || input.dataset.autocompleteBound === 'true') return;
+          if (!(window.google && window.google.maps && window.google.maps.places)) return;
+
+          var autocomplete = new window.google.maps.places.Autocomplete(input, {
+            types: ['address'],
+            fields: ['address_components', 'name']
+          });
+          var scope = input.closest('[data-address-scope]') || form;
+          var listener = autocomplete.addListener('place_changed', function () {
+            var place = autocomplete.getPlace();
+            var values = buildAddressFromPlace(place);
+            fillAddressScope(scope, values);
+          });
+          addressAutocompleteInstances.push(listener);
+          input.dataset.autocompleteBound = 'true';
+        }
+
+        function wireAddressAutocomplete() {
+          if (!googlePlacesEnabled) return;
+          Array.prototype.slice.call(document.querySelectorAll('[data-address-role="line1"]')).forEach(bindAutocompleteForInput);
         }
 
         function resetRecaptcha() {
@@ -604,17 +726,27 @@
             var config = await configResponse.json().catch(function () { return {}; });
             if (!configResponse.ok || !config.ok || !config.recaptchaSiteKey) {
               showCaptchaPlaceholder('reCAPTCHA is not configured yet. Add the production site key before using this intake form.');
-              return;
+            } else {
+              var grecaptcha = await waitForRecaptcha();
+              recaptchaWidgetId = grecaptcha.render('recaptchaMount', {
+                sitekey: config.recaptchaSiteKey,
+                callback: function (token) { setRecaptchaToken(token); },
+                'expired-callback': function () { setRecaptchaToken(''); },
+                'error-callback': function () { setRecaptchaToken(''); }
+              });
+              hideCaptchaPlaceholder();
+              recaptchaEnabled = true;
             }
-            var grecaptcha = await waitForRecaptcha();
-            recaptchaWidgetId = grecaptcha.render('recaptchaMount', {
-              sitekey: config.recaptchaSiteKey,
-              callback: function (token) { setRecaptchaToken(token); },
-              'expired-callback': function () { setRecaptchaToken(''); },
-              'error-callback': function () { setRecaptchaToken(''); }
-            });
-            hideCaptchaPlaceholder();
-            recaptchaEnabled = true;
+
+            if (config.googlePlacesApiKey) {
+              try {
+                await loadGooglePlaces(config.googlePlacesApiKey);
+                googlePlacesEnabled = Boolean(window.google && window.google.maps && window.google.maps.places);
+                wireAddressAutocomplete();
+              } catch (_) {
+                googlePlacesEnabled = false;
+              }
+            }
           } catch (error) {
             showCaptchaPlaceholder('reCAPTCHA could not be initialized. Please reload the page or contact CommunityBridge support.');
           }
@@ -628,6 +760,37 @@
         function clearStatus() {
           statusBox.className = 'status';
           statusBox.textContent = '';
+        }
+
+        function formatPhoneInput(value) {
+          var digits = (value || '').toString().replace(/\D/g, '');
+          if (digits.length === 11 && digits.charAt(0) === '1') digits = digits.slice(1);
+          digits = digits.slice(0, 10);
+          if (!digits) return '';
+          if (digits.length <= 3) return digits;
+          if (digits.length <= 6) return digits.slice(0, 3) + '-' + digits.slice(3);
+          return digits.slice(0, 3) + '-' + digits.slice(3, 6) + '-' + digits.slice(6);
+        }
+
+        function normalizeWebsiteInput(value, options) {
+          var presetScheme = options && options.presetScheme;
+          var trimmed = (value || '').toString().trim();
+          if (!trimmed) return presetScheme ? 'https://' : '';
+          if (/^https:\/\//i.test(trimmed)) return 'https://' + trimmed.slice(8);
+          if (/^http:\/\//i.test(trimmed)) return 'https://' + trimmed.slice(7);
+          if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+          return 'https://' + trimmed.replace(/^\/+/, '');
+        }
+
+        function normalizeFormInput(target) {
+          if (!target || !target.tagName || target.tagName.toLowerCase() !== 'input') return;
+          if (target.type === 'tel') {
+            target.value = formatPhoneInput(target.value);
+            return;
+          }
+          if (target.type === 'url') {
+            target.value = target.value ? normalizeWebsiteInput(target.value) : '';
+          }
         }
 
         function blankLocation() {
@@ -650,13 +813,33 @@
 
         var locations = [blankLocation()];
 
+        form.addEventListener('focusin', function (event) {
+          var target = event.target;
+          if (target && target.tagName && target.tagName.toLowerCase() === 'input' && target.type === 'url' && !target.value) {
+            target.value = 'https://';
+          }
+        });
+
+        form.addEventListener('input', function (event) {
+          normalizeFormInput(event.target);
+        }, true);
+
+        form.addEventListener('blur', function (event) {
+          var target = event.target;
+          if (target && target.tagName && target.tagName.toLowerCase() === 'input' && target.type === 'url') {
+            target.value = normalizeWebsiteInput(target.value);
+          }
+        }, true);
+
         function renderLocations() {
+          clearAutocompleteInstances();
           locationsStack.innerHTML = '';
           locations.forEach(function (location, index) {
             var fragment = template.content.cloneNode(true);
             var card = fragment.querySelector('[data-location-card]');
             var locationBody = fragment.querySelector('[data-location-body]');
             var toggleBtn = fragment.querySelector('[data-toggle-location]');
+            card.setAttribute('data-address-scope', 'location-' + index);
             fragment.querySelector('[data-location-index]').textContent = String(index + 1);
             if (location.expanded === false) {
               card.setAttribute('data-collapsed', 'true');
@@ -691,6 +874,7 @@
             });
             locationsStack.appendChild(fragment);
           });
+          wireAddressAutocomplete();
         }
 
         function collectPayload() {
@@ -698,18 +882,18 @@
           return {
             organizationName: (fd.get('organizationName') || '').toString().trim(),
             organizationShortCode: (fd.get('organizationShortCode') || '').toString().trim(),
-            organizationPhone: (fd.get('organizationPhone') || '').toString().trim(),
+            organizationPhone: formatPhoneInput((fd.get('organizationPhone') || '').toString().trim()),
             organizationEmail: (fd.get('organizationEmail') || '').toString().trim(),
             organizationAddress1: (fd.get('organizationAddress1') || '').toString().trim(),
             organizationAddress2: (fd.get('organizationAddress2') || '').toString().trim(),
             organizationCity: (fd.get('organizationCity') || '').toString().trim(),
             organizationState: (fd.get('organizationState') || '').toString().trim().toUpperCase(),
             organizationZipCode: (fd.get('organizationZipCode') || '').toString().trim(),
-            organizationWebsite: (fd.get('organizationWebsite') || '').toString().trim(),
+            organizationWebsite: normalizeWebsiteInput((fd.get('organizationWebsite') || '').toString().trim()),
             contactName: (fd.get('contactName') || '').toString().trim(),
             contactTitle: (fd.get('contactTitle') || '').toString().trim(),
             contactEmail: (fd.get('contactEmail') || '').toString().trim(),
-            contactPhone: (fd.get('contactPhone') || '').toString().trim(),
+            contactPhone: formatPhoneInput((fd.get('contactPhone') || '').toString().trim()),
             notes: (fd.get('notes') || '').toString().trim(),
             website: (fd.get('website') || '').toString().trim(),
             recaptchaToken: recaptchaToken,
@@ -719,7 +903,7 @@
                 programType: (location.programType || 'centerBasedAba').toString().trim(),
                 name: (location.name || '').toString().trim(),
                 campusType: (location.campusType || 'Center').toString().trim(),
-                phone: (location.phone || '').toString().trim(),
+                phone: formatPhoneInput((location.phone || '').toString().trim()),
                 email: (location.email || '').toString().trim(),
                 address1: (location.address1 || '').toString().trim(),
                 address2: (location.address2 || '').toString().trim(),

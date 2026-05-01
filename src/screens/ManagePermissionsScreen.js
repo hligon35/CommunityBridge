@@ -9,6 +9,7 @@ import { listActiveOrganizations } from '../core/tenant/OrganizationRepository';
 import { listProgramsByOrganization } from '../core/tenant/ProgramRepository';
 import { listCampusesByOrganization } from '../core/tenant/CampusRepository';
 import { THERAPY_ROLE_LABELS, getDisplayRoleLabel } from '../utils/roleTerminology';
+import { formatPhoneInput } from '../utils/inputFormat';
 import * as Api from '../Api';
 
 const DEFAULT_ROLES = ['Admin', 'Teacher', 'Therapist', 'Parent', 'Staff'];
@@ -64,7 +65,7 @@ function createUserDraft(user) {
   return {
     name: String(item.name || ''),
     email: String(item.email || ''),
-    phone: String(item.phone || ''),
+    phone: formatPhoneInput(item.phone),
     address: String(item.address || ''),
     role: normalizeUserRole(item.role),
     organizationId: String(item.organizationId || ''),
@@ -226,11 +227,12 @@ export default function ManagePermissionsScreen(){
   }
 
   function updateUserDraft(userId, field, value) {
+    const nextValue = field === 'phone' ? formatPhoneInput(value) : value;
     setUserDrafts((current) => ({
       ...current,
       [userId]: {
         ...(current[userId] || createUserDraft({})),
-        [field]: value,
+        [field]: nextValue,
       },
     }));
   }
@@ -456,7 +458,7 @@ export default function ManagePermissionsScreen(){
             <TextInput value={draft.email} onChangeText={(value) => updateUserDraft(userItem.id, 'email', value)} style={styles.input} placeholder="Email" autoCapitalize="none" keyboardType="email-address" />
 
             <Text style={styles.fieldLabel}>Phone</Text>
-            <TextInput value={draft.phone} onChangeText={(value) => updateUserDraft(userItem.id, 'phone', value)} style={styles.input} placeholder="+15551234567" autoCapitalize="none" />
+            <TextInput value={draft.phone} onChangeText={(value) => updateUserDraft(userItem.id, 'phone', value)} style={styles.input} placeholder="555-123-4567" autoCapitalize="none" keyboardType="phone-pad" />
 
             <Text style={styles.fieldLabel}>Address</Text>
             <TextInput value={draft.address} onChangeText={(value) => updateUserDraft(userItem.id, 'address', value)} style={[styles.input, styles.multilineInput]} placeholder="Address" multiline />
