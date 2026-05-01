@@ -142,13 +142,6 @@ function main() {
   // Ensure web-dist root works (for the app Hosting site).
   fs.writeFileSync(path.join('web-dist', 'index.html'), spaIndexHtml, 'utf8');
 
-  // Firebase Hosting "app" site needs /app-login available on the same origin.
-  copyDirIfExists(path.join('public', 'app-login'), path.join('web-dist', 'app-login'));
-  copyIfExists(path.join('public', 'app-login.html'), path.join('web-dist', 'app-login.html'));
-
-  // Also keep /login available as the primary login route.
-  copyDirIfExists(path.join('public', 'login'), path.join('web-dist', 'login'));
-
   // Keep /sign-up available as a static page.
   copyDirIfExists(path.join('public', 'sign-up'), path.join('web-dist', 'sign-up'));
 

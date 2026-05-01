@@ -4426,7 +4426,7 @@ function resolvePublicFileForRequestPath(reqPath) {
     if (!candidate.startsWith(PUBLIC_DIR_PREFIX) && candidate !== PUBLIC_DIR) return null;
     if (fileExists(candidate)) return candidate;
 
-    // 2) Directory index (/app-login -> /app-login/index.html)
+    // 2) Directory index (/support -> /support/index.html)
     candidate = path.resolve(PUBLIC_DIR, rel, 'index.html');
     if (candidate.startsWith(PUBLIC_DIR_PREFIX) && fileExists(candidate)) return candidate;
 
@@ -4490,20 +4490,25 @@ app.get(/.*/, (req, res, next) => {
       if (pRoot) return res.sendFile(pRoot);
     }
 
-    // Keep the browser login helper on the app subdomain.
     if (
       req.path === '/app-login' ||
       req.path === '/app-login.html' ||
       req.path.startsWith('/app-login/') ||
       req.path === '/login' ||
       req.path === '/login.html' ||
-      req.path.startsWith('/login/') ||
+      req.path.startsWith('/login/')
+    ) {
+      const pDashboard = resolvePublicFileForRequestPath('/dashboard');
+      if (pDashboard) return res.sendFile(pDashboard);
+    }
+
+    if (
       req.path === '/sign-up' ||
       req.path === '/sign-up.html' ||
       req.path.startsWith('/sign-up/')
     ) {
-      const pLogin = resolvePublicFileForRequestPath(req.path);
-      if (pLogin) return res.sendFile(pLogin);
+      const pSignUp = resolvePublicFileForRequestPath(req.path);
+      if (pSignUp) return res.sendFile(pSignUp);
     }
 
     const pWeb = resolveWebDistFileForRequestPath(req.path);
@@ -4514,6 +4519,18 @@ app.get(/.*/, (req, res, next) => {
     if (pPublic) return res.sendFile(pPublic);
 
     return next();
+  }
+
+  if (
+    req.path === '/app-login' ||
+    req.path === '/app-login.html' ||
+    req.path.startsWith('/app-login/') ||
+    req.path === '/login' ||
+    req.path === '/login.html' ||
+    req.path.startsWith('/login/')
+  ) {
+    const pDashboard = resolvePublicFileForRequestPath('/dashboard') || resolveWebDistFileForRequestPath('/');
+    if (pDashboard) return res.sendFile(pDashboard);
   }
 
   const p = resolvePublicFileForRequestPath(req.path);

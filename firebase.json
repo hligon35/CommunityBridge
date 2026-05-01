@@ -35,7 +35,7 @@
             { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
             { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
             { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), interest-cohort=()" },
-            { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://www.googletagmanager.com https://apis.google.com https://www.google.com https://www.recaptcha.net https://www.gstatic.com/recaptcha/; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com https://www.gstatic.com https://www.google.com https://www.recaptcha.net; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebasestorage.googleapis.com https://*.run.app https://www.google.com https://www.recaptcha.net; frame-src https://*.firebaseapp.com https://accounts.google.com https://www.google.com https://www.recaptcha.net; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'" }
+            { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://www.googletagmanager.com https://apis.google.com https://www.google.com https://www.recaptcha.net https://www.gstatic.com/recaptcha/ https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com https://www.gstatic.com https://www.google.com https://www.recaptcha.net https://*.cloudflareinsights.com; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebasestorage.googleapis.com https://*.run.app https://www.google.com https://www.recaptcha.net https://cloudflareinsights.com https://*.cloudflareinsights.com; frame-src https://*.firebaseapp.com https://accounts.google.com https://www.google.com https://www.recaptcha.net; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'" }
           ]
         }
       ],
@@ -88,19 +88,19 @@
         },
         {
           "source": "/login",
-          "destination": "/login/index.html"
+          "destination": "/dashboard/index.html"
         },
         {
           "source": "/login/**",
-          "destination": "/login/index.html"
+          "destination": "/dashboard/index.html"
         },
         {
           "source": "/app-login",
-          "destination": "/app-login/index.html"
+          "destination": "/dashboard/index.html"
         },
         {
           "source": "/app-login/**",
-          "destination": "/app-login/index.html"
+          "destination": "/dashboard/index.html"
         },
         {
           "source": "/delete-account",

@@ -118,24 +118,17 @@ Notes
 - Link previews use `/api/link/preview?url=`.
 - Urgent memos are fetched on app start and acknowledged via `/api/urgent-memos/read`.
 
-Web login pages (why there are duplicates)
----------------------------------------
+# Web login routing
 
-This repo intentionally has multiple *copies* of the login helper pages because there are two different deployment shapes:
+The web app now uses the Expo / React Native `LoginScreen` as the only login UI.
 
-- **Source (checked-in) static pages:**
-	- [public/login/index.html](public/login/index.html): marketing-site login page (static HTML).
-	- [public/app-login/index.html](public/app-login/index.html): browser login helper page used on the same origin as the web app (for auth redirects / deep links).
-	- [public/app-login.html](public/app-login.html): legacy alias for `/app-login` on some hosts.
-
-- **Build output (generated):**
-	- `npm run build:web` generates `web-dist/` via `expo export` and then **copies the source pages above into `web-dist/`** so a “web-dist-only” deployment still has `/login` and `/app-login`.
-	- Do not hand-edit `web-dist/**` files; they will be overwritten on the next build.
+- `/dashboard` serves the web app and its login screen when the user is signed out.
+- `/login` and `/app-login` are legacy aliases that route into the same web app entry.
+- Do not add new static HTML login helpers under `public/`; they will drift from the app login experience.
 
 If you see a local `dist/` folder, that’s a leftover artifact from older workflows (not used by the current scripts). It’s safe to delete if it’s untracked.
 
 Local API + smoke tests (Windows)
--------------------------------
 
 This repo includes two backends you can run locally:
 

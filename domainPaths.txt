@@ -47,14 +47,12 @@ Primary pages (top-level HTML):
 - /privacy                -> public/privacy.html
 - /support                -> public/support.html
 - /terms                  -> public/terms.html
-- /app-login              -> public/app-login.html
-
 Folder index pages:
 - /dashboard               -> public/dashboard/index.html  (via explicit rewrite)
 - /home                   -> public/home/index.html  (also via explicit rewrite)
-- /login                  -> public/login/index.html
 - /sign-up                -> public/sign-up/index.html
-- /app-login/             -> public/app-login/index.html
+- /login                  -> public/dashboard/index.html  (legacy alias to React Native web login)
+- /app-login              -> public/dashboard/index.html  (legacy alias to React Native web login)
 
 Download / client packet HTML pages:
 - /downloads/client-packet/html/01_CommunityBridge_Executive_Product_Overview
@@ -142,15 +140,15 @@ D) Hosted Web Pages — Site: communitybridge-26apr20 (web-dist/)
 
 Notes:
 - This site has a catch-all rewrite: "**" -> /index.html (SPA entry).
-- It also has a rewrite for /app-login and /app-login/** -> /app-login/index.html.
+- `/login` and `/app-login` are legacy aliases that route into the SPA login screen.
 - Static files may still be directly served if requested (depending on Hosting precedence).
 
 Primary SPA entry:
 - /                       -> web-dist/index.html
 
-App-login entry:
-- /app-login               -> web-dist/app-login/index.html (rewrite target)
-- /app-login.html           -> web-dist/app-login.html (static file also present)
+Legacy login aliases:
+- /login                   -> web-dist/index.html
+- /app-login               -> web-dist/index.html
 
 Static support pages present in web-dist root:
 - /download                -> web-dist/download.html
@@ -160,7 +158,6 @@ Static support pages present in web-dist root:
 - /terms                   -> web-dist/terms.html
 
 Folder index pages also present in web-dist:
-- /login                   -> web-dist/login/index.html
 - /sign-up                 -> web-dist/sign-up/index.html
 
 Download / client packet HTML pages (also present in web-dist):
