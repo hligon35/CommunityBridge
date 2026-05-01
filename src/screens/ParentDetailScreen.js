@@ -31,8 +31,19 @@ export default function ParentDetailScreen() {
   const [meetingDate, setMeetingDate] = useState(new Date());
   const isWeb = Platform.OS === 'web';
 
-  function openPhone(phone) { try { if (phone) Linking.openURL(`tel:${phone}`); } catch (e) {} }
-  function openEmail(email) { try { if (email) Linking.openURL(`mailto:${email}`); } catch (e) {} }
+  function openPhone(phone) {
+    if (!phone) return;
+    Linking.openURL(`tel:${phone}`).catch(() => {
+      Alert.alert('Unable to place call', 'Your device could not open the phone app.');
+    });
+  }
+
+  function openEmail(email) {
+    if (!email) return;
+    Linking.openURL(`mailto:${email}`).catch(() => {
+      Alert.alert('Unable to open email', 'Your device could not open the email app.');
+    });
+  }
 
   async function submitTimeUpdate() {
     if (!selectedChild) { Alert.alert('Select child'); return; }

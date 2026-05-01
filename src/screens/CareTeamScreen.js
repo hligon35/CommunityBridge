@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react';
-import { Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRoute } from '@react-navigation/native';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { avatarSourceFor } from '../utils/idVisibility';
+import { maskEmailDisplay, maskPhoneDisplay } from '../utils/inputFormat';
 import { THERAPY_ROLE_LABELS, getAssignmentRoleLabel, getDisplayRoleLabel } from '../utils/roleTerminology';
 
 function getRelevantChildren(userId, children) {
@@ -54,11 +55,15 @@ function ContactCard({ member }) {
   const email = member.email;
   const onCall = () => {
     if (!phone) return;
-    Linking.openURL(`tel:${phone}`).catch(() => {});
+    Linking.openURL(`tel:${phone}`).catch(() => {
+      Alert.alert('Unable to place call', 'Your device could not open the phone app.');
+    });
   };
   const onEmail = () => {
     if (!email) return;
-    Linking.openURL(`mailto:${email}`).catch(() => {});
+    Linking.openURL(`mailto:${email}`).catch(() => {
+      Alert.alert('Unable to open email', 'Your device could not open the email app.');
+    });
   };
   return (
     <View style={styles.card}>
@@ -84,7 +89,7 @@ function ContactCard({ member }) {
         >
           <MaterialIcons name="phone" size={20} color={phone ? '#1d4ed8' : '#9ca3af'} />
           <Text style={[styles.actionText, !phone && styles.actionTextDisabled]} numberOfLines={1}>
-            {phone || 'No phone'}
+            {maskPhoneDisplay(phone) || 'No phone'}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -96,7 +101,7 @@ function ContactCard({ member }) {
         >
           <MaterialIcons name="email" size={20} color={email ? '#1d4ed8' : '#9ca3af'} />
           <Text style={[styles.actionText, !email && styles.actionTextDisabled]} numberOfLines={1}>
-            {email || 'No email'}
+            {maskEmailDisplay(email) || 'No email'}
           </Text>
         </TouchableOpacity>
       </View>

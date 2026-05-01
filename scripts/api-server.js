@@ -497,6 +497,37 @@ function normalizeEmail(input) {
   return v;
 }
 
+function validatePasswordPolicy(password) {
+  const raw = String(password || '');
+  if (raw.length < 8) return 'password must be at least 8 characters';
+  if (!/[a-z]/.test(raw) || !/[A-Z]/.test(raw) || !/[0-9]/.test(raw)) {
+    return 'password must include uppercase, lowercase, and a number';
+  }
+  return '';
+}
+
+function hasValidEntityId(value) {
+  const id = safeString(value).trim();
+  return Boolean(id && id.length <= 128);
+}
+
+function validateDirectoryMergePayload(body) {
+  const payload = body && typeof body === 'object' ? body : {};
+  const buckets = [
+    ['children', Array.isArray(payload.children) ? payload.children : []],
+    ['parents', Array.isArray(payload.parents) ? payload.parents : []],
+    ['therapists', Array.isArray(payload.therapists) ? payload.therapists : []],
+  ];
+  for (const [label, items] of buckets) {
+    if (items.length > 1000) return `${label} exceeds the 1000 item limit`;
+    for (const item of items) {
+      if (!item || typeof item !== 'object') return `${label} entries must be objects`;
+      if (!hasValidEntityId(item.id)) return `${label} entries require a valid id`;
+    }
+  }
+  return '';
+}
+
 async function send2faCodeEmail({ to, code }) {
   const destination = normalizeEmail(to);
   if (!destination) throw new Error('Invalid email destination');
@@ -1937,6 +1968,16 @@ function normalizeTherapyEvent(entry, session, actor) {
   };
 }
 
+function validateTherapyEventPayload(item) {
+  if (!item) return 'Valid event payload required';
+  if (!item.eventType || !item.eventCode) return 'Valid event payload required';
+  if (safeString(item.eventCode).trim().length > 80) return 'event code is too long';
+  if (safeString(item.label).trim().length > 200) return 'event label is too long';
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(safeString(item.occurredAt).trim())) return 'occurredAt must be an ISO timestamp';
+  if (!Number.isFinite(Number(item.frequencyDelta)) || Math.abs(Number(item.frequencyDelta)) > 1000) return 'frequencyDelta is out of range';
+  return '';
+}
+
 function buildTherapySessionResponse(row) {
   if (!row) return null;
   return {
@@ -2418,6 +2459,8 @@ app.get('/api/directory/me', authMiddleware, (req, res) => {
 
 app.post('/api/directory/merge', authMiddleware, requireAdmin, requireCapability('children:edit'), (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const payloadError = validateDirectoryMergePayload(body);
+  if (payloadError) return res.status(400).json({ ok: false, error: payloadError });
   const children = Array.isArray(body.children) ? body.children : [];
   const parents = Array.isArray(body.parents) ? body.parents : [];
   const therapists = Array.isArray(body.therapists) ? body.therapists : [];
@@ -2735,6 +2778,7 @@ app.post('/api/therapy-sessions', authMiddleware, requireChildCareWriteAccess, (
       createdAt: now,
       updatedAt: now,
     };
+    if (!item.sessionDate) return res.status(400).json({ ok: false, error: 'sessionDate must be a valid date' });
 
     db.prepare(
       'INSERT INTO therapy_sessions (id, child_id, child_name, therapist_id, therapist_role, organization_id, program_id, campus_id, session_date, session_type, started_at, ended_at, status, summary_generated_at, approved_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
@@ -2765,10 +2809,12 @@ app.post('/api/therapy-sessions/:sessionId/events', authMiddleware, requireChild
     const sessionId = safeString(req.params && req.params.sessionId).trim();
     const session = getTherapySessionRowSqlite(sessionId);
     if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+    if (safeString(session.status).trim().toLowerCase() !== 'active') return res.status(409).json({ ok: false, error: 'Session is no longer active' });
     const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
     if (!visibleChildIds.has(session.child_id)) return res.status(403).json({ ok: false, error: 'Forbidden' });
     const item = normalizeTherapyEvent(req.body && req.body.event ? req.body.event : req.body, session, req.user);
-    if (!item) return res.status(400).json({ ok: false, error: 'Valid event payload required' });
+    const payloadError = validateTherapyEventPayload(item);
+    if (payloadError) return res.status(400).json({ ok: false, error: payloadError });
 
     db.prepare('INSERT INTO therapy_session_events (id, session_id, child_id, therapist_id, event_type, event_code, label, value_json, intensity, frequency_delta, metadata_json, occurred_at, source, client_event_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
       .run(item.id, item.sessionId, item.childId, item.therapistId || null, item.eventType, item.eventCode, item.label || null, JSON.stringify(item.value), item.intensity || null, item.frequencyDelta, JSON.stringify(item.metadata || {}), item.occurredAt, item.source || null, item.clientEventId, item.createdAt);
@@ -2800,9 +2846,14 @@ app.post('/api/therapy-sessions/:sessionId/events/bulk', authMiddleware, require
     const sessionId = safeString(req.params && req.params.sessionId).trim();
     const session = getTherapySessionRowSqlite(sessionId);
     if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+    if (safeString(session.status).trim().toLowerCase() !== 'active') return res.status(409).json({ ok: false, error: 'Session is no longer active' });
     const visibleChildIds = new Set(getVisibleChildIdsForUser(req.user));
     if (!visibleChildIds.has(session.child_id)) return res.status(403).json({ ok: false, error: 'Forbidden' });
-    const entries = (Array.isArray(req.body?.events) ? req.body.events : []).map((entry) => normalizeTherapyEvent(entry, session, req.user)).filter(Boolean);
+    const rawEntries = Array.isArray(req.body?.events) ? req.body.events : [];
+    if (rawEntries.length > 250) return res.status(400).json({ ok: false, error: 'Too many events supplied' });
+    const entries = rawEntries.map((entry) => normalizeTherapyEvent(entry, session, req.user)).filter(Boolean);
+    const invalidEntry = entries.map((entry) => validateTherapyEventPayload(entry)).find(Boolean);
+    if (invalidEntry) return res.status(400).json({ ok: false, error: invalidEntry });
     if (!entries.length) return res.status(400).json({ ok: false, error: 'No valid events supplied' });
 
     const insert = db.prepare('INSERT INTO therapy_session_events (id, session_id, child_id, therapist_id, event_type, event_code, label, value_json, intensity, frequency_delta, metadata_json, occurred_at, source, client_event_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
@@ -3053,24 +3104,29 @@ if (LOG_REQUESTS) {
 
 // Auth
 app.post('/api/auth/login', authRateLimit, (req, res) => {
-  const email = (req.body && req.body.email) ? String(req.body.email).trim().toLowerCase() : '';
+  const email = normalizeEmail(req.body && req.body.email);
   const password = (req.body && req.body.password) ? String(req.body.password) : '';
   if (!email || !password) return res.status(400).json({ ok: false, error: 'email and password required' });
+  if (password.length > 256) return res.status(400).json({ ok: false, error: 'password is too long' });
 
-  slog.debug('auth', 'Login attempt', { email: maskEmail(email) });
+  try {
+    slog.debug('auth', 'Login attempt', { email: maskEmail(email) });
 
-  // Treat emails case-insensitively (SQLite comparisons are case-sensitive by default).
-  const row = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(email);
-  if (!row) return res.status(401).json({ ok: false, error: 'invalid credentials' });
-  const ok = bcrypt.compareSync(password, row.password_hash);
-  if (!ok) return res.status(401).json({ ok: false, error: 'invalid credentials' });
+    const row = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(email);
+    if (!row) return res.status(401).json({ ok: false, error: 'invalid credentials' });
+    const ok = bcrypt.compareSync(password, row.password_hash);
+    if (!ok) return res.status(401).json({ ok: false, error: 'invalid credentials' });
 
-  if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'server missing BB_JWT_SECRET' });
+    if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'server missing BB_JWT_SECRET' });
 
-  const user = userToClient(row);
-  const token = signToken(user);
-  slog.info('auth', 'Login success', { userId: user?.id, email: maskEmail(email) });
-  res.json({ token, user });
+    const user = userToClient(row);
+    const token = signToken(user);
+    slog.info('auth', 'Login success', { userId: user?.id, email: maskEmail(email) });
+    return res.json({ token, user });
+  } catch (e) {
+    slog.error('auth', 'Login failed unexpectedly', { email: maskEmail(email), message: e?.message || String(e) });
+    return res.status(500).json({ ok: false, error: 'login failed' });
+  }
 });
 
 // Password reset (request a reset code)
@@ -3103,12 +3159,10 @@ app.post('/api/auth/forgot-password', authRateLimit, async (req, res) => {
         if (passwordResetEmailConfigured()) {
           await sendPasswordResetEmail({ to: email, code: resetCode });
         } else {
-          slog.warn('auth', 'Password reset requested but SMTP not configured; logging reset code', { email: maskEmail(email), resetCode });
+          slog.warn('auth', 'Password reset requested but SMTP not configured', { email: maskEmail(email) });
         }
       } catch (e) {
         slog.error('auth', 'Password reset delivery failed', { email: maskEmail(email), message: e?.message || String(e) });
-        // Fall back to logging for internal/dev convenience.
-        slog.warn('auth', 'Password reset code (fallback)', { email: maskEmail(email), resetCode });
       }
 
       const payload = { ok: true };
@@ -3545,7 +3599,7 @@ app.delete('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapa
 app.post('/api/auth/signup', authRateLimit, async (req, res) => {
   if (!ALLOW_SIGNUP) return res.status(403).json({ ok: false, error: 'signup disabled' });
 
-  const email = (req.body && req.body.email) ? String(req.body.email).trim().toLowerCase() : '';
+  const email = normalizeEmail(req.body && req.body.email);
   const password = (req.body && req.body.password) ? String(req.body.password) : '';
   const name = (req.body && req.body.name) ? String(req.body.name).trim() : '';
   const role = (req.body && req.body.role) ? String(req.body.role).trim() : 'parent';
@@ -3553,6 +3607,9 @@ app.post('/api/auth/signup', authRateLimit, async (req, res) => {
   const phone = (req.body && req.body.phone) ? String(req.body.phone).trim() : '';
 
   if (!email || !password || !name) return res.status(400).json({ ok: false, error: 'name, email, password required' });
+  if (name.length > 120) return res.status(400).json({ ok: false, error: 'name is too long' });
+  const passwordPolicyError = validatePasswordPolicy(password);
+  if (passwordPolicyError) return res.status(400).json({ ok: false, error: passwordPolicyError });
   if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'server missing BB_JWT_SECRET' });
   if (isRestrictedSignupRole(role)) return res.status(403).json({ ok: false, error: 'elevated roles must be provisioned by an existing administrator' });
 

@@ -122,14 +122,44 @@ export default function SignUpScreen({ onDone, onCancel }) {
     };
   }
 
+  function isValidEmail(value) {
+    return /^\S+@\S+\.[^\s@]+$/.test(String(value || '').trim());
+  }
+
+  function getPasswordPolicyError(value) {
+    const raw = String(value || '');
+    if (raw.length < 8) return 'Password must be at least 8 characters.';
+    if (!/[a-z]/.test(raw) || !/[A-Z]/.test(raw) || !/[0-9]/.test(raw)) {
+      return 'Password must include uppercase, lowercase, and a number.';
+    }
+    return '';
+  }
+
   const submit = async () => {
     const cleanedName = String(name || '').trim();
-    const cleanedEmail = String(email || '').trim();
+    const cleanedEmail = String(email || '').trim().toLowerCase();
     const cleanedPassword = String(password || '');
     const cleanedEnrollmentCode = String(enrollmentCode || '').trim().toUpperCase();
 
     if (!cleanedEmail || !cleanedName || !cleanedPassword || !organizationId || !programId || !cleanedEnrollmentCode) {
       Alert.alert('Missing', 'Please provide name, email, password, organization, program, and enrollment code');
+      return;
+    }
+    if (cleanedName.length > 120) {
+      Alert.alert('Invalid name', 'Please enter a shorter full name.');
+      return;
+    }
+    if (!isValidEmail(cleanedEmail)) {
+      Alert.alert('Invalid email', 'Please enter a valid email address.');
+      return;
+    }
+    const passwordPolicyError = getPasswordPolicyError(cleanedPassword);
+    if (passwordPolicyError) {
+      Alert.alert('Invalid password', passwordPolicyError);
+      return;
+    }
+    if (!/^[A-Z0-9-]{4,24}$/.test(cleanedEnrollmentCode)) {
+      Alert.alert('Invalid enrollment code', 'Enrollment codes must be 4-24 letters, numbers, or hyphens.');
       return;
     }
 
@@ -218,6 +248,7 @@ export default function SignUpScreen({ onDone, onCancel }) {
                   onChangeText={setName}
                   style={styles.input}
                   autoCapitalize="words"
+                  maxLength={120}
                 />
               </View>
 
@@ -228,6 +259,7 @@ export default function SignUpScreen({ onDone, onCancel }) {
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  autoCorrect={false}
                   style={styles.input}
                 />
               </View>
@@ -236,7 +268,7 @@ export default function SignUpScreen({ onDone, onCancel }) {
                 <TextInput
                   placeholder="Password"
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(value) => setPassword(String(value || '').slice(0, 128))}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -288,10 +320,11 @@ export default function SignUpScreen({ onDone, onCancel }) {
                 <TextInput
                   placeholder="Organization / Enrollment code"
                   value={enrollmentCode}
-                  onChangeText={setEnrollmentCode}
+                  onChangeText={(value) => setEnrollmentCode(String(value || '').replace(/[^a-z0-9-]/gi, '').slice(0, 24).toUpperCase())}
                   autoCapitalize="characters"
                   autoCorrect={false}
                   style={styles.input}
+                  maxLength={24}
                 />
               </View>
 

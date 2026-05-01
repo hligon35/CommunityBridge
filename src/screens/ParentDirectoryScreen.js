@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Image, Linking } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Image, Linking, Alert } from 'react-native';
 import { useData } from '../DataContext';
 import { useNavigation } from '@react-navigation/native';
 // header provided by ScreenWrapper
@@ -10,6 +10,20 @@ import { avatarSourceFor } from '../utils/idVisibility';
 export default function ParentDirectoryScreen() {
   const { parents = [], children = [] } = useData();
   const navigation = useNavigation();
+
+  const openPhone = (phone) => {
+    if (!phone) return;
+    Linking.openURL(`tel:${phone}`).catch(() => {
+      Alert.alert('Unable to place call', 'Your device could not open the phone app.');
+    });
+  };
+
+  const openEmail = (email) => {
+    if (!email) return;
+    Linking.openURL(`mailto:${email}`).catch(() => {
+      Alert.alert('Unable to open email', 'Your device could not open the email app.');
+    });
+  };
 
   const renderItem = ({ item }) => (
     <View style={styles.row}>
@@ -37,8 +51,8 @@ export default function ParentDirectoryScreen() {
         </View>
       </TouchableOpacity>
       <View style={styles.actions}>
-        <TouchableOpacity activeOpacity={0.85} onPress={() => { if (item.phone) Linking.openURL(`tel:${item.phone}`).catch(() => {}); }} style={styles.iconBtn}><MaterialIcons name="call" size={18} color="#2563eb" /></TouchableOpacity>
-        <TouchableOpacity activeOpacity={0.85} onPress={() => { if (item.email) Linking.openURL(`mailto:${item.email}`).catch(() => {}); }} style={styles.iconBtn}><MaterialIcons name="email" size={18} color="#2563eb" /></TouchableOpacity>
+        <TouchableOpacity activeOpacity={0.85} onPress={() => openPhone(item.phone)} style={styles.iconBtn}><MaterialIcons name="call" size={18} color="#2563eb" /></TouchableOpacity>
+        <TouchableOpacity activeOpacity={0.85} onPress={() => openEmail(item.email)} style={styles.iconBtn}><MaterialIcons name="email" size={18} color="#2563eb" /></TouchableOpacity>
       </View>
     </View>
   );

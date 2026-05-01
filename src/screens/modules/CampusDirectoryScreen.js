@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Linking } from 'react-native';
+import { Alert, View, Text, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { ScreenWrapper } from '../../components/ScreenWrapper';
 import { useAuth } from '../../AuthContext';
 import { useTenant } from '../../core/tenant/TenantContext';
@@ -7,6 +7,7 @@ import { listActiveOrganizations } from '../../core/tenant/OrganizationRepositor
 import { listCampusesByOrganization } from '../../core/tenant/CampusRepository';
 import { listProgramsByOrganization } from '../../core/tenant/ProgramRepository';
 import { isScopedAdminRole } from '../../core/tenant/models';
+import { maskEmailDisplay, maskPhoneDisplay } from '../../utils/inputFormat';
 import { logPress } from '../../utils/logger';
 import moduleStyles from './ModuleStyles';
 
@@ -23,13 +24,17 @@ function formatAddress(item) {
 function openPhone(phone) {
   const normalized = String(phone || '').trim();
   if (!normalized) return;
-  Linking.openURL(`tel:${normalized}`).catch(() => {});
+  Linking.openURL(`tel:${normalized}`).catch(() => {
+    Alert.alert('Unable to place call', 'Your device could not open the phone app.');
+  });
 }
 
 function openEmail(email) {
   const normalized = String(email || '').trim();
   if (!normalized) return;
-  Linking.openURL(`mailto:${normalized}`).catch(() => {});
+  Linking.openURL(`mailto:${normalized}`).catch(() => {
+    Alert.alert('Unable to open email', 'Your device could not open the email app.');
+  });
 }
 
 function renderContactLines(item, { phoneFallback = '', emailFallback = '', addressFallback = '' } = {}) {
@@ -41,12 +46,12 @@ function renderContactLines(item, { phoneFallback = '', emailFallback = '', addr
     <>
       {phone ? (
         <TouchableOpacity onPress={() => openPhone(phone)} accessibilityRole="link" accessibilityLabel={`Call ${phone}`} style={{ alignSelf: 'flex-start' }}>
-          <Text style={[moduleStyles.cardMeta, moduleStyles.contactLink, { marginTop: 4 }]}>{phone}</Text>
+          <Text style={[moduleStyles.cardMeta, moduleStyles.contactLink, { marginTop: 4 }]}>{maskPhoneDisplay(phone)}</Text>
         </TouchableOpacity>
       ) : null}
       {email ? (
         <TouchableOpacity onPress={() => openEmail(email)} accessibilityRole="link" accessibilityLabel={`Email ${email}`} style={{ alignSelf: 'flex-start' }}>
-          <Text style={[moduleStyles.cardMeta, moduleStyles.contactLink]}>{email}</Text>
+          <Text style={[moduleStyles.cardMeta, moduleStyles.contactLink]}>{maskEmailDisplay(email)}</Text>
         </TouchableOpacity>
       ) : null}
       {address ? <Text style={moduleStyles.cardMeta}>{address}</Text> : null}

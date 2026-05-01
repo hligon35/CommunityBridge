@@ -125,7 +125,7 @@ export default function ReportsScreen() {
         status: 'ready',
         summary: `${normalizedFormat.toUpperCase()} transfer is ready for handoff.`,
         generatedAt: 'serverTimestamp',
-      }).catch(() => null);
+      });
     }
   }
 

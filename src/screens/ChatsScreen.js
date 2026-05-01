@@ -122,7 +122,14 @@ export default function ChatsScreen({ navigation }) {
   const unreadCount = displayList.filter((item) => item?.isUnread).length;
 
   async function onRefresh() {
-    try { setRefreshing(true); await fetchAndSync({ force: true }); } catch (e) {} finally { setRefreshing(false); }
+    try {
+      setRefreshing(true);
+      await fetchAndSync({ force: true });
+    } catch (e) {
+      Alert.alert('Refresh failed', String(e?.message || e || 'Could not refresh conversations.'));
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   function HeaderIconButton({ name, onPress, accessibilityLabel, active }) {

@@ -223,7 +223,7 @@ export default function SettingsScreen({ navigation }) {
         await Api.registerPushToken(payload);
         pushSyncLastPayloadRef.current = payloadKey;
       } catch (e) {
-        // ignore: preferences will be attempted again on next change
+        console.warn('push preferences sync failed', e?.message || e);
       }
     }, 450);
 
@@ -314,7 +314,7 @@ export default function SettingsScreen({ navigation }) {
         await Api.unregisterPushToken({ token, platform: Platform.OS, userId: user?.id });
       }
     } catch (e) {
-      // ignore
+      Alert.alert('Push Notifications', e?.message || 'Push notifications were turned off locally, but the server could not be updated yet.');
     }
   };
 

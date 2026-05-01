@@ -8,6 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { avatarSourceFor, formatIdForDisplay } from '../utils/idVisibility';
+import { maskEmailDisplay, maskPhoneDisplay } from '../utils/inputFormat';
 import * as Api from '../Api';
 import { isAdminRole } from '../core/tenant/models';
 import { getDisplayRoleLabel } from '../utils/roleTerminology';
@@ -292,8 +293,8 @@ export default function FacultyDetailScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Profile Overview</Text>
           <Text style={styles.detailLine}>Assigned learners: {assignedChildren.length}</Text>
-          <Text style={styles.detailLine}>Phone: {faculty.phone || 'Not on file'}</Text>
-          <Text style={styles.detailLine}>Email: {faculty.email || 'Not on file'}</Text>
+          <Text style={styles.detailLine}>Phone: {maskPhoneDisplay(faculty.phone) || 'Not on file'}</Text>
+          <Text style={styles.detailLine}>Email: {maskEmailDisplay(faculty.email) || 'Not on file'}</Text>
           <Text style={styles.detailLine}>Certification expiration: {credentials.certificationExpiration || 'Not recorded'}</Text>
         </View>
       ) : null}

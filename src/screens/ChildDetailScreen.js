@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, Linking, Alert } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
@@ -10,6 +10,7 @@ import { isAdminRole, isStaffRole } from '../core/tenant/models';
 import SessionSummarySnapshot from '../components/SessionSummarySnapshot';
 import { resolveTherapyWorkspaceTarget } from '../features/sessionTracking/utils/dashboardSessionTarget';
 import { THERAPY_ROLE_LABELS, getDisplayRoleLabel } from '../utils/roleTerminology';
+import { maskPhoneDisplay } from '../utils/inputFormat';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
 const { PREVIEW_CHILD } = require('../features/sessionTracking/utils/previewWorkspace');
@@ -32,6 +33,20 @@ export default function ChildDetailScreen() {
     const { routeName, params } = resolveTherapyWorkspaceTarget(sessionAction, child?.id || null, isSessionPreview);
     navigation.replace(routeName, params);
   }, [sessionAction, navigation, child?.id, isSessionPreview]);
+
+  const openPhone = (phone) => {
+    if (!phone) return;
+    Linking.openURL(`tel:${phone}`).catch(() => {
+      Alert.alert('Unable to place call', 'Your device could not open the phone app.');
+    });
+  };
+
+  const openEmail = (email) => {
+    if (!email) return;
+    Linking.openURL(`mailto:${email}`).catch(() => {
+      Alert.alert('Unable to open email', 'Your device could not open the email app.');
+    });
+  };
 
 
   if (!displayChild) {
@@ -119,12 +134,12 @@ export default function ChildDetailScreen() {
                   <Image source={avatarSourceFor(p)} style={styles.smallAvatar} />
                   <View style={{ marginLeft: 8 }}>
                     <Text style={{ fontWeight: '700' }}>{p.name}</Text>
-                    <Text style={{ color: '#6b7280' }}>{p.phone || ''}</Text>
+                    <Text style={{ color: '#6b7280' }}>{maskPhoneDisplay(p.phone)}</Text>
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  {p.phone ? <TouchableOpacity style={{ padding: 8 }} onPress={() => { try { Linking.openURL(`tel:${p.phone}`); } catch (e) {} }}><MaterialIcons name="call" size={18} color="#2563eb" /></TouchableOpacity> : null}
-                  {p.email ? <TouchableOpacity style={{ padding: 8 }} onPress={() => { try { Linking.openURL(`mailto:${p.email}`); } catch (e) {} }}><MaterialIcons name="email" size={18} color="#2563eb" /></TouchableOpacity> : null}
+                  {p.phone ? <TouchableOpacity style={{ padding: 8 }} onPress={() => openPhone(p.phone)}><MaterialIcons name="call" size={18} color="#2563eb" /></TouchableOpacity> : null}
+                  {p.email ? <TouchableOpacity style={{ padding: 8 }} onPress={() => openEmail(p.email)}><MaterialIcons name="email" size={18} color="#2563eb" /></TouchableOpacity> : null}
                 </View>
               </TouchableOpacity>
             ))}

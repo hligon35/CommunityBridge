@@ -64,16 +64,16 @@
           <div class="row">
             <div>
               <label for="email">Email</label>
-              <input id="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required />
+              <input id="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required />
             </div>
             <div>
               <label for="phone">Phone</label>
-              <input id="phone" inputmode="tel" autocomplete="tel" placeholder="(555) 123-4567" required />
+              <input id="phone" inputmode="tel" autocomplete="tel" placeholder="(555) 123-4567" required pattern="\(\d{3}\) \d{3}-\d{4}" />
             </div>
           </div>
 
           <label for="password">Password</label>
-          <input id="password" type="password" autocomplete="new-password" placeholder="Password" required />
+          <input id="password" type="password" autocomplete="new-password" placeholder="Password" required minlength="8" maxlength="128" />
           <div class="checkRow">
             <label class="checkLabel" for="showPassword">Show password</label>
             <input id="showPassword" type="checkbox" />
@@ -84,7 +84,7 @@
           </div>
 
           <label for="password2">Confirm password</label>
-          <input id="password2" type="password" autocomplete="new-password" placeholder="Confirm password" required />
+          <input id="password2" type="password" autocomplete="new-password" placeholder="Confirm password" required minlength="8" maxlength="128" />
           <div class="checkRow">
             <label class="checkLabel" for="showPassword2">Show confirm</label>
             <input id="showPassword2" type="checkbox" />
@@ -102,7 +102,7 @@
             </div>
             <div class="codeCol">
               <label for="schoolCode">School ID</label>
-              <input id="schoolCode" inputmode="numeric" autocomplete="one-time-code" placeholder="5-digit code" required />
+              <input id="schoolCode" inputmode="numeric" autocomplete="one-time-code" placeholder="5-digit code" required pattern="\d{5}" maxlength="5" />
             </div>
           </div>
 
@@ -215,6 +215,16 @@
 
         if (password !== password2) {
           setMsg('Passwords do not match.', true);
+          return;
+        }
+
+        if (!/^\S+@\S+\.[^\s@]+$/.test(email)) {
+          setMsg('Please enter a valid email address.', true);
+          return;
+        }
+
+        if (password.length < 8 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
+          setMsg('Password must be at least 8 characters and include uppercase, lowercase, and a number.', true);
           return;
         }
 

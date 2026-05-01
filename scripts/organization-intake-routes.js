@@ -545,6 +545,13 @@ async function sendOrganizationIntakeEmail({ to, submission, approveUrl, rejectU
   });
 }
 
+function getApplicantNotificationRecipients(submission) {
+  return uniqueBy([
+    normalizeEmail(submission?.contact?.email),
+    normalizeEmail(submission?.organization?.email),
+  ].filter(Boolean), (value) => value);
+}
+
 async function sendOrganizationIntakeConfirmationEmail({ to, submission }) {
   if (!to) return;
   const { from, transporter } = getOrganizationIntakeMailer();
@@ -728,14 +735,15 @@ function registerOrganizationIntakeRoutes(app) {
         rejectUrl,
       });
 
+      const applicantRecipients = getApplicantNotificationRecipients(submission);
       let confirmationEmailStatus = 'skipped';
       let confirmationEmailError = '';
       try {
         await sendOrganizationIntakeConfirmationEmail({
-          to: submission.contact.email,
+          to: applicantRecipients,
           submission,
         });
-        confirmationEmailStatus = 'sent';
+        confirmationEmailStatus = applicantRecipients.length ? 'sent' : 'skipped';
       } catch (confirmationError) {
         confirmationEmailStatus = 'failed';
         confirmationEmailError = safeString(confirmationError?.code || confirmationError?.message || 'unknown_error').slice(0, 200);
@@ -746,7 +754,8 @@ function registerOrganizationIntakeRoutes(app) {
         await submissionRef.set({
           applicantConfirmationEmail: {
             status: confirmationEmailStatus,
-            email: submission.contact.email || '',
+            email: applicantRecipients.join(', '),
+            emails: applicantRecipients,
             sentAt: confirmationEmailStatus === 'sent' ? admin.firestore.FieldValue.serverTimestamp() : null,
             failedAt: confirmationEmailStatus === 'failed' ? admin.firestore.FieldValue.serverTimestamp() : null,
             error: confirmationEmailError,
@@ -830,19 +839,21 @@ function registerOrganizationIntakeRoutes(app) {
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
 
+        const applicantRecipients = getApplicantNotificationRecipients(data);
         try {
           await sendOrganizationDecisionEmail({
-            to: data.contact?.email || data.applicantEmail || '',
+            to: applicantRecipients,
             submission: data,
             decision: 'rejected',
             publicBaseUrl: getPublicBaseUrl(req),
           });
           await submissionRef.set({
             applicantDecisionEmail: {
-              status: 'sent',
+              status: applicantRecipients.length ? 'sent' : 'skipped',
               decision: 'rejected',
-              email: data.contact?.email || data.applicantEmail || '',
-              sentAt: admin.firestore.FieldValue.serverTimestamp(),
+              email: applicantRecipients.join(', '),
+              emails: applicantRecipients,
+              sentAt: applicantRecipients.length ? admin.firestore.FieldValue.serverTimestamp() : null,
               error: '',
             },
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -853,7 +864,8 @@ function registerOrganizationIntakeRoutes(app) {
             applicantDecisionEmail: {
               status: 'failed',
               decision: 'rejected',
-              email: data.contact?.email || data.applicantEmail || '',
+              email: applicantRecipients.join(', '),
+              emails: applicantRecipients,
               failedAt: admin.firestore.FieldValue.serverTimestamp(),
               error: safeString(decisionEmailError?.code || decisionEmailError?.message || 'unknown_error').slice(0, 200),
             },
@@ -870,19 +882,21 @@ function registerOrganizationIntakeRoutes(app) {
 
       await activateApprovedSubmission(submissionRef, data);
 
+      const applicantRecipients = getApplicantNotificationRecipients(data);
       try {
         await sendOrganizationDecisionEmail({
-          to: data.contact?.email || data.applicantEmail || '',
+          to: applicantRecipients,
           submission: data,
           decision: 'approved',
           publicBaseUrl: getPublicBaseUrl(req),
         });
         await submissionRef.set({
           applicantDecisionEmail: {
-            status: 'sent',
+            status: applicantRecipients.length ? 'sent' : 'skipped',
             decision: 'approved',
-            email: data.contact?.email || data.applicantEmail || '',
-            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+            email: applicantRecipients.join(', '),
+            emails: applicantRecipients,
+            sentAt: applicantRecipients.length ? admin.firestore.FieldValue.serverTimestamp() : null,
             error: '',
           },
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -893,7 +907,8 @@ function registerOrganizationIntakeRoutes(app) {
           applicantDecisionEmail: {
             status: 'failed',
             decision: 'approved',
-            email: data.contact?.email || data.applicantEmail || '',
+            email: applicantRecipients.join(', '),
+            emails: applicantRecipients,
             failedAt: admin.firestore.FieldValue.serverTimestamp(),
             error: safeString(decisionEmailError?.code || decisionEmailError?.message || 'unknown_error').slice(0, 200),
           },

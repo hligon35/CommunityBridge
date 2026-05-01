@@ -127,12 +127,13 @@ export default function ChatThreadScreen({ route }) {
             <View style={{ flexDirection: 'row' }}>
             <TextInput
               value={text}
-              onChangeText={setText}
+              onChangeText={(value) => setText(String(value || '').slice(0, 5000))}
               placeholder="Message"
               style={{ flex: 1, padding: 8, borderWidth: 1, borderColor: '#ddd', marginRight: 8, backgroundColor: isChatBlocked ? '#f8fafc' : '#fff', color: isChatBlocked ? '#94a3b8' : '#111827' }}
               onSubmitEditing={handleSend}
               returnKeyType="send"
               editable={!isChatBlocked}
+              maxLength={5000}
             />
             <Button title="Send" onPress={handleSend} disabled={isChatBlocked} />
             </View>

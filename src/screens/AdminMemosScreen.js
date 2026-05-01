@@ -233,6 +233,7 @@ export default function AdminMemosScreen() {
         placeholder="Subject"
         value={subject}
         onChangeText={(t) => { setSubject(t); pushLog(`subject -> ${t}`); }}
+        maxLength={120}
         onFocus={() => pushLog('subject focused')}
         onBlur={() => pushLog('subject blurred')}
       />
@@ -242,8 +243,9 @@ export default function AdminMemosScreen() {
         style={[styles.input, { height: 120 }]}
         placeholder="Write your memo here"
         value={body}
-        onChangeText={(t) => { setBody(t); pushLog(`body -> ${t.slice(0,40)}`); }}
+        onChangeText={(t) => { const next = String(t || '').slice(0, 5000); setBody(next); pushLog(`body -> ${next.slice(0,40)}`); }}
         multiline
+        maxLength={5000}
         onFocus={() => pushLog('body focused')}
         onBlur={() => pushLog('body blurred')}
       />

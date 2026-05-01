@@ -21,6 +21,7 @@ export default function ExportDataScreen(){
   const [selectedCategory, setSelectedCategory] = useState('reports');
   const [selectedFormat, setSelectedFormat] = useState('csv');
   const [jobs, setJobs] = useState([]);
+  const [jobsError, setJobsError] = useState('');
   const [busy, setBusy] = useState(false);
 
   const recordCount = useMemo(() => selectedCategory === 'billing' ? children.length : messages.length + children.length, [children.length, messages.length, selectedCategory]);
@@ -28,15 +29,24 @@ export default function ExportDataScreen(){
   async function loadJobs() {
     try {
       const result = await Api.listExportJobs(12);
+      setJobsError('');
       setJobs(Array.isArray(result?.items) ? result.items : []);
-    } catch (_) {
+    } catch (error) {
       setJobs([]);
+      setJobsError(String(error?.message || error || 'Could not load recent export jobs.'));
     }
   }
 
   useEffect(() => {
-    loadJobs().catch(() => {});
+    loadJobs();
   }, []);
+
+  function openArtifact(url) {
+    if (!url) return;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Unable to open export', 'Your device could not open this export file.');
+    });
+  }
 
   function buildRows() {
     if (selectedCategory === 'billing') {
@@ -204,6 +214,14 @@ export default function ExportDataScreen(){
 
         <View style={styles.jobsCard}>
           <Text style={styles.infoTitle}>Recent Export Jobs</Text>
+          {jobsError ? (
+            <View style={styles.errorCard}>
+              <Text style={styles.errorText}>{jobsError}</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={loadJobs}>
+                <Text style={styles.retryText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
           {jobs.length ? jobs.map((job) => (
             <View key={job.id} style={styles.jobRow}>
               <View style={{ flex: 1, paddingRight: 12 }}>
@@ -216,7 +234,7 @@ export default function ExportDataScreen(){
                   <Text style={[styles.jobStatusText, job.status === 'failed' ? styles.jobStatusTextFailed : null]}>{String(job.status || 'ready').toUpperCase()}</Text>
                 </View>
                 {job.artifactUrl ? (
-                  <TouchableOpacity style={styles.downloadBtn} onPress={() => Linking.openURL(job.artifactUrl).catch(() => {})}>
+                  <TouchableOpacity style={styles.downloadBtn} onPress={() => openArtifact(job.artifactUrl)}>
                     <Text style={styles.downloadBtnText}>Open</Text>
                   </TouchableOpacity>
                 ) : null}
@@ -254,6 +272,10 @@ const styles = StyleSheet.create({
   exportBtnDisabled: { opacity: 0.55 },
   exportText: { color: '#fff', fontWeight: '700' },
   jobsCard: { marginTop: 16, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
+  errorCard: { marginTop: 10, marginBottom: 4, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#fecaca', backgroundColor: '#fef2f2' },
+  errorText: { color: '#991b1b', lineHeight: 18 },
+  retryBtn: { alignSelf: 'flex-start', marginTop: 8, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#991b1b' },
+  retryText: { color: '#fff', fontWeight: '700' },
   jobRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
   jobTitle: { color: '#0f172a', fontWeight: '800' },
   jobMeta: { color: '#64748b', marginTop: 4 },

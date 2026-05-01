@@ -9,6 +9,26 @@ export function formatPhoneInput(input) {
   return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
+export function maskPhoneDisplay(input) {
+  const formatted = formatPhoneInput(input);
+  const digits = formatted.replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length <= 4) return digits;
+  return `***-***-${digits.slice(-4)}`;
+}
+
+export function maskEmailDisplay(input) {
+  const normalized = String(input || '').trim().toLowerCase();
+  if (!normalized) return '';
+  const atIndex = normalized.indexOf('@');
+  if (atIndex <= 0) return normalized;
+  const local = normalized.slice(0, atIndex);
+  const domain = normalized.slice(atIndex + 1);
+  if (!domain) return normalized;
+  const visible = local.slice(0, Math.min(3, local.length));
+  return `${visible}${local.length > visible.length ? '***' : '*' }@${domain}`;
+}
+
 export function normalizeWebsiteInput(input, { presetScheme = false } = {}) {
   const raw = String(input || '');
   const trimmed = raw.trim();

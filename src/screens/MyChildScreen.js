@@ -126,6 +126,22 @@ export default function MyChildScreen() {
     Linking.openURL(`mailto:${email}`).catch(() => {});
   };
 
+  const maskPhoneDisplay = (value) => {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (!digits) return '';
+    return digits.length <= 4 ? digits : `***-***-${digits.slice(-4)}`;
+  };
+
+  const maskEmailDisplay = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    const atIndex = normalized.indexOf('@');
+    if (atIndex <= 0) return normalized;
+    const local = normalized.slice(0, atIndex);
+    const domain = normalized.slice(atIndex + 1);
+    const visible = local.slice(0, Math.min(3, local.length));
+    return `${visible}${local.length > visible.length ? '***' : '*' }@${domain}`;
+  };
+
   const dailyReviewSections = useMemo(() => ([
     {
       key: 'daily-recap',
@@ -437,7 +453,7 @@ export default function MyChildScreen() {
               <View key={u.id} style={{ marginBottom: 8 }}>
                 <Text style={styles.sectionText}>• {u.when} — {u.title}</Text>
                 {u.organizer ? (
-                  <Text style={[styles.sectionText, { marginTop: 4 }]}>Organizer: {u.organizer.name} • {u.organizer.phone} • {u.organizer.email}</Text>
+                  <Text style={[styles.sectionText, { marginTop: 4 }]}>Organizer: {u.organizer.name} • {maskPhoneDisplay(u.organizer.phone)} • {maskEmailDisplay(u.organizer.email)}</Text>
                 ) : null}
               </View>
             ))

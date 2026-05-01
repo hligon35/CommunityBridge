@@ -378,11 +378,11 @@
               </label>
               <label>
                 Short code
-                <input type="text" name="organizationShortCode" maxlength="12" placeholder="CENTRIA" />
+                <input type="text" name="organizationShortCode" maxlength="12" pattern="[A-Za-z0-9-]{2,12}" placeholder="CENTRIA" />
               </label>
               <label>
                 Organization phone
-                <input type="tel" name="organizationPhone" required placeholder="855-772-8847" />
+                <input type="tel" name="organizationPhone" required pattern="\d{3}-\d{3}-\d{4}" placeholder="855-772-8847" />
               </label>
               <label>
                 Organization email
@@ -403,11 +403,11 @@
               </label>
               <label>
                 State
-                <input type="text" name="organizationState" required maxlength="2" placeholder="MI" autocomplete="address-level1" data-address-role="state" data-address-scope="organization" />
+                <input type="text" name="organizationState" required maxlength="2" pattern="[A-Za-z]{2}" placeholder="MI" autocomplete="address-level1" data-address-role="state" data-address-scope="organization" />
               </label>
               <label>
                 ZIP
-                <input type="text" name="organizationZipCode" required placeholder="48334" autocomplete="postal-code" data-address-role="zipCode" data-address-scope="organization" />
+                <input type="text" name="organizationZipCode" required pattern="\d{5}(-\d{4})?" placeholder="48334" autocomplete="postal-code" data-address-role="zipCode" data-address-scope="organization" />
               </label>
               <label>
                 Website
@@ -422,7 +422,7 @@
             <div class="grid two mt16">
               <label>
                 Contact name
-                <input type="text" name="contactName" required placeholder="Jane Smith" />
+                <input type="text" name="contactName" required maxlength="120" placeholder="Jane Smith" />
               </label>
               <label>
                 Job title
@@ -434,7 +434,7 @@
               </label>
               <label>
                 Contact phone
-                <input type="tel" name="contactPhone" placeholder="317-555-0101" />
+                <input type="tel" name="contactPhone" pattern="\d{3}-\d{3}-\d{4}" placeholder="317-555-0101" />
               </label>
             </div>
           </section>
@@ -511,7 +511,7 @@
           </label>
           <label>
             Campus/location name
-            <input type="text" data-field="name" required placeholder="Centria Autism - Indianapolis (Lawrence)" />
+            <input type="text" data-field="name" required maxlength="120" placeholder="Centria Autism - Indianapolis (Lawrence)" />
           </label>
           <label>
             Campus type
@@ -519,7 +519,7 @@
           </label>
           <label>
             Location phone
-            <input type="tel" data-field="phone" placeholder="317-300-5725" />
+            <input type="tel" data-field="phone" pattern="\d{3}-\d{3}-\d{4}" placeholder="317-300-5725" />
           </label>
           <label>
             Location email
@@ -540,15 +540,15 @@
           </label>
           <label>
             State
-            <input type="text" data-field="state" required maxlength="2" placeholder="IN" autocomplete="address-level1" data-address-role="state" />
+            <input type="text" data-field="state" required maxlength="2" pattern="[A-Za-z]{2}" placeholder="IN" autocomplete="address-level1" data-address-role="state" />
           </label>
           <label>
             ZIP
-            <input type="text" data-field="zipCode" required placeholder="46216" autocomplete="postal-code" data-address-role="zipCode" />
+            <input type="text" data-field="zipCode" required pattern="\d{5}(-\d{4})?" placeholder="46216" autocomplete="postal-code" data-address-role="zipCode" />
           </label>
           <label>
             Enrollment code
-            <input type="text" data-field="enrollmentCode" placeholder="Defaults to ZIP if omitted" />
+            <input type="text" data-field="enrollmentCode" maxlength="24" pattern="[A-Za-z0-9-]{4,24}" placeholder="Defaults to ZIP if omitted" />
           </label>
         </div>
       </article>

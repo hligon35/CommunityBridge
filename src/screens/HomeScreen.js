@@ -181,13 +181,18 @@ export default function HomeScreen() {
       const encoded = encodeURIComponent(body);
       const scheme = Platform.OS === 'android' ? `sms:?body=${encoded}` : `sms:&body=${encoded}`;
       await Linking.openURL(scheme);
+      if (post?.id) {
+        try {
+          await recordShare(post.id);
+        } catch (recordError) {
+          console.warn('share metric failed', recordError?.message || recordError);
+        }
+      }
     } catch (e) {
       Alert.alert('Unable to open Messages', 'Your device could not open the messages app.');
     }
     setShareModalVisible(false);
     setShareTargetPost(null);
-    // record the share (notify server) but don't open native share sheet
-    if (post?.id) recordShare(post.id).catch(() => {});
   }
 
   async function handleShareViaEmail(post) {
@@ -196,25 +201,34 @@ export default function HomeScreen() {
       const body = encodeURIComponent((post.title ? `${post.title}\n\n` : '') + (post.body || '') + (post.image ? `\n\n${post.image}` : ''));
       const url = `mailto:?subject=${subject}&body=${body}`;
       await Linking.openURL(url);
+      if (post?.id) {
+        try {
+          await recordShare(post.id);
+        } catch (recordError) {
+          console.warn('share metric failed', recordError?.message || recordError);
+        }
+      }
     } catch (e) {
       Alert.alert('Unable to open Email', 'Your device could not open the email app.');
     }
     setShareModalVisible(false);
     setShareTargetPost(null);
-    if (post?.id) recordShare(post.id).catch(() => {});
   }
 
   async function handleShareMore(post) {
     try {
       const message = post.title ? `${post.title}\n\n${post.body || ''}` : (post.body || '');
       await Share.share({ message, url: post.image, title: post.title || 'Post' });
+      try {
+        await recordShare(post.id);
+      } catch (recordError) {
+        console.warn('share metric failed', recordError?.message || recordError);
+      }
     } catch (e) {
-      console.warn('share more failed', e?.message || e);
+      Alert.alert('Share failed', e?.message || 'Unable to open the share sheet.');
     }
     setShareModalVisible(false);
     setShareTargetPost(null);
-    // share() already opens share sheet and records count, but recordShare is safer if share fails
-    try { await recordShare(post.id); } catch (e) {}
   }
 
   async function handlePost() {
@@ -237,7 +251,7 @@ export default function HomeScreen() {
       setTimeout(() => Keyboard.dismiss(), 120);
       return created;
     } catch (e) {
-      console.warn('post failed', e.message);
+      Alert.alert('Post failed', e?.message || 'Unable to publish this post right now.');
     } finally {
       setLoading(false);
     }

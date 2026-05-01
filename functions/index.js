@@ -686,6 +686,13 @@ async function sendOrganizationIntakeEmail({ to, submission, approveUrl, rejectU
   });
 }
 
+function getApplicantNotificationRecipients(submission) {
+  return uniqueBy([
+    normalizeEmail(submission?.contact?.email),
+    normalizeEmail(submission?.organization?.email),
+  ].filter(Boolean), (value) => value);
+}
+
 async function sendOrganizationIntakeConfirmationEmail({ to, submission }) {
   if (!to) return;
   const { from, transporter } = getOrganizationIntakeMailer();
@@ -852,14 +859,15 @@ exports.submitOrganizationIntake = regional.https.onRequest(async (req, res) => 
       rejectUrl,
     });
 
+    const applicantRecipients = getApplicantNotificationRecipients(submission);
     let confirmationEmailStatus = 'skipped';
     let confirmationEmailError = '';
     try {
       await sendOrganizationIntakeConfirmationEmail({
-        to: submission.contact.email,
+        to: applicantRecipients,
         submission,
       });
-      confirmationEmailStatus = 'sent';
+      confirmationEmailStatus = applicantRecipients.length ? 'sent' : 'skipped';
     } catch (confirmationError) {
       confirmationEmailStatus = 'failed';
       confirmationEmailError = safeString(confirmationError?.code || confirmationError?.message || 'unknown_error').slice(0, 200);
@@ -870,7 +878,8 @@ exports.submitOrganizationIntake = regional.https.onRequest(async (req, res) => 
       await submissionRef.set({
         applicantConfirmationEmail: {
           status: confirmationEmailStatus,
-          email: submission.contact.email || '',
+          email: applicantRecipients.join(', '),
+          emails: applicantRecipients,
           sentAt: confirmationEmailStatus === 'sent' ? admin.firestore.FieldValue.serverTimestamp() : null,
           failedAt: confirmationEmailStatus === 'failed' ? admin.firestore.FieldValue.serverTimestamp() : null,
           error: confirmationEmailError,
@@ -946,10 +955,80 @@ exports.organizationIntakeAction = regional.https.onRequest(async (req, res) => 
         rejectedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
+
+      const applicantRecipients = getApplicantNotificationRecipients(data);
+      try {
+        await sendOrganizationDecisionEmail({
+          to: applicantRecipients,
+          submission: data,
+          decision: 'rejected',
+          publicBaseUrl: getPublicBaseUrl(req),
+        });
+        await submissionRef.set({
+          applicantDecisionEmail: {
+            status: applicantRecipients.length ? 'sent' : 'skipped',
+            decision: 'rejected',
+            email: applicantRecipients.join(', '),
+            emails: applicantRecipients,
+            sentAt: applicantRecipients.length ? admin.firestore.FieldValue.serverTimestamp() : null,
+            error: '',
+          },
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      } catch (decisionEmailError) {
+        console.error('organizationIntakeAction rejected decision email failed', decisionEmailError);
+        await submissionRef.set({
+          applicantDecisionEmail: {
+            status: 'failed',
+            decision: 'rejected',
+            email: applicantRecipients.join(', '),
+            emails: applicantRecipients,
+            failedAt: admin.firestore.FieldValue.serverTimestamp(),
+            error: safeString(decisionEmailError?.code || decisionEmailError?.message || 'unknown_error').slice(0, 200),
+          },
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+
       return res.status(200).send(renderIntakeResultPage({ title: 'Submission rejected', body: 'The organization submission was rejected and no tenant data was activated.', accent: '#f97316' }));
     }
 
     await activateApprovedSubmission(submissionRef, data);
+
+    const applicantRecipients = getApplicantNotificationRecipients(data);
+    try {
+      await sendOrganizationDecisionEmail({
+        to: applicantRecipients,
+        submission: data,
+        decision: 'approved',
+        publicBaseUrl: getPublicBaseUrl(req),
+      });
+      await submissionRef.set({
+        applicantDecisionEmail: {
+          status: applicantRecipients.length ? 'sent' : 'skipped',
+          decision: 'approved',
+          email: applicantRecipients.join(', '),
+          emails: applicantRecipients,
+          sentAt: applicantRecipients.length ? admin.firestore.FieldValue.serverTimestamp() : null,
+          error: '',
+        },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    } catch (decisionEmailError) {
+      console.error('organizationIntakeAction approved decision email failed', decisionEmailError);
+      await submissionRef.set({
+        applicantDecisionEmail: {
+          status: 'failed',
+          decision: 'approved',
+          email: applicantRecipients.join(', '),
+          emails: applicantRecipients,
+          failedAt: admin.firestore.FieldValue.serverTimestamp(),
+          error: safeString(decisionEmailError?.code || decisionEmailError?.message || 'unknown_error').slice(0, 200),
+        },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+
     return res.status(200).send(renderIntakeResultPage({ title: 'Organization approved', body: 'The organization, programs, and campuses are now active and available for user enrollment immediately.', accent: '#16a34a' }));
   } catch (error) {
     console.error('organizationIntakeAction failed', error);
@@ -1008,7 +1087,6 @@ exports.mfaSendCode = regional.https.onCall(async (data, context) => {
   const method = normalizeMethod(data?.method);
   const email = getDisplayEmail(context.auth.token?.email);
 
-  // Destination: for email use auth email; for sms use user profile phone (or explicit override).
   let destination = null;
   if (method === 'email') {
     destination = email;
@@ -1033,7 +1111,6 @@ exports.mfaSendCode = regional.https.onCall(async (data, context) => {
   const cooldownMs = 60 * 1000;
   const ttlMs = 10 * 60 * 1000;
 
-  // Basic rate-limit: one send per minute per user.
   const existing = await ref.get();
   if (existing.exists) {
     const prev = existing.data() || {};
@@ -1049,21 +1126,17 @@ exports.mfaSendCode = regional.https.onCall(async (data, context) => {
   const codeHash = sha256Hex(`${uid}:${code}:${secret}`);
   const expiresAt = admin.firestore.Timestamp.fromMillis(now.toMillis() + ttlMs);
 
-  // Persist challenge before sending (so verify works even if send is slow).
-  await ref.set(
-    {
-      uid,
-      method,
-      to: destination,
-      codeHash,
-      attempts: 0,
-      maxAttempts: 5,
-      sentAt: now,
-      expiresAt,
-      updatedAt: now,
-    },
-    { merge: true }
-  );
+  await ref.set({
+    uid,
+    method,
+    to: destination,
+    codeHash,
+    attempts: 0,
+    maxAttempts: 5,
+    sentAt: now,
+    expiresAt,
+    updatedAt: now,
+  }, { merge: true });
 
   try {
     if (method === 'sms') {
@@ -1071,10 +1144,11 @@ exports.mfaSendCode = regional.https.onCall(async (data, context) => {
     } else {
       await sendEmailOtp({ to: destination, code });
     }
-  } catch (e) {
-    // Best-effort cleanup: if delivery failed, remove challenge so user can retry.
+  } catch (error) {
     try { await ref.delete(); } catch (_) {}
-    const msg = safeString(e?.message || e) || 'Failed to send verification code.';
+    const msg = method === 'sms'
+      ? 'Unable to send text verification code right now.'
+      : 'Unable to send email verification code right now.';
     throw new functions.https.HttpsError('internal', msg);
   }
 
@@ -1148,7 +1222,7 @@ exports.mfaVerifyCode = regional.https.onCall(async (data, context) => {
 });
 
 exports.listOrganizationsPublic = regional.https.onCall(async () => {
-  const snap = await admin.firestore().collection('organizations').where('active', '==', true).limit(100).get();
+  const snap = await admin.firestore().collection('organizations').where('active', '==', true).get();
   const items = snap.docs
     .map((docSnap) => sanitizeLookupDoc(docSnap.id, docSnap.data(), {
       shortCode: safeString(docSnap.data()?.shortCode || docSnap.data()?.code).trim(),
@@ -1162,7 +1236,7 @@ exports.listProgramsPublic = regional.https.onCall(async (data) => {
   if (!organizationId) {
     throw new functions.https.HttpsError('invalid-argument', 'organizationId is required.');
   }
-  const snap = await admin.firestore().collection('organizations').doc(organizationId).collection('programs').where('active', '==', true).limit(100).get();
+  const snap = await admin.firestore().collection('organizations').doc(organizationId).collection('programs').where('active', '==', true).get();
   const items = snap.docs
     .map((docSnap) => sanitizeLookupDoc(docSnap.id, docSnap.data(), {
       organizationId,
@@ -1177,7 +1251,7 @@ exports.listBranchesPublic = regional.https.onCall(async (data) => {
   if (!organizationId) {
     throw new functions.https.HttpsError('invalid-argument', 'organizationId is required.');
   }
-  const snap = await admin.firestore().collection('organizations').doc(organizationId).collection('branches').where('active', '==', true).limit(100).get();
+  const snap = await admin.firestore().collection('organizations').doc(organizationId).collection('branches').where('active', '==', true).get();
   const items = snap.docs
     .map((docSnap) => sanitizeLookupDoc(docSnap.id, docSnap.data(), {
       organizationId,
@@ -1195,7 +1269,7 @@ exports.listCampusesPublic = regional.https.onCall(async (data) => {
   }
   let queryRef = admin.firestore().collection('organizations').doc(organizationId).collection('campuses').where('active', '==', true);
   if (programId) queryRef = queryRef.where('programId', '==', programId);
-  const snap = await queryRef.limit(100).get();
+  const snap = await queryRef.get();
   const items = snap.docs
     .map((docSnap) => sanitizeLookupDoc(docSnap.id, docSnap.data(), {
       organizationId,
@@ -1225,7 +1299,7 @@ exports.resolveEnrollmentContextPublic = regional.https.onCall(async (data) => {
     throw new functions.https.HttpsError('not-found', 'Program not found.');
   }
 
-  let campusQuery = orgRef.collection('campuses').where('active', '==', true).where('programId', '==', programId).limit(100);
+  let campusQuery = orgRef.collection('campuses').where('active', '==', true).where('programId', '==', programId);
   if (campusId) {
     const scopedSnap = await orgRef.collection('campuses').doc(campusId).get();
     const scopedData = scopedSnap.exists ? (scopedSnap.data() || {}) : null;
