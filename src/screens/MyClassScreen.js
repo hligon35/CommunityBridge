@@ -5,6 +5,7 @@ import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
 import { avatarSourceFor } from '../utils/idVisibility';
 import { findLinkedTherapistId } from '../utils/directoryLinking';
+import { THERAPY_ROLE_LABELS, getDisplayRoleLabel } from '../utils/roleTerminology';
 
 function StudentCard({ student, resolveParents }) {
   return (
@@ -105,7 +106,7 @@ export default function MyClassScreen() {
                       <Image source={avatarSourceFor(aba)} style={styles.avatar} />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.name}>{aba.name}</Text>
-                        <Text style={styles.meta}>{aba.role || 'ABA'}</Text>
+                        <Text style={styles.meta}>{getDisplayRoleLabel(aba.role) || THERAPY_ROLE_LABELS.therapist}</Text>
                       </View>
                       <View style={{ alignItems: 'flex-end' }}>
                         <Text style={{ fontWeight: '700' }}>{abaStudents.length}</Text>
@@ -126,7 +127,7 @@ export default function MyClassScreen() {
                 );
               })
             ) : (
-              <Text style={styles.paragraph}>You do not currently manage any ABAs.</Text>
+              <Text style={styles.paragraph}>{`You do not currently manage any ${THERAPY_ROLE_LABELS.therapists.toLowerCase()}.`}</Text>
             )}
           </>
         ) : null}

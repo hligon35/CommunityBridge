@@ -16,9 +16,9 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
         variantPrompt: {
           title: 'Trial outcome',
           options: [
-            { label: 'Correct', detailLabel: 'Correct', metadata: { trialOutcome: 'correct' } },
+            { label: 'Independent', detailLabel: 'Independent', metadata: { trialOutcome: 'independent' } },
+            { label: 'Correct Prompt', detailLabel: 'Correct with prompt', metadata: { trialOutcome: 'correct_prompt' } },
             { label: 'Incorrect', detailLabel: 'Incorrect', metadata: { trialOutcome: 'incorrect' } },
-            { label: 'Prompted', detailLabel: 'Prompted', metadata: { trialOutcome: 'prompted' } },
             { label: 'No Response', detailLabel: 'No response', metadata: { trialOutcome: 'no_response' } },
           ],
         },
@@ -33,6 +33,14 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
           label: 'Maintenance',
           metadata: { programName: 'Maintenance target review' },
         },
+        variantPrompt: {
+          title: 'Maintenance outcome',
+          options: [
+            { label: 'Independent', detailLabel: 'Independent correct', metadata: { maintenanceOutcome: 'independent' } },
+            { label: 'Prompted', detailLabel: 'Needed prompt', metadata: { maintenanceOutcome: 'prompted' } },
+            { label: 'Incorrect', detailLabel: 'Incorrect', metadata: { maintenanceOutcome: 'incorrect' } },
+          ],
+        },
       },
       {
         key: 'generalization',
@@ -44,6 +52,14 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
           label: 'Generalization',
           metadata: { programName: 'Generalization opportunity' },
         },
+        variantPrompt: {
+          title: 'Generalization context',
+          options: [
+            { label: 'Across Staff', detailLabel: 'Across staff', metadata: { generalizationType: 'staff' } },
+            { label: 'Across Settings', detailLabel: 'Across settings', metadata: { generalizationType: 'settings' } },
+            { label: 'Across Materials', detailLabel: 'Across materials', metadata: { generalizationType: 'materials' } },
+          ],
+        },
       },
       {
         key: 'prompt-fade',
@@ -54,6 +70,14 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
           eventCode: 'prompt_fading_success',
           label: 'Prompt fading success',
           metadata: { milestone: 'Prompt fading success' },
+        },
+        variantPrompt: {
+          title: 'Prompt fade step',
+          options: [
+            { label: 'Physical to Partial', detailLabel: 'Physical to partial', metadata: { fadeStep: 'physical_partial' } },
+            { label: 'Model to Gesture', detailLabel: 'Model to gesture', metadata: { fadeStep: 'model_gesture' } },
+            { label: 'Verbal to Independent', detailLabel: 'Verbal to independent', metadata: { fadeStep: 'verbal_independent' } },
+          ],
         },
       },
     ],
@@ -73,6 +97,15 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
           intensity: 'Moderate',
           frequencyDelta: 1,
         },
+        variantPrompt: {
+          title: 'Aggression type',
+          options: [
+            { label: 'Hit', detailLabel: 'Hit', metadata: { behaviorType: 'hit' } },
+            { label: 'Kick', detailLabel: 'Kick', metadata: { behaviorType: 'kick' } },
+            { label: 'Bite', detailLabel: 'Bite', metadata: { behaviorType: 'bite' } },
+            { label: 'Throw Object', detailLabel: 'Throw object', metadata: { behaviorType: 'throw_object' } },
+          ],
+        },
       },
       {
         key: 'elopement',
@@ -84,6 +117,15 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
           label: 'Elopement',
           intensity: 'High',
           frequencyDelta: 1,
+        },
+        variantPrompt: {
+          title: 'Elopement type',
+          options: [
+            { label: 'Left Seat', detailLabel: 'Left seat', metadata: { behaviorType: 'left_seat' } },
+            { label: 'Left Area', detailLabel: 'Left area', metadata: { behaviorType: 'left_area' } },
+            { label: 'Ran from Staff', detailLabel: 'Ran from staff', metadata: { behaviorType: 'ran_from_staff' } },
+            { label: 'Exit Attempt', detailLabel: 'Attempted exit', metadata: { behaviorType: 'exit_attempt' } },
+          ],
         },
       },
       {
@@ -97,6 +139,15 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
           intensity: 'Moderate',
           frequencyDelta: 1,
         },
+        variantPrompt: {
+          title: 'Tantrum type',
+          options: [
+            { label: 'Crying', detailLabel: 'Crying', metadata: { behaviorType: 'crying' } },
+            { label: 'Screaming', detailLabel: 'Screaming', metadata: { behaviorType: 'screaming' } },
+            { label: 'Drop to Floor', detailLabel: 'Dropped to floor', metadata: { behaviorType: 'drop_to_floor' } },
+            { label: 'Over 5 Min', detailLabel: 'Duration over 5 min', metadata: { behaviorType: 'duration_over_5' } },
+          ],
+        },
       },
       {
         key: 'precursor',
@@ -108,6 +159,15 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
           label: 'Precursor behavior',
           intensity: 'Precursor',
           frequencyDelta: 1,
+        },
+        variantPrompt: {
+          title: 'Precursor type',
+          options: [
+            { label: 'Whining', detailLabel: 'Whining', metadata: { behaviorType: 'whining' } },
+            { label: 'Pacing', detailLabel: 'Pacing', metadata: { behaviorType: 'pacing' } },
+            { label: 'Avoidance', detailLabel: 'Avoidance', metadata: { behaviorType: 'avoidance' } },
+            { label: 'Noncompliance', detailLabel: 'Early noncompliance', metadata: { behaviorType: 'early_noncompliance' } },
+          ],
         },
       },
     ],
@@ -126,6 +186,15 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
           label: 'Independent responding',
           metadata: { milestone: 'Independent responding' },
         },
+        variantPrompt: {
+          title: 'Independent result',
+          options: [
+            { label: 'Correct', detailLabel: 'Independent correct', metadata: { promptLevel: 'independent_correct' } },
+            { label: 'Incorrect', detailLabel: 'Independent incorrect', metadata: { promptLevel: 'independent_incorrect' } },
+            { label: 'Refusal', detailLabel: 'Independent refusal', metadata: { promptLevel: 'independent_refusal' } },
+            { label: 'Partial', detailLabel: 'Partial correct', metadata: { promptLevel: 'independent_partial' } },
+          ],
+        },
       },
       {
         key: 'gestural',
@@ -136,6 +205,15 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
           eventCode: 'gestural_prompt',
           label: 'Gestural prompt',
           metadata: { note: 'Gestural prompt level used.' },
+        },
+        variantPrompt: {
+          title: 'Gestural prompt used',
+          options: [
+            { label: 'Pointing', detailLabel: 'Pointing', metadata: { promptUsed: 'pointing' } },
+            { label: 'Motion Cue', detailLabel: 'Motion cue', metadata: { promptUsed: 'motion_cue' } },
+            { label: 'Eye Gaze', detailLabel: 'Eye gaze cue', metadata: { promptUsed: 'eye_gaze' } },
+            { label: 'Visual Cue', detailLabel: 'Visual cue', metadata: { promptUsed: 'visual_cue' } },
+          ],
         },
       },
       {
@@ -148,6 +226,15 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
           label: 'Verbal prompt',
           metadata: { note: 'Verbal prompt level used.' },
         },
+        variantPrompt: {
+          title: 'Verbal prompt used',
+          options: [
+            { label: 'Partial', detailLabel: 'Partial verbal', metadata: { promptUsed: 'partial_verbal' } },
+            { label: 'Full', detailLabel: 'Full verbal', metadata: { promptUsed: 'full_verbal' } },
+            { label: 'Repeated', detailLabel: 'Repeated verbal', metadata: { promptUsed: 'repeated_verbal' } },
+            { label: 'Model Lead', detailLabel: 'Modelled after verbal cue', metadata: { promptUsed: 'model_lead' } },
+          ],
+        },
       },
       {
         key: 'physical',
@@ -158,6 +245,15 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
           eventCode: 'full_physical_prompt',
           label: 'Full physical prompt',
           metadata: { note: 'Full physical prompt level used.' },
+        },
+        variantPrompt: {
+          title: 'Physical prompt used',
+          options: [
+            { label: 'Hand-over-hand', detailLabel: 'Hand-over-hand', metadata: { promptUsed: 'hand_over_hand' } },
+            { label: 'Partial Physical', detailLabel: 'Partial physical', metadata: { promptUsed: 'partial_physical' } },
+            { label: 'Safety Guide', detailLabel: 'Safety physical guidance', metadata: { promptUsed: 'safety_guidance' } },
+            { label: 'Full Physical', detailLabel: 'Full physical', metadata: { promptUsed: 'full_physical' } },
+          ],
         },
       },
     ],
@@ -176,6 +272,14 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
           label: 'Primary reinforcer',
           metadata: { note: 'Primary reinforcer delivered.' },
         },
+        variantPrompt: {
+          title: 'Primary reinforcement',
+          options: [
+            { label: 'Edible', detailLabel: 'Edible delivered', metadata: { reinforcementType: 'edible' } },
+            { label: 'Sensory', detailLabel: 'Sensory delivered', metadata: { reinforcementType: 'sensory' } },
+            { label: 'Break', detailLabel: 'Break delivered', metadata: { reinforcementType: 'break' } },
+          ],
+        },
       },
       {
         key: 'secondary-reinforcer',
@@ -186,6 +290,14 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
           eventCode: 'secondary_reinforcer',
           label: 'Secondary reinforcer',
           metadata: { note: 'Secondary reinforcer delivered.' },
+        },
+        variantPrompt: {
+          title: 'Secondary reinforcement',
+          options: [
+            { label: 'Praise', detailLabel: 'Praise', metadata: { reinforcementType: 'praise' } },
+            { label: 'High-five', detailLabel: 'High-five', metadata: { reinforcementType: 'high_five' } },
+            { label: 'Token', detailLabel: 'Token delivered', metadata: { reinforcementType: 'token' } },
+          ],
         },
       },
       {
@@ -214,172 +326,63 @@ export const THERAPY_EVENT_GROUPS = Object.freeze([
     title: 'Meals, Toileting, Mood',
     items: [
       {
-        key: 'snack',
-        label: 'Snack',
-        description: 'Meal or snack accepted.',
+        key: 'meal',
+        label: 'Meals',
+        description: 'Record meal acceptance or refusal.',
         payload: {
           eventType: 'meal',
-          eventCode: 'snack',
-          label: 'Snack',
-          metadata: { type: 'Snack', note: 'Accepted snack.' },
+          eventCode: 'meal_note',
+          label: 'Meal',
+          metadata: { type: 'Meal', note: 'Meal intake logged.' },
+        },
+        variantPrompt: {
+          title: 'Meal detail',
+          options: [
+            { label: 'Breakfast', detailLabel: 'Breakfast', metadata: { mealType: 'breakfast' } },
+            { label: 'Snack', detailLabel: 'Snack', metadata: { mealType: 'snack' } },
+            { label: 'Lunch', detailLabel: 'Lunch', metadata: { mealType: 'lunch' } },
+          ],
         },
       },
       {
-        key: 'lunch',
-        label: 'Lunch',
-        description: 'Lunch intake logged.',
-        payload: {
-          eventType: 'meal',
-          eventCode: 'lunch',
-          label: 'Lunch',
-          metadata: { type: 'Lunch', note: 'Lunch intake logged.' },
-        },
-      },
-      {
-        key: 'toileting-success',
-        label: 'Toileting Success',
-        description: 'Successful toileting trip.',
+        key: 'toileting',
+        label: 'Toileting',
+        description: 'Record toileting success or accidents.',
         payload: {
           eventType: 'toileting',
-          eventCode: 'toileting_success',
-          label: 'Toileting success',
-          metadata: { status: 'Successful' },
+          eventCode: 'toileting_note',
+          label: 'Toileting',
+          metadata: { status: 'Logged' },
+        },
+        variantPrompt: {
+          title: 'Toileting detail',
+          options: [
+            { label: 'Success', detailLabel: 'Prompted success', metadata: { toiletingType: 'success' } },
+            { label: 'Accident', detailLabel: 'Accident', metadata: { toiletingType: 'accident' } },
+            { label: 'Independent', detailLabel: 'Initiated independently', metadata: { toiletingType: 'independent' } },
+          ],
         },
       },
       {
-        key: 'toileting-accident',
-        label: 'Toileting Accident',
-        description: 'Accident or unsuccessful trip.',
-        payload: {
-          eventType: 'toileting',
-          eventCode: 'toileting_accident',
-          label: 'Toileting accident',
-          metadata: { status: 'Accident' },
-        },
-      },
-      {
-        key: 'mood-regulated',
-        label: 'Mood 4',
-        description: 'Regulated and engaged mood.',
+        key: 'mood',
+        label: 'Mood',
+        description: 'Log current mood regulation score.',
         payload: {
           eventType: 'mood',
-          eventCode: 'mood_4',
-          label: 'Mood 4',
-          score: 4,
-          metadata: { score: 4, selectedValue: 4 },
-        },
-      },
-      {
-        key: 'mood-dysregulated',
-        label: 'Mood 2',
-        description: 'Dysregulated or frustrated mood.',
-        payload: {
-          eventType: 'mood',
-          eventCode: 'mood_2',
-          label: 'Mood 2',
-          score: 2,
-          metadata: { score: 2, selectedValue: 2 },
-        },
-      },
-    ],
-  },
-  {
-    key: 'notes',
-    title: 'Notes & Communication',
-    items: [
-      {
-        key: 'abc-note',
-        label: 'ABC Note',
-        description: 'Antecedent, behavior, consequence note marker.',
-        payload: {
-          eventType: 'note',
-          eventCode: 'abc_note',
-          label: 'ABC note',
-          metadata: { note: 'ABC note captured for follow-up.' },
+          eventCode: 'mood_score',
+          label: 'Mood',
+          score: 5,
+          metadata: { score: 5, selectedValue: 5 },
         },
         variantPrompt: {
-          title: 'ABC segment',
-          textPrompt: {
-            title: 'ABC detail',
-            placeholder: 'Enter a short antecedent, behavior, or consequence note',
-            metadataKey: 'noteText',
-          },
+          title: 'Mood score',
           options: [
-            { label: 'Antecedent', detailLabel: 'Antecedent', metadata: { noteCategory: 'antecedent' } },
-            { label: 'Behavior', detailLabel: 'Behavior', metadata: { noteCategory: 'behavior' } },
-            { label: 'Consequence', detailLabel: 'Consequence', metadata: { noteCategory: 'consequence' } },
+            { label: '1', detailLabel: 'Mood 1', metadata: { moodScore: 1 } },
+            { label: '3', detailLabel: 'Mood 3', metadata: { moodScore: 3 } },
+            { label: '5', detailLabel: 'Mood 5', metadata: { moodScore: 5 } },
+            { label: '7', detailLabel: 'Mood 7', metadata: { moodScore: 7 } },
+            { label: '10', detailLabel: 'Mood 10', metadata: { moodScore: 10 } },
           ],
-        },
-      },
-      {
-        key: 'parent-communication',
-        label: 'Parent Communication',
-        description: 'Parent communication logged.',
-        payload: {
-          eventType: 'note',
-          eventCode: 'parent_communication',
-          label: 'Parent communication',
-          metadata: { note: 'Parent communication log updated.' },
-        },
-        variantPrompt: {
-          title: 'Communication type',
-          textPrompt: {
-            title: 'Parent communication detail',
-            placeholder: 'Enter a short communication summary',
-            metadataKey: 'communicationDetail',
-          },
-          options: [
-            { label: 'Pick-up update', detailLabel: 'Pick-up update', metadata: { communicationType: 'pickup_update' } },
-            { label: 'Phone call', detailLabel: 'Phone call', metadata: { communicationType: 'phone_call' } },
-            { label: 'Message sent', detailLabel: 'Message sent', metadata: { communicationType: 'message_sent' } },
-          ],
-        },
-      },
-      {
-        key: 'attendance-absence',
-        label: 'Attendance Note',
-        description: 'Attendance or absence note.',
-        payload: {
-          eventType: 'note',
-          eventCode: 'attendance_note',
-          label: 'Attendance note',
-          metadata: { note: 'Attendance note recorded.' },
-        },
-        variantPrompt: {
-          title: 'Attendance context',
-          textPrompt: {
-            title: 'Attendance detail',
-            placeholder: 'Enter a short attendance or absence note',
-            metadataKey: 'attendanceDetail',
-          },
-          options: [
-            { label: 'Late arrival', detailLabel: 'Late arrival', metadata: { attendanceType: 'late_arrival' } },
-            { label: 'Excused absence', detailLabel: 'Excused absence', metadata: { attendanceType: 'excused_absence' } },
-            { label: 'Unexpected absence', detailLabel: 'Unexpected absence', metadata: { attendanceType: 'unexpected_absence' } },
-          ],
-        },
-      },
-      {
-        key: 'incident-report',
-        label: 'Safety Incident',
-        description: 'Safety or incident report marker.',
-        payload: {
-          eventType: 'behavior',
-          eventCode: 'safety_incident',
-          label: 'Safety incident',
-          intensity: 'Hazardous',
-          frequencyDelta: 1,
-        },
-      },
-      {
-        key: 'bcba-review',
-        label: 'BCBA Review',
-        description: 'BCBA sign-off or review needed.',
-        payload: {
-          eventType: 'milestone',
-          eventCode: 'bcba_review_needed',
-          label: 'BCBA review',
-          metadata: { milestone: 'BCBA review requested' },
         },
       },
     ],

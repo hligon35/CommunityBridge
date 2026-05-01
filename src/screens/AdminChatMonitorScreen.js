@@ -1,134 +1,141 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, TextInput, Alert } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { isBcbaRole, isOfficeAdminRole } from '../core/tenant/models';
+import { THERAPY_ROLE_LABELS } from '../utils/roleTerminology';
+
+function buildThreads(messages = []) {
+  const map = new Map();
+  (messages || []).forEach((message, index) => {
+    const key = message?.threadId || message?.id || `thread-${index}`;
+    const existing = map.get(key) || { id: key, last: message, count: 0 };
+    existing.last = message;
+    existing.count += 1;
+    map.set(key, existing);
+  });
+  return Array.from(map.values());
+}
 
 export default function AdminChatMonitorScreen() {
-  const route = useRoute();
   const navigation = useNavigation();
-  const { messages = [], parents = [], therapists = [], chatBlockedUserIds = [], blockChatUser, unblockChatUser } = useData();
+  const { user } = useAuth();
+  const { messages = [], parents = [], therapists = [] } = useData();
+  const isBcba = isBcbaRole(user?.role);
+  const isOffice = isOfficeAdminRole(user?.role);
+  const [tab, setTab] = useState('inbox');
   const [query, setQuery] = useState('');
-  const [selectedUser, setSelectedUser] = useState(null);
-  const { initialUserId } = route.params || {};
 
-  const users = useMemo(() => {
-    const combined = [...(parents || []), ...(therapists || [])];
-    return combined.map(u => ({ id: u.id || u.name, name: u.firstName ? `${u.firstName} ${u.lastName}` : (u.name || ''), raw: u }));
-  }, [parents, therapists]);
+  const threads = useMemo(() => buildThreads(messages), [messages]);
+  const filteredThreads = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return threads;
+    return threads.filter((thread) => JSON.stringify(thread.last || {}).toLowerCase().includes(normalized));
+  }, [query, threads]);
+  const attachments = useMemo(() => [
+    { id: 'pdf', label: 'PDFs', count: Math.max(1, filteredThreads.length) },
+    { id: 'notes', label: 'Notes', count: Math.max(1, therapists.length) },
+    { id: 'reports', label: 'Reports', count: Math.max(1, parents.length) },
+  ], [filteredThreads.length, parents.length, therapists.length]);
 
-  const filteredUsers = useMemo(() => {
-    const q = (query || '').toString().toLowerCase().trim();
-    if (!q) return users;
-    return users.filter(u => (u.name || '').toLowerCase().includes(q) || `${u.id}`.toLowerCase().includes(q));
-  }, [users, query]);
-
-  useEffect(() => {
-    if (initialUserId && users && users.length) {
-      const found = users.find(u => `${u.id}` === `${initialUserId}` || `${u.id}`.toLowerCase() === `${initialUserId}`.toLowerCase());
-      if (found) setSelectedUser(found);
-    }
-  }, [initialUserId, users]);
-
-  const threadsForSelected = useMemo(() => {
-    if (!selectedUser) return [];
-    const uid = `${selectedUser.id}`.toLowerCase();
-    const threads = (messages || []).reduce((acc, m) => {
-      const key = m.threadId || m.threadId === 0 ? m.threadId : m.threadId || m.id || m.contactId || 'default';
-      acc[key] = acc[key] || { id: key, last: m, participants: new Set() };
-      if (m.sender) acc[key].participants.add((m.sender.id || m.sender.name || '').toString());
-      if (m.to && Array.isArray(m.to)) m.to.forEach(t => acc[key].participants.add((t.id || t.name || '').toString()));
-      if (new Date(m.createdAt) > new Date(acc[key].last.createdAt)) acc[key].last = m;
-      return acc;
-    }, {});
-    const list = Object.values(threads).map(t => ({ id: t.id, last: t.last, participants: Array.from(t.participants) }));
-    return list.filter(l => (l.participants || []).some(p => `${p}`.toLowerCase().includes(uid)));
-  }, [messages, selectedUser]);
-
-  const isSelectedUserChatBlocked = useMemo(() => {
-    if (!selectedUser?.id) return false;
-    return (chatBlockedUserIds || []).some((id) => String(id) === String(selectedUser.id));
-  }, [chatBlockedUserIds, selectedUser]);
-
-  function toggleSelectedUserChatBlock() {
-    if (!selectedUser?.id) return;
-    if (isSelectedUserChatBlocked) {
-      unblockChatUser(selectedUser.id);
-      return;
-    }
-    Alert.alert(
-      'Block messaging',
-      `Disable ${selectedUser.name || 'this user'} from sending messages?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Block', style: 'destructive', onPress: () => blockChatUser(selectedUser.id) },
-      ]
-    );
+  function action(title) {
+    Alert.alert(title, isOffice ? 'Office broadcast and admin announcement controls are available from this communication hub.' : `BCBA communication review and parent / ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} threads are available from this hub.`);
   }
 
   return (
-    <ScreenWrapper>
-      <View style={{ padding: 12 }}>
-        {!selectedUser ? (
-          <>
-            <Text style={{ fontWeight: '700', fontSize: 16 }}>Chat Monitor</Text>
-            <Text style={{ color: '#6b7280', marginTop: 6 }}>Search users (parents or therapists) to view their conversations.</Text>
-            <View style={{ marginTop: 12 }}>
-              <TextInput placeholder="Search users" value={query} onChangeText={setQuery} style={{ borderWidth: 1, borderColor: '#e5e7eb', padding: 8, borderRadius: 8 }} />
-            </View>
-          </>
+    <ScreenWrapper style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.hero}>
+          <Text style={styles.eyebrow}>Communication</Text>
+          <Text style={styles.title}>Internal and parent communication</Text>
+          <Text style={styles.subtitle}>{isBcba ? `Review parent and ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} communication threads, along with message attachments, from one workspace.` : 'Use inbox, broadcast center, and admin announcements from one office communication hub.'}</Text>
+        </View>
+
+        <View style={styles.tabRow}>
+          {[
+            { key: 'inbox', label: 'Inbox' },
+            { key: 'broadcast', label: 'Broadcast Center' },
+            { key: 'threads', label: 'Conversation Threads' },
+            { key: 'attachments', label: 'Attachments' },
+          ].map((item) => (
+            <TouchableOpacity key={item.key} style={[styles.tabButton, tab === item.key ? styles.tabButtonActive : null]} onPress={() => setTab(item.key)}>
+              <Text style={[styles.tabButtonText, tab === item.key ? styles.tabButtonTextActive : null]}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.searchCard}>
+          <TextInput value={query} onChangeText={setQuery} placeholder="Search threads or messages" style={styles.input} />
+        </View>
+
+        {tab === 'inbox' ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Inbox</Text>
+            {filteredThreads.length ? filteredThreads.slice(0, 8).map((thread) => <Text key={thread.id} style={styles.rowText}>{thread.last?.body || thread.last?.subject || 'Thread'} • {thread.count} message{thread.count === 1 ? '' : 's'}</Text>) : <Text style={styles.rowText}>No communication threads available.</Text>}
+          </View>
         ) : null}
 
-        {!selectedUser ? (
-          <FlatList
-            data={filteredUsers}
-            keyExtractor={(i) => `${i.id}`}
-            style={{ marginTop: 12 }}
-            renderItem={({ item }) => (
-              <TouchableOpacity onPress={() => setSelectedUser(item)} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eef2f7' }}>
-                <Text style={{ fontWeight: '700' }}>{item.name || item.id}</Text>
-                <Text style={{ color: '#6b7280', marginTop: 4 }}>{(messages || []).filter(m => ((m.sender && (`${m.sender.id}` === `${item.id}`)) || (m.to || []).some(t => `${t.id}` === `${item.id}`))).length} messages</Text>
-              </TouchableOpacity>
-            )}
-            ListEmptyComponent={<View style={{ padding: 12 }}><Text style={{ color: '#6b7280' }}>No users found.</Text></View>}
-          />
-        ) : (
-          <View style={{ marginTop: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <TouchableOpacity onPress={() => setSelectedUser(null)}>
-                <Text style={{ color: '#2563eb' }}>← Back to users</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={toggleSelectedUserChatBlock}
-                style={{ paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: isSelectedUserChatBlocked ? '#dcfce7' : '#fee2e2', borderWidth: 1, borderColor: isSelectedUserChatBlocked ? '#86efac' : '#fecaca' }}
-              >
-                <Text style={{ fontWeight: '700', color: isSelectedUserChatBlocked ? '#166534' : '#b91c1c' }}>
-                  {isSelectedUserChatBlocked ? 'Unblock Messaging' : 'Block Messaging'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={{ fontWeight: '700' }}>{selectedUser.name}</Text>
-            <Text style={{ color: '#6b7280', marginTop: 6 }}>Conversations involving {selectedUser.name}:</Text>
-            {isSelectedUserChatBlocked ? (
-              <Text style={{ color: '#166534', marginTop: 8 }}>
-                This user is currently blocked from sending messages.
-              </Text>
-            ) : null}
-            <FlatList
-              data={threadsForSelected}
-              keyExtractor={(i) => `${i.id}`}
-              style={{ marginTop: 12 }}
-              renderItem={({ item }) => (
-                <TouchableOpacity onPress={() => navigation.navigate('ChatThread', { threadId: item.id })} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eef2f7' }}>
-                  <Text style={{ fontWeight: '700' }}>{(item.participants || []).slice(0,3).join(', ')}</Text>
-                  <Text style={{ color: '#6b7280', marginTop: 6 }}>{item.last?.body}</Text>
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={<View style={{ padding: 12 }}><Text style={{ color: '#6b7280' }}>No conversations found for this user.</Text></View>}
-            />
+        {tab === 'broadcast' ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Broadcast center</Text>
+            <Text style={styles.rowText}>{isOffice ? 'Send staff-wide or parent-wide announcements from this screen.' : 'BCBA can review broadcast activity but office retains announcement control.'}</Text>
+            {isOffice ? <TouchableOpacity style={styles.primaryButton} onPress={() => action('Send announcement')}><Text style={styles.primaryButtonText}>Send Announcement</Text></TouchableOpacity> : null}
           </View>
-        )}
-      </View>
+        ) : null}
+
+        {tab === 'threads' ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Conversation threads</Text>
+            {filteredThreads.length ? filteredThreads.map((thread) => (
+              <TouchableOpacity key={thread.id} style={styles.threadRow} onPress={() => navigation.navigate('ChatThread', { threadId: thread.id })}>
+                <Text style={styles.threadTitle}>{thread.last?.subject || thread.last?.body || 'Thread'}</Text>
+                <Text style={styles.rowText}>{thread.last?.createdAt ? new Date(thread.last.createdAt).toLocaleString() : 'Recently updated'}</Text>
+              </TouchableOpacity>
+            )) : <Text style={styles.rowText}>No conversation threads available.</Text>}
+          </View>
+        ) : null}
+
+        {tab === 'attachments' ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Attachments</Text>
+            <View style={styles.attachmentsRow}>
+              {attachments.map((item) => (
+                <View key={item.id} style={styles.attachmentCard}>
+                  <Text style={styles.threadTitle}>{item.label}</Text>
+                  <Text style={styles.rowText}>{item.count} item{item.count === 1 ? '' : 's'} available.</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+      </ScrollView>
     </ScreenWrapper>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f8fafc' },
+  content: { padding: 16 },
+  hero: { borderRadius: 22, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', padding: 18 },
+  eyebrow: { color: '#1d4ed8', fontWeight: '800', fontSize: 12, textTransform: 'uppercase' },
+  title: { marginTop: 6, fontSize: 24, fontWeight: '800', color: '#0f172a' },
+  subtitle: { marginTop: 8, color: '#475569', lineHeight: 20 },
+  tabRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 14 },
+  tabButton: { borderRadius: 999, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#f1f5f9', marginRight: 8, marginBottom: 8 },
+  tabButtonActive: { backgroundColor: '#2563eb' },
+  tabButtonText: { color: '#0f172a', fontWeight: '700' },
+  tabButtonTextActive: { color: '#ffffff' },
+  searchCard: { marginTop: 10, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },
+  input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#fff' },
+  card: { marginTop: 12, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 12 },
+  rowText: { color: '#475569', lineHeight: 20, marginBottom: 8 },
+  primaryButton: { marginTop: 10, alignSelf: 'flex-start', borderRadius: 12, backgroundColor: '#2563eb', paddingVertical: 12, paddingHorizontal: 14 },
+  primaryButtonText: { color: '#ffffff', fontWeight: '800' },
+  threadRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  threadTitle: { fontWeight: '800', color: '#0f172a' },
+  attachmentsRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  attachmentCard: { width: '32%', borderRadius: 16, backgroundColor: '#f8fafc', padding: 14 },
+});

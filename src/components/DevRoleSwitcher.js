@@ -6,6 +6,7 @@ import { useTenant } from '../core/tenant/TenantContext';
 import { MaterialIcons } from '@expo/vector-icons';
 import { logPress } from '../utils/logger';
 import { isDevSwitcherUser, isDemoReviewerUser } from '../utils/authState';
+import { THERAPY_ROLE_LABELS } from '../utils/roleTerminology';
 
 export default function DevRoleSwitcher() {
   const { setRole, user, isDemoReviewer } = useAuth();
@@ -63,7 +64,7 @@ export default function DevRoleSwitcher() {
     try {
       logPress('DevTools:SeedDemoMode');
       resetDemoData();
-      Alert.alert('Demo Mode seeded', 'Loaded demo parents, therapists, children, posts, chats, memos, alerts, and proposals across the app.');
+      Alert.alert('Demo Mode seeded', `Loaded demo parents, ${THERAPY_ROLE_LABELS.therapists.toLowerCase()}, children, posts, chats, memos, alerts, and proposals across the app.`);
     } catch (e) {
       Alert.alert('Error', 'Could not seed demo mode');
     }
@@ -120,7 +121,7 @@ export default function DevRoleSwitcher() {
             <Text>Parent</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => changeRole('therapist')} style={styles.menuBtn}>
-            <Text>Therapist</Text>
+            <Text>{THERAPY_ROLE_LABELS.therapist}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => changeRole('admin')} style={styles.menuBtn}>
             <Text>Admin</Text>

@@ -6,6 +6,7 @@ import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { avatarSourceFor } from '../utils/idVisibility';
+import { THERAPY_ROLE_LABELS, getAssignmentRoleLabel, getDisplayRoleLabel } from '../utils/roleTerminology';
 
 function getRelevantChildren(userId, children) {
   const all = Array.isArray(children) ? children : [];
@@ -20,8 +21,8 @@ function dedupeMembers(children) {
   children.forEach((child) => {
     const childLabel = child?.name || child?.firstName || '';
     const slots = [
-      { entry: child?.amTherapist, role: 'AM Therapist' },
-      { entry: child?.pmTherapist, role: 'PM Therapist' },
+      { entry: child?.amTherapist, role: THERAPY_ROLE_LABELS.amTherapist },
+      { entry: child?.pmTherapist, role: THERAPY_ROLE_LABELS.pmTherapist },
       { entry: child?.bcaTherapist, role: 'BCBA' },
     ];
     slots.forEach(({ entry, role }) => {
@@ -30,7 +31,7 @@ function dedupeMembers(children) {
       if (!id) return;
       const existing = map.get(id);
       const roles = new Set(existing?.roles || []);
-      roles.add(entry.role || role);
+      roles.add(getAssignmentRoleLabel(entry.role || role));
       const childrenLabels = new Set(existing?.childrenLabels || []);
       if (childLabel) childrenLabels.add(childLabel);
       map.set(id, {
@@ -123,7 +124,7 @@ export default function CareTeamScreen() {
             <MaterialIcons name="groups" size={36} color="#9ca3af" />
             <Text style={styles.emptyTitle}>No care team yet</Text>
             <Text style={styles.emptyText}>
-              Therapists and teachers connected to your child will appear here with their contact info.
+              {THERAPY_ROLE_LABELS.therapists} and teachers connected to your child will appear here with their contact info.
             </Text>
           </View>
         ) : (

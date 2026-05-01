@@ -1,0 +1,150 @@
+You are performing a COMPLETE, NON‑DESTRUCTIVE, END‑TO‑END SYSTEM VALIDATION of the ABA Family Connection App in this workspace.
+
+Your mission:
+1. Analyze the ENTIRE codebase (UI + backend + storage + navigation + logic).
+2. Identify ALL workflows, screens, components, services, and data models used by the app.
+3. Automatically generate a COMPLETE synthetic dataset that covers 100% of the app’s functionality.
+4. Use that dataset to simulate EVERY workflow the app supports.
+5. Validate that the entire system functions correctly and that all data is stored, retrieved, and processed properly.
+
+STRICT RULES:
+- DO NOT modify any code.
+- DO NOT delete or rename files.
+- DO NOT assume missing features; infer them from the codebase.
+- DO NOT fabricate data that contradicts the app’s models.
+- DO NOT skip any workflow.
+- If uncertain about a workflow or model, identify it and request clarification instead of guessing.
+
+------------------------------------------------------------
+PHASE 1 — FULL APP ANALYSIS
+------------------------------------------------------------
+
+Analyze the entire workspace and produce:
+
+1. A complete map of:
+   - All screens and UI flows
+   - All components and their responsibilities
+   - All backend services and API calls
+   - All data models, interfaces, and schemas
+   - All storage mechanisms (local, async, DB, API)
+   - All navigation routes and transitions
+   - All role‑based logic (ABA Tech, BCBA, Parent, Admin)
+   - All reporting, exporting, and importing logic
+
+2. A list of ALL workflows the app supports, including but not limited to:
+   - Session start → session completion
+   - Skill acquisition trials
+   - Behavior tracking (ABC, frequency, duration, intensity)
+   - Reinforcement logging
+   - Program mastery logic
+   - Daily notes
+   - Attendance
+   - Messaging or communication (if present)
+   - Report generation
+   - Report sending
+   - Data export
+   - Data import
+   - User authentication
+   - Profile management
+   - Admin/BCBA oversight tools
+   - Any additional workflows discovered in the codebase
+
+3. Identify:
+   - Missing handlers
+   - Unused components
+   - Incomplete flows
+   - Dead code
+   - Unreachable screens
+   - Data models referenced but not implemented
+   - API calls not handled by UI
+   - UI screens not connected to logic
+
+------------------------------------------------------------
+PHASE 2 — AUTO‑GENERATED SYNTHETIC DATASET
+------------------------------------------------------------
+
+Using the discovered data models, generate a COMPLETE synthetic dataset that includes:
+
+- All user roles (ABA Tech, BCBA, Parent, Admin)
+- Multiple children with different care plans
+- Multiple programs per child
+- Multiple targets per program
+- Multiple prompt hierarchies
+- Multiple behavior definitions
+- Reinforcers
+- Session templates
+- Session logs (trials, behaviors, ABC events, reinforcement)
+- Attendance records
+- Notes
+- Reports
+- Import/export payloads
+- Any additional data structures discovered during analysis
+
+Rules for dataset generation:
+- Must match EXACTLY the fields, types, and structures used in the codebase.
+- Must include edge cases (empty arrays, nullables, optional fields).
+- Must include multi‑child, multi‑session scenarios.
+- Must include at least one scenario for every workflow the app supports.
+
+------------------------------------------------------------
+PHASE 3 — FULL WORKFLOW SIMULATION
+------------------------------------------------------------
+
+Using the generated dataset, simulate EVERY workflow end‑to‑end:
+
+1. Start → run → complete ABA sessions
+2. Log trials across multiple programs
+3. Log behaviors with ABC data
+4. Log reinforcement
+5. Update mastery criteria
+6. Generate session summaries
+7. Generate full reports
+8. Send reports
+9. Export all data
+10. Import the same data back into the system
+11. Validate storage integrity
+12. Validate UI flows
+13. Validate backend logic
+14. Validate navigation
+15. Validate error handling
+16. Validate edge cases
+17. Validate multi‑role access (ABA Tech vs BCBA vs Parent vs Admin)
+
+------------------------------------------------------------
+PHASE 4 — SYSTEM VALIDATION REPORT
+------------------------------------------------------------
+
+Produce a comprehensive report including:
+
+1. **Workflow Simulation Output**
+   - Step‑by‑step execution of every workflow
+   - Inputs, outputs, and transitions
+
+2. **Data Integrity Validation**
+   - Confirm all data is stored correctly
+   - Confirm all fields are preserved across export/import
+   - Confirm no data loss, corruption, or mismatches
+
+3. **UI Flow Validation**
+   - Confirm all screens are reachable
+   - Confirm navigation is consistent
+   - Confirm no missing props or broken components
+
+4. **Backend Validation**
+   - Confirm all API calls are handled
+   - Confirm all models are used correctly
+   - Confirm no missing fields or mismatched types
+
+5. **Error & Breakpoint Detection**
+   - List all issues found
+   - Severity levels
+   - Root causes
+   - Recommended fixes
+
+6. **Coverage Summary**
+   - Confirm 100% of workflows were tested
+   - Confirm 100% of data models were exercised
+   - Confirm 100% of storage paths were validated
+
+Final instruction:
+Begin with PHASE 1. Do NOT modify any files. Only analyze and report.

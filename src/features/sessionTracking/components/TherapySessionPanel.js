@@ -25,15 +25,18 @@ export default function TherapySessionPanel({ workspace, mode = 'combined', titl
     <View style={styles.sectionCard}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>{title}</Text>
-        {workspace.loadingSession || workspace.savingSession || workspace.syncingQueuedEvents ? <ActivityIndicator size="small" color="#2563eb" /> : null}
+        <View style={styles.headerMetaRow}>
+          {workspace.activeSession ? <Text style={styles.sessionMetaText}>Active {workspace.activeSession.sessionType} session started {summarizeSessionStamp(workspace.activeSession)}.</Text> : null}
+          {workspace.loadingSession || workspace.savingSession || workspace.syncingQueuedEvents ? <ActivityIndicator size="small" color="#2563eb" /> : null}
+        </View>
       </View>
       {workspace.preview ? <Text style={styles.previewBanner}>Preview mode: changes stay local to this screen.</Text> : null}
+      {showTracker ? <Text style={styles.trackerHelpText}>Tap a button to open the event menu and define the event before it is queued.</Text> : null}
 
       {showTracker ? (
         <View>
           {workspace.activeSession ? (
             <>
-              <Text style={styles.bodyText}>Active {workspace.activeSession.sessionType} session started {summarizeSessionStamp(workspace.activeSession)}.</Text>
               <BehaviorTapGrid
                 groups={THERAPY_EVENT_GROUPS}
                 queuedEvents={workspace.queuedEvents}
@@ -107,8 +110,11 @@ export default function TherapySessionPanel({ workspace, mode = 'combined', titl
 const styles = StyleSheet.create({
   sectionCard: { marginTop: 12, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc' },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerMetaRow: { flexDirection: 'row', alignItems: 'center', marginLeft: 12, flex: 1, justifyContent: 'flex-end' },
   title: { fontWeight: '700', marginBottom: 6 },
   subtitle: { fontWeight: '700', marginBottom: 6 },
+  sessionMetaText: { color: '#475569', fontSize: 12, textAlign: 'right', marginRight: 10, flexShrink: 1 },
+  trackerHelpText: { marginTop: 4, color: '#475569', lineHeight: 18 },
   bodyText: { color: '#374151' },
   previewBanner: { marginTop: 8, marginBottom: 4, color: '#1d4ed8', backgroundColor: '#eff6ff', borderRadius: 10, padding: 10, lineHeight: 18 },
   noteInput: { minHeight: 88, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 10, marginTop: 12, textAlignVertical: 'top' },

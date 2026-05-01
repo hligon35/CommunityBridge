@@ -23,6 +23,7 @@ import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportEr
 import { getAuthInitError, getFirebaseAppInitError } from '../src/firebase';
 import { MaterialIcons } from '@expo/vector-icons';
 import { USER_ROLES } from '../src/core/tenant/models';
+import { THERAPY_ROLE_LABELS } from '../src/utils/roleTerminology';
 
 const signupLogoImage = require('../assets/titlelogo.png');
 
@@ -45,7 +46,7 @@ export default function SignUpScreen({ onDone, onCancel }) {
   const roleOptions = [
     { value: USER_ROLES.PARENT, label: 'Parent' },
     { value: USER_ROLES.FACULTY, label: 'Faculty' },
-    { value: USER_ROLES.THERAPIST, label: 'Therapist' },
+    { value: USER_ROLES.THERAPIST, label: THERAPY_ROLE_LABELS.therapist },
     { value: USER_ROLES.BCBA, label: 'BCBA' },
   ];
 

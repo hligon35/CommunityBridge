@@ -7,6 +7,7 @@ import { useAuth } from '../AuthContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import ScreenWrapper from '../components/ScreenWrapper';
 import { avatarSourceFor, formatIdForDisplay } from '../utils/idVisibility';
+import { THERAPY_ROLE_LABELS, getDisplayRoleLabel } from '../utils/roleTerminology';
 
 export default function ParentDetailScreen() {
   const route = useRoute();
@@ -197,7 +198,7 @@ export default function ParentDetailScreen() {
               </View>
 
               <View style={[styles.sectionContainer, { marginTop: 10 }] }>
-                <Text style={{ fontWeight: '700' }}>Therapists</Text>
+                <Text style={{ fontWeight: '700' }}>{THERAPY_ROLE_LABELS.therapists}</Text>
                 {(() => {
                   const bca = c.bcaTherapist || null;
                   const abas = [c.amTherapist, c.pmTherapist].filter((t) => t && !((t.role || '').toLowerCase().includes('bcba')));
@@ -211,7 +212,7 @@ export default function ParentDetailScreen() {
                           <Image source={avatarSourceFor(bca)} style={{ width: 56, height: 56, borderRadius: 28 }} />
                           <View style={{ marginLeft: 12, flex: 1, overflow: 'hidden' }}>
                             <Text style={styles.nameText} numberOfLines={1} ellipsizeMode="tail">{getDisplayName(bca)}</Text>
-                            <Text style={styles.roleText} numberOfLines={1} ellipsizeMode="tail">{bca.role}</Text>
+                            <Text style={styles.roleText} numberOfLines={1} ellipsizeMode="tail">{getDisplayRoleLabel(bca.role)}</Text>
                           </View>
                           <View style={styles.contactIconsRight}>
                             {bca.phone ? (
@@ -228,7 +229,7 @@ export default function ParentDetailScreen() {
                         </TouchableOpacity>
                       ) : null}
 
-                      {/* ABA therapists in rows of two */}
+                      {/* ABA Techs in rows of two */}
                       {abas.length ? abas.reduce((rows, item, idx) => {
                         if (idx % 2 === 0) rows.push([item]);
                         else rows[rows.length - 1].push(item);
@@ -240,7 +241,7 @@ export default function ParentDetailScreen() {
                               <Image source={avatarSourceFor(t)} style={{ width: 44, height: 44, borderRadius: 22 }} />
                               <View style={{ marginLeft: 10, flex: 1, overflow: 'hidden' }}>
                                   <Text style={styles.nameText} numberOfLines={1} ellipsizeMode="tail">{getDisplayName(t)}</Text>
-                                  <Text style={styles.roleText} numberOfLines={1} ellipsizeMode="tail">{t.role}</Text>
+                                  <Text style={styles.roleText} numberOfLines={1} ellipsizeMode="tail">{getDisplayRoleLabel(t.role)}</Text>
                                   <View style={styles.contactIconsCentered}>
                                     {t.phone ? (
                                       <TouchableOpacity style={styles.contactIconTouch} onPress={() => openPhone(t.phone)}>

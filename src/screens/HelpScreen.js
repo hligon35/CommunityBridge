@@ -40,7 +40,7 @@ export default function HelpScreen() {
 
         <Text style={styles.sectionTitle}>My Child</Text>
         <Text style={styles.paragraph}>
-          The My Child screen shows your child's profile, assigned therapists, care plan, and notes. Tap the avatar to
+          The My Child screen shows your child's profile, assigned ABA Techs, care plan, and notes. Tap the avatar to
           view more details or to load demo data.
         </Text>
 

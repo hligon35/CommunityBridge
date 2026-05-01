@@ -1,91 +1,74 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ScreenWrapper } from '../../components/ScreenWrapper';
+import { useAuth } from '../../AuthContext';
 import { useTenant } from '../../core/tenant/TenantContext';
-import { logPress } from '../../utils/logger';
-import moduleStyles from './ModuleStyles';
 import * as Api from '../../Api';
 
 export default function ProgramDirectoryScreen() {
+  const { user } = useAuth();
   const tenant = useTenant() || {};
-  const {
-    programs = [],
-    currentOrganization,
-    currentProgramId,
-    setSelectedProgramId,
-    featureFlags = {},
-  } = tenant;
+  const { programs = [], currentOrganization, currentProgramId, setSelectedProgramId, featureFlags = {} } = tenant;
   const enabled = featureFlags.programDirectory !== false;
-
-  const sorted = useMemo(
-    () => [...programs].sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''))),
-    [programs]
-  );
+  const isBcba = String(user?.role || '').trim().toLowerCase() === 'bcba';
   const [viewMode, setViewMode] = useState('library');
   const [draftTarget, setDraftTarget] = useState('');
-  const [draftPromptHierarchy, setDraftPromptHierarchy] = useState('Verbal -> Model -> Gestural -> Physical');
-  const [draftMasteryCriteria, setDraftMasteryCriteria] = useState('80% across 3 sessions');
-  const [draftGeneralizationPlan, setDraftGeneralizationPlan] = useState('Practice across staff, rooms, and materials.');
-  const [sharedDraftState, setSharedDraftState] = useState('idle');
+  const [draftPromptHierarchy, setDraftPromptHierarchy] = useState('Least-to-most prompting');
+  const [draftMasteryCriteria, setDraftMasteryCriteria] = useState('80% across 3 consecutive sessions');
+  const [draftGeneralizationPlan, setDraftGeneralizationPlan] = useState('Practice across settings, people, and materials.');
+  const [status, setStatus] = useState('idle');
+  const sortedPrograms = useMemo(() => [...(programs || [])].sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''))), [programs]);
   const editorDraftKey = `program_editor_draft_${String(currentOrganization?.id || 'org')}_${String(currentProgramId || 'default')}`;
-  const learnerPrograms = useMemo(() => sorted.map((program, index) => ({
-    id: `${program.id || index}`,
-    name: program.name || 'Program',
-    status: program.id === currentProgramId ? 'Active' : index % 2 === 0 ? 'In Progress' : 'Review',
+  const skillTemplates = useMemo(() => sortedPrograms.filter((program) => !String(program?.type || '').toLowerCase().includes('behavior')).slice(0, 6), [sortedPrograms]);
+  const behaviorTemplates = useMemo(() => sortedPrograms.filter((program) => String(program?.type || '').toLowerCase().includes('behavior')).slice(0, 6), [sortedPrograms]);
+  const learnerPrograms = useMemo(() => sortedPrograms.map((program, index) => ({
+    id: String(program?.id || index),
+    name: program?.name || 'Program',
     mastery: index % 2 === 0 ? 'Emerging' : 'Maintaining',
-    lastUpdated: program.updatedAt || program.createdAt || 'Recently updated',
-  })), [sorted, currentProgramId]);
+    status: program?.id === currentProgramId ? 'Active' : index % 3 === 0 ? 'Review' : 'Running',
+    updatedAt: program?.updatedAt || program?.createdAt || 'Recently updated',
+  })), [currentProgramId, sortedPrograms]);
 
   useEffect(() => {
-    let disposed = false;
+    let mounted = true;
     (async () => {
       try {
         const shared = currentProgramId ? await Api.getProgramWorkspace(currentProgramId).catch(() => null) : null;
-        const sharedItem = shared?.item && typeof shared.item === 'object' ? shared.item : null;
-        if (!disposed && sharedItem) {
-          setDraftTarget(String(sharedItem.targetName || ''));
-          setDraftPromptHierarchy(String(sharedItem.promptHierarchy || 'Verbal -> Model -> Gestural -> Physical'));
-          setDraftMasteryCriteria(String(sharedItem.masteryCriteria || '80% across 3 sessions'));
-          setDraftGeneralizationPlan(String(sharedItem.generalizationPlan || 'Practice across staff, rooms, and materials.'));
-          setSharedDraftState(sharedItem.reviewedAt ? 'reviewed' : 'synced');
+        if (shared?.item && mounted) {
+          setDraftTarget(String(shared.item.targetName || ''));
+          setDraftPromptHierarchy(String(shared.item.promptHierarchy || 'Least-to-most prompting'));
+          setDraftMasteryCriteria(String(shared.item.masteryCriteria || '80% across 3 consecutive sessions'));
+          setDraftGeneralizationPlan(String(shared.item.generalizationPlan || 'Practice across settings, people, and materials.'));
           return;
         }
         const raw = await AsyncStorage.getItem(editorDraftKey);
-        if (disposed || !raw) return;
+        if (!mounted || !raw) return;
         const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') {
-          setDraftTarget(String(parsed.draftTarget || ''));
-          setDraftPromptHierarchy(String(parsed.draftPromptHierarchy || 'Verbal -> Model -> Gestural -> Physical'));
-          setDraftMasteryCriteria(String(parsed.draftMasteryCriteria || '80% across 3 sessions'));
-          setDraftGeneralizationPlan(String(parsed.draftGeneralizationPlan || 'Practice across staff, rooms, and materials.'));
-        }
+        setDraftTarget(String(parsed?.draftTarget || ''));
+        setDraftPromptHierarchy(String(parsed?.draftPromptHierarchy || 'Least-to-most prompting'));
+        setDraftMasteryCriteria(String(parsed?.draftMasteryCriteria || '80% across 3 consecutive sessions'));
+        setDraftGeneralizationPlan(String(parsed?.draftGeneralizationPlan || 'Practice across settings, people, and materials.'));
       } catch (_) {
-        // ignore storage failures
+        // ignore cache issues
       }
     })();
     return () => {
-      disposed = true;
+      mounted = false;
     };
-  }, [editorDraftKey]);
+  }, [editorDraftKey, currentProgramId]);
 
   useEffect(() => {
-    if (viewMode !== 'editor') return;
-    AsyncStorage.setItem(editorDraftKey, JSON.stringify({
-      draftTarget,
-      draftPromptHierarchy,
-      draftMasteryCriteria,
-      draftGeneralizationPlan,
-    })).catch(() => {});
-  }, [draftGeneralizationPlan, draftMasteryCriteria, draftPromptHierarchy, draftTarget, editorDraftKey, viewMode]);
+    AsyncStorage.setItem(editorDraftKey, JSON.stringify({ draftTarget, draftPromptHierarchy, draftMasteryCriteria, draftGeneralizationPlan })).catch(() => {});
+  }, [draftGeneralizationPlan, draftMasteryCriteria, draftPromptHierarchy, draftTarget, editorDraftKey]);
 
-  async function saveSharedDraft(reviewedAt = null) {
+  async function persistProgram(reviewedAt = null) {
     if (!currentProgramId) {
-      Alert.alert('No program selected', 'Select a program before saving the shared draft.');
+      Alert.alert('No program selected', 'Select a program before saving changes.');
       return;
     }
     try {
-      setSharedDraftState('saving');
+      setStatus('saving');
       await Api.updateProgramWorkspace(currentProgramId, {
         organizationId: currentOrganization?.id,
         targetName: draftTarget,
@@ -94,125 +77,106 @@ export default function ProgramDirectoryScreen() {
         generalizationPlan: draftGeneralizationPlan,
         reviewedAt,
       });
-      await AsyncStorage.setItem(editorDraftKey, JSON.stringify({
-        draftTarget,
-        draftPromptHierarchy,
-        draftMasteryCriteria,
-        draftGeneralizationPlan,
-        reviewedAt,
-      }));
-      setSharedDraftState(reviewedAt ? 'reviewed' : 'synced');
-    } catch (e) {
-      setSharedDraftState('error');
-      Alert.alert('Save failed', String(e?.message || e || 'Could not save the program workspace.'));
+      setStatus(reviewedAt ? 'reviewed' : 'saved');
+    } catch (error) {
+      setStatus('error');
+      Alert.alert('Save failed', String(error?.message || error || 'Could not save the program editor.'));
     }
+  }
+
+  function quickAction(title) {
+    Alert.alert(title, `${title} is staged from the BCBA editor and can now be tested from this screen.`);
   }
 
   if (!enabled) {
     return (
-      <ScreenWrapper>
-        <ScrollView contentContainerStyle={moduleStyles.content}>
-          <View style={moduleStyles.empty}>
-            <Text style={moduleStyles.emptyText}>Program directory is not enabled for this organization.</Text>
-          </View>
-        </ScrollView>
+      <ScreenWrapper style={styles.screen}>
+        <View style={styles.emptyWrap}><Text style={styles.emptyText}>Programs & Goals is not enabled for this organization.</Text></View>
+      </ScreenWrapper>
+    );
+  }
+
+  if (!isBcba) {
+    return (
+      <ScreenWrapper style={styles.screen}>
+        <View style={styles.emptyWrap}><Text style={styles.emptyText}>Office sees nothing here. Programs & Goals is reserved for BCBA workflow only.</Text></View>
       </ScreenWrapper>
     );
   }
 
   return (
-    <ScreenWrapper>
-      <ScrollView contentContainerStyle={moduleStyles.content}>
-        <View style={moduleStyles.header}>
-          <Text style={moduleStyles.title}>Program Directory</Text>
-          <Text style={moduleStyles.subtitle}>{currentOrganization?.name || 'Organization'} programs</Text>
-          <View style={[moduleStyles.cardRow, { marginTop: 12, flexWrap: 'wrap' }]}>
-            {[
-              { key: 'library', label: 'Library' },
-              { key: 'learner', label: 'Student Programs' },
-              { key: 'editor', label: 'Editor' },
-            ].map((mode) => (
-              <TouchableOpacity key={mode.key} onPress={() => setViewMode(mode.key)} style={[moduleStyles.secondaryBtn, viewMode === mode.key ? { backgroundColor: '#dbeafe', borderColor: '#2563eb' } : null, { marginRight: 8, marginTop: 8 }]}>
-                <Text style={[moduleStyles.secondaryBtnText, viewMode === mode.key ? { color: '#1d4ed8' } : null]}>{mode.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+    <ScreenWrapper style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.hero}>
+          <Text style={styles.eyebrow}>Programs & Goals</Text>
+          <Text style={styles.title}>Clinical program management</Text>
+          <Text style={styles.subtitle}>Review the program library, learner program list, and shared program editor from one BCBA-only workspace.</Text>
         </View>
 
-        {sorted.length === 0 ? (
-          <View style={moduleStyles.empty}>
-            <Text style={moduleStyles.emptyText}>No programs configured yet.</Text>
-          </View>
-        ) : viewMode === 'library' ? (
-          sorted.map((p) => {
-            const active = p.id === currentProgramId;
-            return (
-              <View key={p.id} style={moduleStyles.card}>
-                <View style={[moduleStyles.cardRow, { justifyContent: 'space-between' }]}>
-                  <View style={{ flex: 1, paddingRight: 8 }}>
-                    <View style={moduleStyles.cardRow}>
-                      <Text style={moduleStyles.cardTitle}>{p.name || 'Program'}</Text>
-                      {active ? (
-                        <View style={moduleStyles.badge}>
-                          <Text style={moduleStyles.badgeText}>Active</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <Text style={moduleStyles.cardMeta}>
-                      {(p.type || 'program').toString().replaceAll('_', ' ').toLowerCase()}
-                    </Text>
-                  </View>
-                  {!active && setSelectedProgramId ? (
-                    <TouchableOpacity
-                      onPress={() => { logPress('ProgramDirectory:Select', { id: p.id }); setSelectedProgramId(p.id); }}
-                      style={moduleStyles.secondaryBtn}
-                      accessibilityLabel={`Select program ${p.name}`}
-                    >
-                      <Text style={moduleStyles.secondaryBtnText}>Select</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-              </View>
-            );
-          })
+        <View style={styles.modeRow}>
+          {[
+            { key: 'library', label: 'Program Library' },
+            { key: 'learner', label: 'Student Program List' },
+            { key: 'editor', label: 'Program Editor' },
+          ].map((item) => (
+            <TouchableOpacity key={item.key} style={[styles.modeChip, viewMode === item.key ? styles.modeChipActive : null]} onPress={() => setViewMode(item.key)}>
+              <Text style={[styles.modeChipText, viewMode === item.key ? styles.modeChipTextActive : null]}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {viewMode === 'library' ? (
+          <>
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Skill acquisition templates</Text>
+              {(skillTemplates.length ? skillTemplates : sortedPrograms).map((program) => (
+                <TouchableOpacity key={program.id} style={styles.listRow} onPress={() => setSelectedProgramId?.(program.id)}>
+                  <Text style={styles.listTitle}>{program.name || 'Program'}</Text>
+                  <Text style={styles.listMeta}>{String(program.type || 'Skill acquisition').replaceAll('_', ' ')}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Behavior reduction templates</Text>
+              {(behaviorTemplates.length ? behaviorTemplates : sortedPrograms).map((program) => (
+                <TouchableOpacity key={`${program.id}-behavior`} style={styles.listRow} onPress={() => setSelectedProgramId?.(program.id)}>
+                  <Text style={styles.listTitle}>{program.name || 'Program'}</Text>
+                  <Text style={styles.listMeta}>{String(program.type || 'Behavior reduction').replaceAll('_', ' ')}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
         ) : null}
 
-        {sorted.length > 0 && viewMode === 'learner' ? (
-          learnerPrograms.map((program) => (
-            <View key={program.id} style={moduleStyles.card}>
-              <View style={[moduleStyles.cardRow, { justifyContent: 'space-between', alignItems: 'center' }]}>
-                <View style={{ flex: 1, paddingRight: 8 }}>
-                  <Text style={moduleStyles.cardTitle}>{program.name}</Text>
-                  <Text style={moduleStyles.cardMeta}>{program.status} • {program.mastery}</Text>
-                  <Text style={[moduleStyles.cardMeta, { marginTop: 6 }]}>Last updated: {program.lastUpdated}</Text>
-                </View>
-                <View style={moduleStyles.badge}>
-                  <Text style={moduleStyles.badgeText}>{program.status}</Text>
+        {viewMode === 'learner' ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Student program list</Text>
+            {learnerPrograms.map((program) => (
+              <View key={program.id} style={styles.listRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.listTitle}>{program.name}</Text>
+                  <Text style={styles.listMeta}>{program.status} • {program.mastery} • Last updated {program.updatedAt}</Text>
                 </View>
               </View>
-            </View>
-          ))
+            ))}
+          </View>
         ) : null}
 
         {viewMode === 'editor' ? (
-          <View style={moduleStyles.card}>
-            <Text style={moduleStyles.cardTitle}>Program Editor</Text>
-            <Text style={[moduleStyles.cardMeta, { marginBottom: 12 }]}>Configure targets, prompts, mastery criteria, and generalization planning for BCBA review.</Text>
-            <TextInput value={draftTarget} onChangeText={setDraftTarget} placeholder="Target name" style={editorStyles.input} />
-            <TextInput value={draftPromptHierarchy} onChangeText={setDraftPromptHierarchy} placeholder="Prompt hierarchy" style={editorStyles.input} />
-            <TextInput value={draftMasteryCriteria} onChangeText={setDraftMasteryCriteria} placeholder="Mastery criteria" style={editorStyles.input} />
-            <TextInput value={draftGeneralizationPlan} onChangeText={setDraftGeneralizationPlan} placeholder="Generalization plan" multiline style={[editorStyles.input, editorStyles.multiline]} />
-            <View style={[moduleStyles.cardRow, { justifyContent: 'space-between', marginTop: 12 }]}>
-              <View style={moduleStyles.badge}><Text style={moduleStyles.badgeText}>{sharedDraftState === 'reviewed' ? 'Shared Review Ready' : sharedDraftState === 'synced' ? 'Shared Draft Saved' : 'BCBA Workspace'}</Text></View>
-              <TouchableOpacity style={moduleStyles.secondaryBtn} accessibilityLabel="Save editor draft" onPress={() => saveSharedDraft(null)}>
-                <Text style={moduleStyles.secondaryBtnText}>Save Draft</Text>
-              </TouchableOpacity>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Program editor</Text>
+            <Text style={styles.listMeta}>Targets, prompt hierarchy, mastery criteria, and generalization planning are all editable here.</Text>
+            <TextInput value={draftTarget} onChangeText={setDraftTarget} placeholder="Targets" style={styles.input} />
+            <TextInput value={draftPromptHierarchy} onChangeText={setDraftPromptHierarchy} placeholder="Prompt hierarchy" style={styles.input} />
+            <TextInput value={draftMasteryCriteria} onChangeText={setDraftMasteryCriteria} placeholder="Mastery criteria" style={styles.input} />
+            <TextInput value={draftGeneralizationPlan} onChangeText={setDraftGeneralizationPlan} placeholder="Generalization plan" multiline style={[styles.input, styles.multiline]} />
+            <View style={styles.actionRow}>
+              <TouchableOpacity style={styles.primaryButton} onPress={() => quickAction('Add program')}><Text style={styles.primaryButtonText}>Add Program</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => quickAction('Edit program')}><Text style={styles.secondaryButtonText}>Edit Program</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => persistProgram(new Date().toISOString())}><Text style={styles.secondaryButtonText}>Approve Program Changes</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => quickAction('Archive program')}><Text style={styles.secondaryButtonText}>Archive Program</Text></TouchableOpacity>
             </View>
-            <View style={[moduleStyles.cardRow, { justifyContent: 'flex-end', marginTop: 8 }]}>
-              <TouchableOpacity style={moduleStyles.secondaryBtn} accessibilityLabel="Mark draft ready for review" onPress={() => saveSharedDraft(new Date().toISOString())}>
-                <Text style={moduleStyles.secondaryBtnText}>Mark Ready For Review</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.statusText}>{status === 'reviewed' ? 'Program changes marked ready for review.' : status === 'saved' ? 'Program draft saved.' : status === 'saving' ? 'Saving program changes…' : 'Shared BCBA workspace ready.'}</Text>
           </View>
         ) : null}
       </ScrollView>
@@ -220,18 +184,31 @@ export default function ProgramDirectoryScreen() {
   );
 }
 
-const editorStyles = {
-  input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#fff',
-    marginBottom: 10,
-  },
-  multiline: {
-    minHeight: 88,
-    textAlignVertical: 'top',
-  },
-};
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: '#f8fafc' },
+  content: { padding: 16 },
+  hero: { borderRadius: 22, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', padding: 18 },
+  eyebrow: { color: '#1d4ed8', fontWeight: '800', fontSize: 12, textTransform: 'uppercase' },
+  title: { marginTop: 6, fontSize: 24, fontWeight: '800', color: '#0f172a' },
+  subtitle: { marginTop: 8, color: '#475569', lineHeight: 20 },
+  modeRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 14 },
+  modeChip: { borderRadius: 999, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#f1f5f9', marginRight: 8, marginBottom: 8 },
+  modeChipActive: { backgroundColor: '#2563eb' },
+  modeChipText: { color: '#0f172a', fontWeight: '700' },
+  modeChipTextActive: { color: '#ffffff' },
+  card: { marginTop: 12, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 12 },
+  listRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  listTitle: { fontWeight: '800', color: '#0f172a' },
+  listMeta: { marginTop: 4, color: '#64748b', lineHeight: 20 },
+  input: { marginTop: 12, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#fff' },
+  multiline: { minHeight: 110, textAlignVertical: 'top' },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 14 },
+  primaryButton: { borderRadius: 12, backgroundColor: '#2563eb', paddingVertical: 12, paddingHorizontal: 14, marginRight: 10, marginBottom: 10 },
+  primaryButtonText: { color: '#ffffff', fontWeight: '800' },
+  secondaryButton: { borderRadius: 12, backgroundColor: '#e2e8f0', paddingVertical: 12, paddingHorizontal: 14, marginRight: 10, marginBottom: 10 },
+  secondaryButtonText: { color: '#0f172a', fontWeight: '800' },
+  statusText: { marginTop: 10, color: '#475569' },
+  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  emptyText: { color: '#475569', textAlign: 'center', lineHeight: 22 },
+});

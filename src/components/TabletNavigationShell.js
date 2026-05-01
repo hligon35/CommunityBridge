@@ -1,12 +1,16 @@
-import React, { useMemo, useState } from 'react';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
+import { useData } from '../DataContext';
 import { useTenant } from '../core/tenant/TenantContext';
-import { isAdminRole, isStaffRole } from '../core/tenant/models';
+import { ADMIN_SECTION_KEYS, canAccessAdminSection, canAccessAdminWorkspace, isBcbaRole, isStaffRole } from '../core/tenant/models';
+import { isChildLinkedToTherapist } from '../features/sessionTracking/utils/dashboardSessionTarget';
 import useIsTabletLayout from '../hooks/useIsTabletLayout';
 import { navigationRef } from '../navigationRef';
+import { THERAPY_ROLE_LABELS } from '../utils/roleTerminology';
 import LogoTitle from './LogoTitle';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function openTarget(target) {
   if (!navigationRef?.isReady?.()) return;
@@ -26,33 +30,79 @@ function openTarget(target) {
 
 export default function TabletNavigationShell({ currentRoute, children }) {
   const isTabletLayout = useIsTabletLayout();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
+  const { children: directoryChildren = [] } = useData();
   const tenant = useTenant();
   const labels = tenant?.labels || {};
   const [collapsed, setCollapsed] = useState(false);
-  const isAdmin = isAdminRole(user?.role);
+  const [quickMenuOpen, setQuickMenuOpen] = useState(false);
+  const [quickLogType, setQuickLogType] = useState('');
+  const [quickLogValue, setQuickLogValue] = useState('');
   const isStaff = isStaffRole(user?.role);
-  const isBcbaWorkspace = String(user?.role || '').trim().toLowerCase() === 'bcba';
-  const showAdminWorkspace = isAdmin || isBcbaWorkspace;
+  const isBcbaWorkspace = isBcbaRole(user?.role);
+  const showAdminWorkspace = canAccessAdminWorkspace(user?.role);
   const greeting = String(user?.name || user?.firstName || '').trim() || (showAdminWorkspace ? 'Welcome back' : 'Hello');
+  const showQuickAdd = !showAdminWorkspace && isStaff;
+  const activeRouteParams = navigationRef?.getCurrentRoute?.()?.params || null;
+  const activeRouteChildId = String(activeRouteParams?.childId || '').trim();
+
+  useEffect(() => {
+    setQuickMenuOpen(false);
+  }, [currentRoute]);
+
+  useEffect(() => {
+    if (showQuickAdd) return;
+    setQuickMenuOpen(false);
+    setQuickLogType('');
+    setQuickLogValue('');
+  }, [showQuickAdd]);
+
+  const linkedTherapistChildren = useMemo(() => {
+    const therapistId = String(user?.id || '').trim();
+    if (!showQuickAdd || !therapistId) return [];
+    return (Array.isArray(directoryChildren) ? directoryChildren : []).filter((child) => isChildLinkedToTherapist(child, therapistId));
+  }, [directoryChildren, showQuickAdd, user?.id]);
+
+  const activeQuickChild = useMemo(() => {
+    if (!linkedTherapistChildren.length) return null;
+    return linkedTherapistChildren.find((child) => String(child?.id || '').trim() === activeRouteChildId) || linkedTherapistChildren[0] || null;
+  }, [activeRouteChildId, linkedTherapistChildren]);
+
+  const quickMenuWidth = useMemo(() => {
+    const drawerWidth = collapsed ? 92 : 280;
+    const availableWidth = Math.max(176, width - drawerWidth - 120);
+    return Math.max(176, Math.min(220, availableWidth));
+  }, [collapsed, width]);
+
+  function submitQuickLog() {
+    if (!quickLogType || !quickLogValue.trim()) {
+      Alert.alert('Missing details', 'Choose a log type and enter a short note.');
+      return;
+    }
+    Alert.alert('Logged', `${quickLogType} saved for ${activeQuickChild?.name || 'the selected learner'}.`);
+    setQuickLogValue('');
+    setQuickLogType('');
+  }
 
   const navGroups = useMemo(() => {
     if (showAdminWorkspace) {
       return [
         {
-          label: 'Admin Path',
+          label: 'Admin',
           items: [
             { key: 'dashboard', label: 'Dashboard', icon: 'dashboard', target: { root: 'Controls', screen: 'ControlsMain' } },
-            { key: 'students', label: 'Students', icon: 'school', target: { root: 'Controls', screen: 'StudentDirectory' } },
-            { key: 'staff', label: 'Staff', icon: 'groups', target: { root: 'Controls', screen: 'FacultyDirectory' } },
-            { key: 'scheduling', label: 'Scheduling', icon: 'event', target: { root: 'Controls', screen: 'ScheduleCalendar' } },
-            ...(isBcbaWorkspace ? [{ key: 'programs', label: 'Programs & Goals', icon: 'assignment', target: { root: 'Controls', screen: 'ProgramDirectory' } }] : []),
-            { key: 'reports', label: 'Data & Reports', icon: 'query-stats', target: { root: 'Controls', screen: 'Reports' } },
-            { key: 'billing', label: 'Billing & Authorizations', icon: 'receipt-long', target: { root: 'Controls', screen: 'InsuranceBilling' } },
-            { key: 'compliance', label: 'Compliance', icon: 'verified-user', target: { root: 'Controls', screen: 'AdminAlerts' } },
-            { key: 'communication', label: 'Communication', icon: 'forum', target: { root: 'Controls', screen: 'AdminChatMonitor' } },
-            { key: 'settings', label: 'Settings', icon: 'settings', target: { root: 'Settings', screen: 'SettingsMain' } },
-          ],
+            { key: 'students', label: 'Students', icon: 'school', target: { root: 'Controls', screen: 'StudentDirectory' }, section: ADMIN_SECTION_KEYS.STUDENTS },
+            { key: 'staff', label: 'Staff', icon: 'groups', target: { root: 'Controls', screen: 'FacultyDirectory' }, section: ADMIN_SECTION_KEYS.STAFF },
+            { key: 'scheduling', label: 'Scheduling', icon: 'event', target: { root: 'Controls', screen: 'ScheduleCalendar' }, section: ADMIN_SECTION_KEYS.SCHEDULING },
+            { key: 'programs', label: 'Programs & Goals', icon: 'assignment', target: { root: 'Controls', screen: 'ProgramDirectory' }, section: ADMIN_SECTION_KEYS.PROGRAMS_GOALS },
+            { key: 'reports', label: 'Data & Reports', icon: 'query-stats', target: { root: 'Controls', screen: 'Reports' }, section: ADMIN_SECTION_KEYS.DATA_REPORTS },
+            { key: 'billing', label: 'Billing & Authorizations', icon: 'receipt-long', target: { root: 'Controls', screen: 'InsuranceBilling' }, section: ADMIN_SECTION_KEYS.BILLING_AUTHORIZATIONS },
+            { key: 'compliance', label: 'Compliance', icon: 'verified-user', target: { root: 'Controls', screen: 'AdminAlerts' }, section: ADMIN_SECTION_KEYS.COMPLIANCE },
+            { key: 'communication', label: 'Communication', icon: 'forum', target: { root: 'Controls', screen: 'AdminChatMonitor' }, section: ADMIN_SECTION_KEYS.COMMUNICATION },
+            { key: 'settings', label: 'Settings', icon: 'settings', target: { root: 'Controls', screen: 'AdminSettings' }, section: ADMIN_SECTION_KEYS.SETTINGS },
+          ].filter((item) => !item.section || canAccessAdminSection(user?.role, item.section)),
         },
       ];
     }
@@ -67,18 +117,20 @@ export default function TabletNavigationShell({ currentRoute, children }) {
       { key: 'settings', label: 'Settings', icon: 'settings', target: { root: 'Settings', screen: 'SettingsMain' } },
     ];
 
-    return [{ label: isStaff ? 'Therapist Path' : 'Workspace', items: therapistItems }];
-  }, [isBcbaWorkspace, isStaff, labels.dashboard, showAdminWorkspace]);
+    return [{ label: isStaff ? THERAPY_ROLE_LABELS.therapist : 'Workspace', items: therapistItems }];
+  }, [isBcbaWorkspace, isStaff, labels.dashboard, showAdminWorkspace, user?.role]);
 
   if (!isTabletLayout) return children;
 
   return (
     <View style={styles.shell}>
-      <View style={[styles.drawer, collapsed ? styles.drawerCollapsed : null]}>
-        <TouchableOpacity style={styles.drawerToggle} onPress={() => setCollapsed((value) => !value)}>
-          <MaterialIcons name={collapsed ? 'menu' : 'menu-open'} size={22} color="#e2e8f0" />
-          {!collapsed ? <Text style={styles.drawerToggleText}>Collapse</Text> : null}
-        </TouchableOpacity>
+      <View style={[styles.drawer, { paddingTop: 20 + insets.top, paddingBottom: 20 + Math.max(insets.bottom, 0) }, collapsed ? styles.drawerCollapsed : null]}>
+        {Platform.OS !== 'web' ? (
+          <TouchableOpacity style={styles.drawerToggle} onPress={() => setCollapsed((value) => !value)}>
+            <MaterialIcons name={collapsed ? 'menu' : 'menu-open'} size={22} color="#e2e8f0" />
+            {!collapsed ? <Text style={styles.drawerToggleText}>Collapse</Text> : null}
+          </TouchableOpacity>
+        ) : null}
 
         {navGroups.map((group) => (
           <View key={group.label} style={styles.group}>
@@ -101,31 +153,73 @@ export default function TabletNavigationShell({ currentRoute, children }) {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.contentWrap}>
+      <View style={[styles.contentWrap, { paddingTop: Math.max(insets.top, 12), paddingBottom: Math.max(insets.bottom, 12) }]}>
+        {showQuickAdd && quickMenuOpen ? <TouchableOpacity style={styles.quickMenuDismissLayer} activeOpacity={1} onPress={() => setQuickMenuOpen(false)} /> : null}
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
             <LogoTitle width={150} height={48} />
             {!collapsed ? (
               <View style={styles.greetingWrap}>
-                <Text style={styles.topEyebrow}>{showAdminWorkspace ? 'Admin Workspace' : 'Therapist Workspace'}</Text>
+                <Text style={styles.topEyebrow}>{showAdminWorkspace ? 'Admin Workspace' : `${THERAPY_ROLE_LABELS.therapist} Workspace`}</Text>
                 <Text style={styles.topTitle}>Hello, {greeting}</Text>
               </View>
             ) : null}
           </View>
-          <TouchableOpacity style={styles.helpButton} onPress={() => openTarget({ root: 'Settings', screen: 'Help' })}>
-            <MaterialIcons name="help-outline" size={20} color="#1d4ed8" />
-            {!collapsed ? <Text style={styles.helpButtonText}>Help</Text> : null}
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            {showQuickAdd ? (
+              <View style={styles.quickAddAnchor}>
+                <TouchableOpacity style={[styles.iconOnlyButton, styles.quickAddButton, quickMenuOpen ? styles.iconOnlyButtonActive : null]} onPress={() => setQuickMenuOpen((value) => !value)}>
+                  <MaterialIcons name="add" size={20} color="#1d4ed8" />
+                </TouchableOpacity>
+                {quickMenuOpen ? (
+                  <View style={[styles.quickHeaderMenu, { width: quickMenuWidth }]}>
+                    {['Quick Note', 'Incident', 'Unexpected Data'].map((item) => (
+                      <TouchableOpacity
+                        key={item}
+                        style={styles.quickHeaderMenuItem}
+                        onPress={() => {
+                          setQuickMenuOpen(false);
+                          setQuickLogType(item);
+                        }}
+                      >
+                        <Text style={styles.quickHeaderMenuText}>{item}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+            <TouchableOpacity style={styles.iconOnlyButton} onPress={() => openTarget({ root: 'Settings', screen: 'Help' })}>
+              <MaterialIcons name="help-outline" size={20} color="#1d4ed8" />
+            </TouchableOpacity>
+          </View>
         </View>
         <View style={styles.screenWrap}>{children}</View>
       </View>
+      <Modal transparent visible={!!quickLogType} animationType="fade" onRequestClose={() => setQuickLogType('')}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{quickLogType}</Text>
+            <Text style={styles.modalSubtitle}>{activeQuickChild?.name ? `Logging for ${activeQuickChild.name}` : 'Logging for your current learner'}</Text>
+            <TextInput value={quickLogValue} onChangeText={setQuickLogValue} placeholder="Enter a short note" multiline style={styles.modalInput} />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalSecondaryBtn} onPress={() => { setQuickLogType(''); setQuickLogValue(''); }}>
+                <Text style={styles.modalSecondaryBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalPrimaryBtn} onPress={submitQuickLog}>
+                <Text style={styles.modalPrimaryBtnText}>Submit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   shell: { flex: 1, flexDirection: 'row', backgroundColor: '#e2e8f0' },
-  drawer: { width: 280, backgroundColor: '#0f172a', paddingHorizontal: 16, paddingVertical: 20 },
+  drawer: { width: 280, backgroundColor: '#0f172a', paddingHorizontal: 16 },
   drawerCollapsed: { width: 92, paddingHorizontal: 10 },
   drawerToggle: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
   drawerToggleText: { color: '#e2e8f0', fontWeight: '700', marginLeft: 10 },
@@ -137,13 +231,30 @@ const styles = StyleSheet.create({
   navLabelActive: { color: '#0f172a' },
   logoutButton: { marginTop: 'auto', flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#1e293b' },
   logoutText: { color: '#fecaca', fontWeight: '700', marginLeft: 10 },
-  contentWrap: { flex: 1, padding: 12 },
-  topBar: { minHeight: 70, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 18, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  contentWrap: { flex: 1, paddingHorizontal: 12, position: 'relative' },
+  quickMenuDismissLayer: { ...StyleSheet.absoluteFillObject, zIndex: 20 },
+  topBar: { minHeight: 70, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 18, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, zIndex: 30 },
   brandRow: { flexDirection: 'row', alignItems: 'center' },
   greetingWrap: { marginLeft: 14 },
   topEyebrow: { color: '#2563eb', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
   topTitle: { marginTop: 4, fontSize: 20, fontWeight: '800', color: '#0f172a' },
-  helpButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: '#eff6ff' },
-  helpButtonText: { color: '#1d4ed8', fontWeight: '700', marginLeft: 8 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto' },
+  quickAddAnchor: { position: 'relative', marginLeft: 10 },
+  iconOnlyButton: { width: 40, height: 40, borderRadius: 20, marginLeft: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eff6ff' },
+  quickAddButton: { marginLeft: 0 },
+  iconOnlyButtonActive: { backgroundColor: '#dbeafe' },
+  quickHeaderMenu: { position: 'absolute', top: 44, right: 0, borderRadius: 14, borderWidth: 1, borderColor: '#dbe4f0', backgroundColor: '#ffffff', paddingVertical: 8, shadowColor: '#0f172a', shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
+  quickHeaderMenuItem: { paddingVertical: 10, paddingHorizontal: 14 },
+  quickHeaderMenuText: { color: '#0f172a', fontWeight: '700' },
   screenWrap: { flex: 1, borderRadius: 24, overflow: 'hidden', backgroundColor: '#f8fafc' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'center', padding: 24 },
+  modalCard: { borderRadius: 20, backgroundColor: '#ffffff', padding: 18 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a' },
+  modalSubtitle: { marginTop: 6, color: '#64748b' },
+  modalInput: { marginTop: 14, minHeight: 120, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, textAlignVertical: 'top' },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 14 },
+  modalSecondaryBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#e2e8f0', marginRight: 8 },
+  modalSecondaryBtnText: { color: '#0f172a', fontWeight: '700' },
+  modalPrimaryBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#2563eb' },
+  modalPrimaryBtnText: { color: '#ffffff', fontWeight: '700' },
 });

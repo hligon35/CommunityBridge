@@ -25,8 +25,6 @@ const PUSH_CHATS_KEY = 'settings_push_chats_v1';
 const PUSH_TIMELINE_POSTS_KEY = 'settings_push_timeline_posts_v1';
 const PUSH_MENTIONS_POSTS_KEY = 'settings_push_mentions_posts_v1';
 const PUSH_TAGS_POSTS_KEY = 'settings_push_tags_posts_v1';
-const PUSH_REPLIES_COMMENTS_KEY = 'settings_push_replies_comments_v1';
-const PUSH_MENTIONS_COMMENTS_KEY = 'settings_push_mentions_comments_v1';
 const PUSH_UPDATES_KEY = 'settings_push_updates_v1';
 const PUSH_OTHER_KEY = 'settings_push_other_v1';
 const SHOW_EMAIL_KEY = SETTINGS_KEYS.showEmail;
@@ -45,8 +43,6 @@ export default function SettingsScreen({ navigation }) {
   const [pushTimelinePosts, setPushTimelinePosts] = useState(true);
   const [pushMentionsPosts, setPushMentionsPosts] = useState(true);
   const [pushTagsPosts, setPushTagsPosts] = useState(true);
-  const [pushRepliesComments, setPushRepliesComments] = useState(true);
-  const [pushMentionsComments, setPushMentionsComments] = useState(true);
   const [pushUpdates, setPushUpdates] = useState(true);
   const [pushOther, setPushOther] = useState(false);
   const [showEmail, setShowEmail] = useState(true);
@@ -81,8 +77,6 @@ export default function SettingsScreen({ navigation }) {
         const pt = await AsyncStorage.getItem(PUSH_TIMELINE_POSTS_KEY);
         const pmp = await AsyncStorage.getItem(PUSH_MENTIONS_POSTS_KEY);
         const ptg = await AsyncStorage.getItem(PUSH_TAGS_POSTS_KEY);
-        const prc = await AsyncStorage.getItem(PUSH_REPLIES_COMMENTS_KEY);
-        const pmc = await AsyncStorage.getItem(PUSH_MENTIONS_COMMENTS_KEY);
         const pu = await AsyncStorage.getItem(PUSH_UPDATES_KEY);
         const po = await AsyncStorage.getItem(PUSH_OTHER_KEY);
         if (!mounted) return;
@@ -92,8 +86,6 @@ export default function SettingsScreen({ navigation }) {
         if (pt !== null) setPushTimelinePosts(pt === '1');
         if (pmp !== null) setPushMentionsPosts(pmp === '1');
         if (ptg !== null) setPushTagsPosts(ptg === '1');
-        if (prc !== null) setPushRepliesComments(prc === '1');
-        if (pmc !== null) setPushMentionsComments(pmc === '1');
         if (pu !== null) setPushUpdates(pu === '1');
         if (po !== null) setPushOther(po === '1');
         const se = await AsyncStorage.getItem(SHOW_EMAIL_KEY);
@@ -187,12 +179,6 @@ export default function SettingsScreen({ navigation }) {
     AsyncStorage.setItem(PUSH_TAGS_POSTS_KEY, pushTagsPosts ? '1' : '0').catch(() => {});
   }, [pushTagsPosts]);
   useEffect(() => {
-    AsyncStorage.setItem(PUSH_REPLIES_COMMENTS_KEY, pushRepliesComments ? '1' : '0').catch(() => {});
-  }, [pushRepliesComments]);
-  useEffect(() => {
-    AsyncStorage.setItem(PUSH_MENTIONS_COMMENTS_KEY, pushMentionsComments ? '1' : '0').catch(() => {});
-  }, [pushMentionsComments]);
-  useEffect(() => {
     AsyncStorage.setItem(PUSH_UPDATES_KEY, pushUpdates ? '1' : '0').catch(() => {});
   }, [pushUpdates]);
   useEffect(() => {
@@ -205,8 +191,6 @@ export default function SettingsScreen({ navigation }) {
       timelinePosts: !!pushTimelinePosts,
       mentionsPosts: !!pushMentionsPosts,
       tagsPosts: !!pushTagsPosts,
-      repliesComments: !!pushRepliesComments,
-      mentionsComments: !!pushMentionsComments,
       updates: !!pushUpdates,
       other: !!pushOther,
     };
@@ -255,8 +239,6 @@ export default function SettingsScreen({ navigation }) {
     pushTimelinePosts,
     pushMentionsPosts,
     pushTagsPosts,
-    pushRepliesComments,
-    pushMentionsComments,
     pushUpdates,
     pushOther,
     user?.id,
@@ -507,25 +489,6 @@ export default function SettingsScreen({ navigation }) {
                 <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Get notified when someone sends you a chat message.</Text>
               </View>
               <ImageToggle value={pushChats} onValueChange={setPushChats} disabled={!pushEnabled} accessibilityLabel="Receive chat messages" />
-            </View>
-          </View>
-
-          {/* Comments */}
-          <View style={{ marginTop: 8, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>
-            <Text style={{ fontSize: 14, fontWeight: '700', marginBottom: 6 }}>Comments</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <View style={{ flex: 1, paddingRight: 8 }}>
-                <Text style={{ fontSize: 14 }}>Mentions in comments</Text>
-                <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Notify when you're mentioned in a comment.</Text>
-              </View>
-              <ImageToggle value={pushMentionsComments} onValueChange={setPushMentionsComments} disabled={!pushEnabled} accessibilityLabel="Mentions in comments" />
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View style={{ flex: 1, paddingRight: 8 }}>
-                <Text style={{ fontSize: 14 }}>Replies to my comments</Text>
-                <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Notify when someone replies to your comment.</Text>
-              </View>
-              <ImageToggle value={pushRepliesComments} onValueChange={setPushRepliesComments} disabled={!pushEnabled} accessibilityLabel="Replies to my comments" />
             </View>
           </View>
 

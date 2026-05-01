@@ -1,8 +1,9 @@
 import { PROGRAM_TYPES, normalizeProgramType } from './models';
+import { THERAPY_ROLE_LABELS } from '../../utils/roleTerminology';
 
 const BASE_LABELS = Object.freeze({
   dashboard: 'Dashboard',
-  staffDashboard: 'Therapist Dashboard',
+  staffDashboard: THERAPY_ROLE_LABELS.therapistDashboard,
   myClass: 'My Class',
   myChild: 'My Child',
   familySection: 'Your Family',

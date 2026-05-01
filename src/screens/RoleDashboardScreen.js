@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
@@ -8,6 +8,7 @@ import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { useTenant } from '../core/tenant/TenantContext';
 import { avatarSourceFor } from '../utils/idVisibility';
+import { THERAPY_ROLE_LABELS } from '../utils/roleTerminology';
 const { logPress } = require('../utils/logger');
 const { isSpecialAccessUser } = require('../utils/authState');
 const { getEffectiveChatIdentity } = require('../utils/demoIdentity');
@@ -119,10 +120,6 @@ export default function RoleDashboardScreen({ navigation }) {
   const selectedChild = useMemo(() => {
     return resolveSelectedDashboardChild(relevantChildren, selectedChildId);
   }, [relevantChildren, selectedChildId]);
-  const [quickMenuOpen, setQuickMenuOpen] = useState(false);
-  const [quickLogType, setQuickLogType] = useState('');
-  const [quickLogValue, setQuickLogValue] = useState('');
-
   const activeChildren = useMemo(() => {
     if (isTherapist) return relevantChildren;
     return selectedChild ? [selectedChild] : [];
@@ -253,7 +250,7 @@ export default function RoleDashboardScreen({ navigation }) {
       key: 'summary-review',
       title: 'Session Report',
       value: sessionTargetChild?.name || 'Review draft',
-      hint: sessionTargetChild ? 'Open the therapist summary review panel for the selected learner.' : 'Assign a learner to review a draft summary.',
+      hint: sessionTargetChild ? `Open the ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} summary review panel for the selected learner.` : 'Assign a learner to review a draft summary.',
       icon: 'fact-check',
       onPress: () => openSessionCard('summary'),
     },
@@ -271,7 +268,7 @@ export default function RoleDashboardScreen({ navigation }) {
       key: 'care-team',
       title: labels.careTeam || 'My Care Team',
       value: careTeamCount ? `${careTeamCount} members` : 'No team assigned',
-      hint: isTherapist ? 'Your assigned caseload.' : 'Therapists connected to your family.',
+      hint: isTherapist ? 'Your assigned caseload.' : `${THERAPY_ROLE_LABELS.therapists} connected to your family.`,
       imageSource: careTeamIcon,
       onPress: () => (isTherapist
         ? navigation.getParent()?.navigate('MyClass')
@@ -320,17 +317,6 @@ export default function RoleDashboardScreen({ navigation }) {
       const gate = cardFlagGates[card.key];
       return gate ? gate() : true;
     });
-
-  function submitQuickLog() {
-    if (!quickLogType || !quickLogValue.trim()) {
-      Alert.alert('Missing details', 'Choose a log type and enter a short note.');
-      return;
-    }
-    Alert.alert('Logged', `${quickLogType} saved for ${selectedChild?.name || 'the selected learner'}.`);
-    setQuickLogValue('');
-    setQuickLogType('');
-    setQuickMenuOpen(false);
-  }
 
   function startDashboardSession() {
     if (!selectedChild?.id) return;
@@ -389,7 +375,7 @@ export default function RoleDashboardScreen({ navigation }) {
               ) : (
                 <View style={styles.statusPanel}>
                   <MaterialIcons name="groups-2" size={18} color="#64748b" />
-                  <Text style={styles.statusText}>No assigned children are linked to this therapist yet.</Text>
+                  <Text style={styles.statusText}>{`No assigned children are linked to this ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} yet.`}</Text>
                 </View>
               )}
             </>
@@ -449,39 +435,6 @@ export default function RoleDashboardScreen({ navigation }) {
         </View> : null}
       </ScrollView>
 
-      {isTherapist ? (
-        <View style={styles.quickFabWrap} pointerEvents="box-none">
-          {quickMenuOpen ? (
-            <View style={styles.quickFabMenu}>
-              {['Quick Note', 'Incident', 'Unexpected Data'].map((item) => (
-                <TouchableOpacity key={item} style={styles.quickFabMenuItem} onPress={() => setQuickLogType(item)}>
-                  <Text style={styles.quickFabMenuText}>{item}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ) : null}
-          <TouchableOpacity style={styles.quickFab} onPress={() => setQuickMenuOpen((value) => !value)}>
-            <MaterialIcons name="add" size={22} color="#ffffff" />
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
-      <Modal transparent visible={!!quickLogType} animationType="fade" onRequestClose={() => setQuickLogType('')}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{quickLogType}</Text>
-            <TextInput value={quickLogValue} onChangeText={setQuickLogValue} placeholder="Enter a short note" multiline style={styles.modalInput} />
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalSecondaryBtn} onPress={() => { setQuickLogType(''); setQuickLogValue(''); }}>
-                <Text style={styles.modalSecondaryBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalPrimaryBtn} onPress={submitQuickLog}>
-                <Text style={styles.modalPrimaryBtnText}>Submit</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </ScreenWrapper>
   );
 }
@@ -527,18 +480,4 @@ const styles = StyleSheet.create({
   cardTitle: { marginTop: 8, fontSize: 13, fontWeight: '800', color: '#0f172a', lineHeight: 16 },
   cardValue: { marginTop: 4, fontSize: 11, fontWeight: '600', color: '#475569', lineHeight: 14 },
   cardHint: { marginTop: 8, color: '#64748b', lineHeight: 18 },
-  quickFabWrap: { position: 'absolute', right: 52, top: 220, alignItems: 'flex-end' },
-  quickFab: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#2563eb', alignItems: 'center', justifyContent: 'center' },
-  quickFabMenu: { marginBottom: 8, backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#dbe4f0', padding: 8, minWidth: 180 },
-  quickFabMenuItem: { paddingVertical: 10, paddingHorizontal: 12 },
-  quickFabMenuText: { color: '#0f172a', fontWeight: '700' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'center', padding: 24 },
-  modalCard: { borderRadius: 20, backgroundColor: '#ffffff', padding: 18 },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a' },
-  modalInput: { marginTop: 14, minHeight: 120, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, textAlignVertical: 'top' },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 14 },
-  modalSecondaryBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#e2e8f0', marginRight: 8 },
-  modalSecondaryBtnText: { color: '#0f172a', fontWeight: '700' },
-  modalPrimaryBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#2563eb' },
-  modalPrimaryBtnText: { color: '#ffffff', fontWeight: '700' },
 });

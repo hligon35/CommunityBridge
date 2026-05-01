@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { MaterialIcons } from '@expo/vector-icons';
 import LogoTitle from './LogoTitle';
 import { useAuth } from '../AuthContext';
 import { navigationRef } from '../navigationRef';
@@ -13,8 +14,6 @@ export default function WebNav() {
   const tenant = useTenant();
   const labels = tenant?.labels || {};
   const role = (user && user.role) ? (user.role || '').toString().toLowerCase() : 'parent';
-  const [open, setOpen] = useState(false);
-
   function navTo(route, params) {
     // Top-level tab targets (Home/Chats/Settings/Controls/MyClass/MyChild)
     // live inside the `Main` screen of the outer AppStack. Use the root
@@ -32,7 +31,6 @@ export default function WebNav() {
   }
 
   function openHelp() {
-    setOpen(false);
     navTo('Settings', { screen: 'Help' });
   }
 
@@ -43,32 +41,22 @@ export default function WebNav() {
           <LogoTitle width={240} height={72} />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={() => setOpen((v) => !v)}
-          accessibilityRole="button"
-          accessibilityLabel={open ? 'Close menu' : 'Open menu'}
-          style={styles.hamburger}
-        >
-          <Text style={styles.hamburgerText}>{open ? 'Close' : 'Menu'}</Text>
-        </TouchableOpacity>
-
-        {open ? (
-          <View style={styles.links}>
-            <TouchableOpacity onPress={() => { setOpen(false); navTo('Home'); }} style={styles.link}><Text style={styles.linkText}>Home</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => { setOpen(false); navTo('Chats'); }} style={styles.link}><Text style={styles.linkText}>Messages</Text></TouchableOpacity>
-            {role !== 'therapist' && <TouchableOpacity onPress={() => { setOpen(false); navTo('MyChild'); }} style={styles.link}><Text style={styles.linkText}>{labels.myChild || 'My Child'}</Text></TouchableOpacity>}
-            {role === 'therapist' && <TouchableOpacity onPress={() => { setOpen(false); navTo('MyClass'); }} style={styles.link}><Text style={styles.linkText}>{labels.myClass || 'My Class'}</Text></TouchableOpacity>}
-            {isAdminRole(role) && <TouchableOpacity onPress={() => { setOpen(false); navTo('Controls'); }} style={styles.link}><Text style={styles.linkText}>{labels.dashboard || 'Dashboard'}</Text></TouchableOpacity>}
-            <TouchableOpacity onPress={() => { setOpen(false); navTo('Settings'); }} style={styles.link}><Text style={styles.linkText}>Settings</Text></TouchableOpacity>
-            <TouchableOpacity onPress={openHelp} style={styles.link}><Text style={styles.linkText}>Help</Text></TouchableOpacity>
-
-            {user ? (
-              <TouchableOpacity onPress={() => { setOpen(false); logout && logout(); }} style={styles.link}>
-                <Text style={[styles.linkText, styles.logoutText]}>Logout</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        ) : null}
+        <View style={styles.links}>
+          <TouchableOpacity onPress={() => navTo('Home')} style={styles.link}><Text style={styles.linkText}>Home</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => navTo('Chats')} style={styles.link}><Text style={styles.linkText}>Messages</Text></TouchableOpacity>
+          {role !== 'therapist' && <TouchableOpacity onPress={() => navTo('MyChild')} style={styles.link}><Text style={styles.linkText}>{labels.myChild || 'My Child'}</Text></TouchableOpacity>}
+          {role === 'therapist' && <TouchableOpacity onPress={() => navTo('MyClass')} style={styles.link}><Text style={styles.linkText}>{labels.myClass || 'My Class'}</Text></TouchableOpacity>}
+          {isAdminRole(role) && <TouchableOpacity onPress={() => navTo('Controls')} style={styles.link}><Text style={styles.linkText}>{labels.dashboard || 'Dashboard'}</Text></TouchableOpacity>}
+          <TouchableOpacity onPress={() => navTo('Settings')} style={styles.link}><Text style={styles.linkText}>Settings</Text></TouchableOpacity>
+          <TouchableOpacity onPress={openHelp} style={styles.iconLink} accessibilityRole="button" accessibilityLabel="Help">
+            <MaterialIcons name="help-outline" size={20} color="#1d4ed8" />
+          </TouchableOpacity>
+          {user ? (
+            <TouchableOpacity onPress={() => { logout && logout(); }} style={styles.link}>
+              <Text style={[styles.linkText, styles.logoutText]}>Logout</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -100,45 +88,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   links: {
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    position: 'absolute',
-    right: 16,
-    top: 72,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    minWidth: 180,
-    zIndex: 1001,
-    elevation: 24,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
   },
   link: {
     paddingVertical: 10,
-    width: '100%',
+    paddingHorizontal: 10,
   },
   linkText: {
     color: '#111827',
     fontWeight: '600',
   },
-  hamburger: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#fff',
-  },
-  hamburgerText: {
-    color: '#111827',
-    fontWeight: '700',
-  },
+  iconLink: { paddingHorizontal: 10, paddingVertical: 10 },
   logoutText: {
     color: '#ef4444',
   },

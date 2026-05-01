@@ -101,7 +101,7 @@ export default function SessionSummarySnapshot({
       <Text style={styles.title}>{title}</Text>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
 
-      <View style={styles.metricsRow}>
+      <View style={styles.metricsGrid}>
         <View style={styles.metricChip}>
           <Text style={styles.metricLabel}>Mood</Text>
           <Text style={styles.metricValue}>{moodValue} · {moodLabel}</Text>
@@ -110,9 +110,6 @@ export default function SessionSummarySnapshot({
           <Text style={styles.metricLabel}>Progress</Text>
           <Text style={styles.metricValue}>{progressLabel}</Text>
         </View>
-      </View>
-
-      <View style={styles.metricsRow}>
         <View style={styles.metricChip}>
           <Text style={styles.metricLabel}>Independence</Text>
           <Text style={styles.metricValue}>{independenceLabel}</Text>
@@ -156,16 +153,17 @@ const styles = StyleSheet.create({
     color: '#475569',
     lineHeight: 20,
   },
-  metricsRow: {
+  metricsGrid: {
     flexDirection: 'row',
+    flexWrap: 'nowrap',
     marginTop: 12,
+    justifyContent: 'space-between',
   },
   metricChip: {
-    flex: 1,
+    width: '24%',
     backgroundColor: '#f8fafc',
     borderRadius: 12,
     padding: 10,
-    marginRight: 8,
   },
   metricLabel: {
     fontSize: 11,

@@ -9,6 +9,32 @@ export const USER_ROLES = Object.freeze({
   ADMIN: 'admin',
 });
 
+export const ADMIN_SECTION_KEYS = Object.freeze({
+  DASHBOARD: 'dashboard',
+  STUDENTS: 'students',
+  STAFF: 'staff',
+  SCHEDULING: 'scheduling',
+  PROGRAMS_GOALS: 'programs_goals',
+  DATA_REPORTS: 'data_reports',
+  BILLING_AUTHORIZATIONS: 'billing_authorizations',
+  COMPLIANCE: 'compliance',
+  COMMUNICATION: 'communication',
+  SETTINGS: 'settings',
+});
+
+const ADMIN_SECTION_ACCESS = Object.freeze({
+  [ADMIN_SECTION_KEYS.DASHBOARD]: Object.freeze({ bcba: 'full', office: 'full' }),
+  [ADMIN_SECTION_KEYS.STUDENTS]: Object.freeze({ bcba: 'full_clinical', office: 'roster_only' }),
+  [ADMIN_SECTION_KEYS.STAFF]: Object.freeze({ bcba: 'view_only', office: 'full' }),
+  [ADMIN_SECTION_KEYS.SCHEDULING]: Object.freeze({ bcba: 'clinical_scheduling', office: 'full' }),
+  [ADMIN_SECTION_KEYS.PROGRAMS_GOALS]: Object.freeze({ bcba: 'full', office: 'none' }),
+  [ADMIN_SECTION_KEYS.DATA_REPORTS]: Object.freeze({ bcba: 'clinical_reports', office: 'operational_reports' }),
+  [ADMIN_SECTION_KEYS.BILLING_AUTHORIZATIONS]: Object.freeze({ bcba: 'view_only', office: 'full' }),
+  [ADMIN_SECTION_KEYS.COMPLIANCE]: Object.freeze({ bcba: 'view_only', office: 'full' }),
+  [ADMIN_SECTION_KEYS.COMMUNICATION]: Object.freeze({ bcba: 'full_clinical', office: 'admin_only' }),
+  [ADMIN_SECTION_KEYS.SETTINGS]: Object.freeze({ bcba: 'limited', office: 'full' }),
+});
+
 export const PROGRAM_TYPES = Object.freeze({
   CORPORATE: 'corporate',
   CENTER_BASED_ABA: 'centerBasedAba',
@@ -159,6 +185,38 @@ export function buildStudentModel(value) {
 export function isAdminRole(role) {
   const value = normalizeUserRole(role);
   return value === USER_ROLES.ADMIN || value === USER_ROLES.CAMPUS_ADMIN || value === USER_ROLES.ORG_ADMIN || value === USER_ROLES.SUPER_ADMIN;
+}
+
+export function isBcbaRole(role) {
+  return normalizeUserRole(role) === USER_ROLES.BCBA;
+}
+
+export function isOfficeAdminRole(role) {
+  return isAdminRole(role);
+}
+
+export function getAdminActorType(role) {
+  if (isBcbaRole(role)) return 'bcba';
+  if (isOfficeAdminRole(role)) return 'office';
+  return 'none';
+}
+
+export function canAccessAdminWorkspace(role) {
+  return getAdminActorType(role) !== 'none';
+}
+
+export function getAdminSectionAccess(role, sectionKey) {
+  const actorType = getAdminActorType(role);
+  if (actorType === 'none') return 'none';
+  return ADMIN_SECTION_ACCESS[sectionKey]?.[actorType] || 'none';
+}
+
+export function canAccessAdminSection(role, sectionKey) {
+  return getAdminSectionAccess(role, sectionKey) !== 'none';
+}
+
+export function hasFullAdminSectionAccess(role, sectionKey) {
+  return getAdminSectionAccess(role, sectionKey) === 'full';
 }
 
 export function isSuperAdminRole(role) {

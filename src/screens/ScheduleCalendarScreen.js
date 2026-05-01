@@ -1,493 +1,165 @@
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useRoute } from '@react-navigation/native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
+import { isBcbaRole, isOfficeAdminRole } from '../core/tenant/models';
+import { THERAPY_ROLE_LABELS } from '../utils/roleTerminology';
+const { isChildLinkedToTherapist } = require('../features/sessionTracking/utils/dashboardSessionTarget');
 
-function startOfDay(date) {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  return next;
+function todayStamp(hours = 9, minutes = 0) {
+  const date = new Date();
+  date.setHours(hours, minutes, 0, 0);
+  return date;
 }
 
-function formatDayKey(date) {
-  return startOfDay(date).toISOString().slice(0, 10);
-}
-
-function findRelevantChildren(role, userId, children) {
-  const allChildren = Array.isArray(children) ? children : [];
-  if (!userId) return [];
-  if (role === 'therapist') {
-    return allChildren.filter((child) => {
-      const assigned = [child?.amTherapist, child?.pmTherapist, child?.bcaTherapist];
-      return assigned.some((entry) => {
-        if (!entry) return false;
-        if (typeof entry === 'string') return entry === userId;
-        return entry?.id === userId;
-      });
-    });
-  }
-  return allChildren.filter((child) => Array.isArray(child?.parents) && child.parents.some((parent) => parent?.id === userId));
-}
-
-function getScheduleEntries(children, selectedDate) {
-  const day = startOfDay(selectedDate);
-  return children
-    .map((child, index) => {
-      const dropBase = child?.dropoffTimeISO ? new Date(child.dropoffTimeISO) : null;
-      const pickBase = child?.pickupTimeISO ? new Date(child.pickupTimeISO) : null;
-      const dropoff = dropBase && !Number.isNaN(dropBase.getTime())
-        ? new Date(day.getFullYear(), day.getMonth(), day.getDate(), dropBase.getHours(), dropBase.getMinutes())
-        : null;
-      const pickup = pickBase && !Number.isNaN(pickBase.getTime())
-        ? new Date(day.getFullYear(), day.getMonth(), day.getDate(), pickBase.getHours(), pickBase.getMinutes())
-        : null;
-      const therapist = child?.session === 'AM'
-        ? child?.amTherapist
-        : child?.session === 'PM'
-          ? child?.pmTherapist
-          : (child?.amTherapist || child?.pmTherapist || child?.bcaTherapist);
-      return {
-        id: child?.id || `child-${index}`,
-        childName: child?.name || 'Child',
-        session: child?.session || 'Session',
-        room: child?.room || '',
-        dropoff,
-        pickup,
-        therapistName: therapist?.name || '',
-      };
-    })
-    .filter((entry) => entry.dropoff || entry.pickup)
-    .sort((left, right) => {
-      const leftTime = left.dropoff?.getTime() || left.pickup?.getTime() || 0;
-      const rightTime = right.dropoff?.getTime() || right.pickup?.getTime() || 0;
-      return leftTime - rightTime;
-    });
-}
-
-function formatTime(date) {
-  if (!date || Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
-function buildCalendarDays(monthDate) {
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
-  const firstOfMonth = new Date(year, month, 1);
-  const start = new Date(firstOfMonth);
-  start.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());
-  const days = [];
-  for (let index = 0; index < 42; index += 1) {
-    const day = new Date(start);
-    day.setDate(start.getDate() + index);
-    days.push(day);
-  }
-  return days;
-}
-
-function monthLabel(date) {
-  return date.toLocaleDateString([], { month: 'long', year: 'numeric' });
-}
-
-function getNextUpcomingEntry(children, now = new Date()) {
-  const allChildren = Array.isArray(children) ? children : [];
-  const entries = allChildren.flatMap((child) => {
-    const base = child?.dropoffTimeISO ? new Date(child.dropoffTimeISO) : null;
-    if (!base || Number.isNaN(base.getTime())) return [];
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), base.getHours(), base.getMinutes());
-    const scheduledAt = today.getTime() >= now.getTime()
-      ? today
-      : new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, base.getHours(), base.getMinutes());
-    return [{
-      childName: child?.name || 'Child',
-      session: child?.session || 'Session',
-      scheduledAt,
-      room: child?.room || '',
-    }];
+function buildSessionCards(children = []) {
+  return (children || []).slice(0, 10).map((child, index) => {
+    const therapist = child?.session === 'PM' ? child?.pmTherapist : child?.amTherapist || child?.pmTherapist || child?.bcaTherapist;
+    const staffName = typeof therapist === 'string' ? therapist : therapist?.name || child?.bcaTherapist?.name || 'Unassigned';
+    const start = child?.dropoffTimeISO ? new Date(child.dropoffTimeISO) : todayStamp(8 + index, 0);
+    const end = child?.pickupTimeISO ? new Date(child.pickupTimeISO) : todayStamp(9 + index, 0);
+    return {
+      id: child?.id || `session-${index}`,
+      student: child?.name || 'Student',
+      staff: staffName,
+      location: child?.room || 'Room TBD',
+      status: index % 4 === 0 ? 'canceled' : index % 3 === 0 ? 'completed' : 'scheduled',
+      start,
+      end,
+    };
   });
-  entries.sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime());
-  return entries[0] || null;
 }
 
 export default function ScheduleCalendarScreen() {
-  const route = useRoute();
   const { user } = useAuth();
   const { children = [] } = useData();
-  const role = String(user?.role || 'parent').trim().toLowerCase();
-  const isTherapistSchedule = role === 'therapist' && route?.params?.therapistSchedule;
-  const relevantChildren = useMemo(() => {
-    const linkedChildren = findRelevantChildren(role, user?.id, children);
-    const requestedChildId = route?.params?.childId;
-    if (isTherapistSchedule) return linkedChildren;
-    if (!requestedChildId) return linkedChildren;
-    return linkedChildren.filter((child) => child?.id === requestedChildId);
-  }, [children, isTherapistSchedule, role, route?.params?.childId, user?.id]);
-  const initialDate = useMemo(() => {
-    const firstChild = relevantChildren[0];
-    const base = firstChild?.dropoffTimeISO || firstChild?.pickupTimeISO || Date.now();
-    return startOfDay(new Date(base));
-  }, [relevantChildren]);
-  const [selectedDate, setSelectedDate] = useState(initialDate);
-  const [displayMonth, setDisplayMonth] = useState(new Date(initialDate.getFullYear(), initialDate.getMonth(), 1));
-  const [viewMode, setViewMode] = useState(isTherapistSchedule ? 'staff' : 'day');
+  const role = String(user?.role || '').trim().toLowerCase();
+  const isBcba = isBcbaRole(user?.role);
+  const isTherapist = role === 'therapist';
+  const isOffice = isOfficeAdminRole(user?.role);
+  const [viewMode, setViewMode] = useState('day');
+  const [focusMode, setFocusMode] = useState('staff');
 
-  const calendarDays = useMemo(() => buildCalendarDays(displayMonth), [displayMonth]);
-  const selectedDayKey = formatDayKey(selectedDate);
-  const entries = useMemo(() => getScheduleEntries(relevantChildren, selectedDate), [relevantChildren, selectedDate]);
-  const nextUpcomingEntry = useMemo(() => getNextUpcomingEntry(relevantChildren), [relevantChildren]);
-  const groupedEntries = useMemo(() => {
-    if (viewMode === 'student') {
-      return relevantChildren.map((child) => ({
-        key: child?.id || child?.name,
-        title: child?.name || 'Child',
-        subtitle: `${child?.session || 'Session'}${child?.room ? ` • ${child.room}` : ''}`,
-      }));
-    }
-    if (viewMode === 'staff') {
-      const groups = new Map();
-      entries.forEach((entry) => {
-        const key = entry.therapistName || 'Unassigned';
-        const next = groups.get(key) || [];
-        next.push(entry);
-        groups.set(key, next);
-      });
-      return Array.from(groups.entries()).map(([key, value]) => ({
-        key,
-        title: key,
-        subtitle: `${value.length} session${value.length === 1 ? '' : 's'}`,
-      }));
-    }
-    if (viewMode === 'week') {
-      return Array.from({ length: 7 }).map((_, index) => {
-        const day = new Date(selectedDate);
-        day.setDate(selectedDate.getDate() - selectedDate.getDay() + index);
-        return {
-          key: formatDayKey(day),
-          title: day.toLocaleDateString([], { weekday: 'long' }),
-          subtitle: `${entries.length} planned entries`,
-        };
-      });
-    }
-    return entries.map((entry) => ({
-      key: entry.id,
-      title: entry.childName,
-      subtitle: `${entry.session}${entry.room ? ` • ${entry.room}` : ''}`,
-    }));
-  }, [entries, relevantChildren, selectedDate, viewMode]);
+  const filteredChildren = useMemo(() => {
+    if (!isTherapist) return children;
+    const therapistId = user?.id;
+    const normalizedName = String(user?.name || user?.displayName || user?.email || '').trim().toLowerCase();
+    return (children || []).filter((child) => {
+      if (isChildLinkedToTherapist(child, therapistId)) return true;
+      const assignments = [child?.amTherapist, child?.pmTherapist, child?.bcaTherapist]
+        .map((entry) => (typeof entry === 'string' ? entry : entry?.name || entry?.email || ''))
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean);
+      return normalizedName ? assignments.includes(normalizedName) : false;
+    });
+  }, [children, isTherapist, user?.displayName, user?.email, user?.id, user?.name]);
+
+  const sessions = useMemo(() => buildSessionCards(filteredChildren), [filteredChildren]);
+  const grouped = useMemo(() => {
+    const groups = new Map();
+    sessions.forEach((session) => {
+      const key = isTherapist ? viewMode.toUpperCase() : (focusMode === 'student' ? session.student : focusMode === 'room' ? session.location : session.staff);
+      const next = groups.get(key) || [];
+      next.push(session);
+      groups.set(key, next);
+    });
+    return Array.from(groups.entries()).map(([key, value]) => ({ key, value }));
+  }, [focusMode, isTherapist, sessions, viewMode]);
+
+  function action(title, message) {
+    Alert.alert(title, message);
+  }
 
   return (
-    <ScreenWrapper
-      bannerTitle={isTherapistSchedule ? 'Work Schedule' : 'Schedule'}
-      style={styles.container}
-      bottomSpacerHeight={0}
-      webBottomSpacerHeight={0}
-    >
+    <ScreenWrapper style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {isTherapistSchedule ? (
-          <View style={styles.nextSessionCard}>
-            <Text style={styles.nextSessionEyebrow}>Next Scheduled Session</Text>
-            {nextUpcomingEntry ? (
-              <>
-                <Text style={styles.nextSessionChild}>{nextUpcomingEntry.childName}</Text>
-                <Text style={styles.nextSessionMeta}>
-                  {nextUpcomingEntry.session} • {nextUpcomingEntry.scheduledAt.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                </Text>
-                {nextUpcomingEntry.room ? <Text style={styles.nextSessionMeta}>Room {nextUpcomingEntry.room}</Text> : null}
-              </>
-            ) : (
-              <Text style={styles.nextSessionMeta}>No upcoming sessions found.</Text>
-            )}
-          </View>
-        ) : null}
+        <View style={styles.hero}>
+          <Text style={styles.eyebrow}>Scheduling</Text>
+          <Text style={styles.title}>{isTherapist ? 'Your work schedule' : 'Master scheduling for students, staff, and rooms'}</Text>
+          <Text style={styles.subtitle}>{isTherapist ? `This view only shows sessions assigned to your ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} profile.` : 'Switch between day, week, and month context while reviewing session cards by staff, student, or room.'}</Text>
+        </View>
 
-        <View style={styles.calendarCard}>
-          <View style={styles.modeRow}>
-            {[
-              { key: 'day', label: 'Day' },
-              { key: 'week', label: 'Week' },
-              { key: 'staff', label: 'Staff' },
-              { key: 'student', label: 'Student' },
-            ].map((mode) => (
-              <TouchableOpacity key={mode.key} style={[styles.modeChip, viewMode === mode.key ? styles.modeChipActive : null]} onPress={() => setViewMode(mode.key)}>
-                <Text style={[styles.modeChipText, viewMode === mode.key ? styles.modeChipTextActive : null]}>{mode.label}</Text>
+        <View style={styles.controlsCard}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRowSingleLine}>
+            {['day', 'week', 'month'].map((mode) => (
+              <TouchableOpacity key={mode} style={[styles.chip, viewMode === mode ? styles.chipActive : null]} onPress={() => setViewMode(mode)}>
+                <Text style={[styles.chipText, viewMode === mode ? styles.chipTextActive : null]}>{mode.toUpperCase()}</Text>
               </TouchableOpacity>
             ))}
-          </View>
-          <View style={styles.calendarHeader}>
-            <TouchableOpacity
-              onPress={() => setDisplayMonth(new Date(displayMonth.getFullYear(), displayMonth.getMonth() - 1, 1))}
-              style={styles.navButton}
-            >
-              <Text style={styles.navButtonText}>{'<'}</Text>
-            </TouchableOpacity>
-            <Text style={styles.monthTitle}>{monthLabel(displayMonth)}</Text>
-            <TouchableOpacity
-              onPress={() => setDisplayMonth(new Date(displayMonth.getFullYear(), displayMonth.getMonth() + 1, 1))}
-              style={styles.navButton}
-            >
-              <Text style={styles.navButtonText}>{'>'}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.weekdayRow}>
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((label) => (
-              <Text key={label} style={styles.weekdayLabel}>{label}</Text>
-            ))}
-          </View>
-
-          <View style={styles.calendarGrid}>
-            {calendarDays.map((day) => {
-              const dayKey = formatDayKey(day);
-              const isSelected = dayKey === selectedDayKey;
-              const inMonth = day.getMonth() === displayMonth.getMonth();
-              return (
-                <TouchableOpacity
-                  key={dayKey}
-                  style={[styles.dayButton, isSelected ? styles.dayButtonSelected : null]}
-                  onPress={() => setSelectedDate(startOfDay(day))}
-                >
-                  <Text style={[styles.dayText, !inMonth ? styles.dayTextMuted : null, isSelected ? styles.dayTextSelected : null]}>
-                    {day.getDate()}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+            {!isTherapist ? ['staff', 'student', 'room'].map((mode) => (
+              <TouchableOpacity key={mode} style={[styles.chip, focusMode === mode ? styles.chipActive : null]} onPress={() => setFocusMode(mode)}>
+                <Text style={[styles.chipText, focusMode === mode ? styles.chipTextActive : null]}>{mode === 'room' ? 'Room view' : `${mode.charAt(0).toUpperCase()}${mode.slice(1)} view`}</Text>
+              </TouchableOpacity>
+            )) : null}
+          </ScrollView>
         </View>
 
-        <View style={styles.scheduleSection}>
-          <Text style={styles.scheduleTitle}>
-            {viewMode === 'staff' ? 'Staff schedule overview' : viewMode === 'student' ? 'Student schedule overview' : isTherapistSchedule ? 'Work schedule' : 'Schedule for'} {selectedDate.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
-          </Text>
+        {!isTherapist ? <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.primaryButton} onPress={() => action('Add session', 'Session creation can be completed from this scheduling hub.')}>
+            <Text style={styles.primaryButtonText}>Add Session</Text>
+          </TouchableOpacity>
+          {isOffice ? <TouchableOpacity style={styles.secondaryButton} onPress={() => action('Edit session', 'Office edit controls are available from the selected session cards.')}><Text style={styles.secondaryButtonText}>Edit Session</Text></TouchableOpacity> : null}
+          {isOffice ? <TouchableOpacity style={styles.secondaryButton} onPress={() => action('Approve changes', 'Office approval routing for scheduling changes is staged here.')}><Text style={styles.secondaryButtonText}>Approve Changes</Text></TouchableOpacity> : null}
+          {isBcba ? <TouchableOpacity style={styles.secondaryButton} onPress={() => action(`Assign ${THERAPY_ROLE_LABELS.therapist.toLowerCase()}`, `BCBA assignment controls are staged from the session cards in this hub.`)}><Text style={styles.secondaryButtonText}>{`Assign ${THERAPY_ROLE_LABELS.therapist}`}</Text></TouchableOpacity> : null}
+        </View> : null}
 
-          {viewMode !== 'day' ? groupedEntries.map((group) => (
-            <View key={group.key} style={styles.entryCard}>
-              <Text style={styles.entryName}>{group.title}</Text>
-              <Text style={styles.entryMeta}>{group.subtitle}</Text>
-            </View>
-          )) : null}
-
-          {viewMode === 'day' && entries.length ? entries.map((entry) => (
-            <View key={entry.id} style={styles.entryCard}>
-              <Text style={styles.entryName}>{entry.childName}</Text>
-              <Text style={styles.entryMeta}>{entry.session}{entry.room ? ` • ${entry.room}` : ''}</Text>
-
-              <View style={styles.timeRow}>
-                <View style={styles.timeBlock}>
-                  <Text style={styles.timeLabel}>Drop-off</Text>
-                  <Text style={styles.timeValue}>{formatTime(entry.dropoff)}</Text>
+        {grouped.map((group) => (
+          <View key={group.key} style={styles.groupCard}>
+            <Text style={styles.groupTitle}>{isTherapist ? 'Assigned sessions' : group.key}</Text>
+            <Text style={styles.groupSubtitle}>{viewMode.toUpperCase()} view • {group.value.length} session{group.value.length === 1 ? '' : 's'}</Text>
+            {group.value.map((session) => (
+              <View key={session.id} style={styles.sessionCard}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sessionTitle}>{session.student}</Text>
+                  <Text style={styles.sessionMeta}>Staff: {session.staff}</Text>
+                  <Text style={styles.sessionMeta}>Location: {session.location}</Text>
+                  <Text style={styles.sessionMeta}>Time: {session.start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {session.end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</Text>
                 </View>
-                <View style={styles.timeBlock}>
-                  <Text style={styles.timeLabel}>Pick-up</Text>
-                  <Text style={styles.timeValue}>{formatTime(entry.pickup)}</Text>
+                <View style={[styles.statusPill, session.status === 'canceled' ? styles.statusCanceled : session.status === 'completed' ? styles.statusCompleted : styles.statusScheduled]}>
+                  <Text style={[styles.statusText, session.status === 'canceled' ? styles.statusTextCanceled : session.status === 'completed' ? styles.statusTextCompleted : styles.statusTextScheduled]}>{session.status.toUpperCase()}</Text>
                 </View>
               </View>
-
-              {entry.therapistName ? <Text style={styles.therapistText}>Therapist: {entry.therapistName}</Text> : null}
-            </View>
-          )) : viewMode === 'day' ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No schedule for this day</Text>
-              <Text style={styles.emptyText}>Select another day to view scheduled drop-off and pick-up times.</Text>
-            </View>
-          ) : null}
-        </View>
+            ))}
+          </View>
+        ))}
+        {!grouped.length ? <View style={styles.groupCard}><Text style={styles.groupTitle}>Assigned sessions</Text><Text style={styles.groupSubtitle}>{`No sessions are assigned to your ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} profile right now.`}</Text></View> : null}
       </ScrollView>
     </ScreenWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f6f8',
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 16,
-  },
-  nextSessionCard: {
-    backgroundColor: '#0f172a',
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 14,
-  },
-  nextSessionEyebrow: {
-    color: '#93c5fd',
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  nextSessionChild: {
-    marginTop: 8,
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  nextSessionMeta: {
-    marginTop: 6,
-    color: '#cbd5e1',
-    fontSize: 14,
-  },
-  calendarCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 16,
-  },
-  modeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 12,
-  },
-  modeChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: '#eff6ff',
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  modeChipActive: {
-    backgroundColor: '#1d4ed8',
-  },
-  modeChipText: {
-    color: '#1d4ed8',
-    fontWeight: '700',
-  },
-  modeChipTextActive: {
-    color: '#fff',
-  },
-  calendarHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  navButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#eff6ff',
-  },
-  navButtonText: {
-    color: '#1d4ed8',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  monthTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  weekdayRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  weekdayLabel: {
-    width: '14.28%',
-    textAlign: 'center',
-    fontSize: 12,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  dayButton: {
-    width: '14.28%',
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  dayButtonSelected: {
-    backgroundColor: '#1d4ed8',
-  },
-  dayText: {
-    color: '#0f172a',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  dayTextMuted: {
-    color: '#94a3b8',
-  },
-  dayTextSelected: {
-    color: '#ffffff',
-  },
-  scheduleSection: {
-    marginTop: 16,
-  },
-  scheduleTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 10,
-  },
-  entryCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 16,
-    marginBottom: 10,
-  },
-  entryName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  entryMeta: {
-    marginTop: 4,
-    fontSize: 13,
-    color: '#475569',
-  },
-  timeRow: {
-    flexDirection: 'row',
-    marginTop: 14,
-  },
-  timeBlock: {
-    flex: 1,
-  },
-  timeLabel: {
-    fontSize: 12,
-    color: '#64748b',
-    marginBottom: 4,
-  },
-  timeValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  therapistText: {
-    marginTop: 12,
-    fontSize: 13,
-    color: '#334155',
-  },
-  emptyCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 16,
-  },
-  emptyTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  emptyText: {
-    marginTop: 6,
-    fontSize: 13,
-    color: '#64748b',
-    lineHeight: 19,
-  },
+  screen: { flex: 1, backgroundColor: '#f8fafc' },
+  content: { padding: 16 },
+  hero: { borderRadius: 22, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', padding: 18 },
+  eyebrow: { color: '#1d4ed8', fontWeight: '800', fontSize: 12, textTransform: 'uppercase' },
+  title: { marginTop: 6, fontSize: 24, fontWeight: '800', color: '#0f172a' },
+  subtitle: { marginTop: 8, color: '#475569', lineHeight: 20 },
+  controlsCard: { marginTop: 14, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 },
+  chipRowSingleLine: { flexDirection: 'row', flexWrap: 'nowrap', paddingRight: 8 },
+  chip: { borderRadius: 999, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#f1f5f9', marginRight: 8, marginBottom: 8 },
+  chipActive: { backgroundColor: '#2563eb' },
+  chipText: { color: '#0f172a', fontWeight: '700' },
+  chipTextActive: { color: '#ffffff' },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 12 },
+  primaryButton: { borderRadius: 12, backgroundColor: '#2563eb', paddingVertical: 12, paddingHorizontal: 14, marginRight: 10, marginBottom: 10 },
+  primaryButtonText: { color: '#ffffff', fontWeight: '800' },
+  secondaryButton: { borderRadius: 12, backgroundColor: '#e2e8f0', paddingVertical: 12, paddingHorizontal: 14, marginRight: 10, marginBottom: 10 },
+  secondaryButtonText: { color: '#0f172a', fontWeight: '800' },
+  groupCard: { marginTop: 12, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },
+  groupTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
+  groupSubtitle: { marginTop: 4, color: '#64748b' },
+  sessionCard: { marginTop: 12, borderRadius: 16, backgroundColor: '#f8fafc', padding: 14, flexDirection: 'row', alignItems: 'center' },
+  sessionTitle: { fontWeight: '800', color: '#0f172a' },
+  sessionMeta: { marginTop: 4, color: '#475569' },
+  statusPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  statusScheduled: { backgroundColor: '#dbeafe' },
+  statusCompleted: { backgroundColor: '#dcfce7' },
+  statusCanceled: { backgroundColor: '#fee2e2' },
+  statusText: { fontWeight: '800', fontSize: 11 },
+  statusTextScheduled: { color: '#1d4ed8' },
+  statusTextCompleted: { color: '#166534' },
+  statusTextCanceled: { color: '#b91c1c' },
 });

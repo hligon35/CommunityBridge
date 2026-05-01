@@ -1,0 +1,147 @@
+1. Dashboard
+Organization overview
+Daily alerts (incidents, cancellations, overdue notes)
+Quick metrics (attendance, sessions today, compliance flags)
+2. Students
+Student roster
+Profiles (IEP, BIP, goals, permissions)
+Enrollment status
+Assigned BCBA / therapists
+Parent contacts
+3. Staff
+Therapist roster
+BCBA roster
+Credentials & expiration tracking
+Caseload assignments
+Availability
+4. Scheduling
+Master schedule
+Staff schedules
+Student schedules
+Room/space scheduling (if school-based)
+Session cancellations & makeups
+5. Programs & Goals
+Skill acquisition programs
+Behavior reduction programs
+Program templates
+Goal libraries
+BCBA approval workflow
+6. Data & Reports
+Session data review
+Graphs & progress charts
+Behavior incident logs
+Attendance reports
+Parent communication logs
+Export center (PDF, CSV, etc.)
+7. Billing & Authorizations
+(Optional if you want to support billing later)
+
+Insurance authorizations
+Hours remaining
+Session verification
+Billing exports
+8. Compliance
+Staff certifications
+Background checks
+CPR/First Aid
+RBT renewals
+Document expiration alerts
+Audit logs
+9. Communication
+Parent messages
+Staff messages
+Broadcast announcements
+Document sharing
+10. Settings
+Organization settings
+User roles & permissions
+Import center (your universal import pipeline)
+Integrations
+Branding
+{
+
+"permissions": {
+
+"dashboard": {
+
+"bcba": "full",
+
+"office": "full"
+
+},
+
+"students": {
+
+"bcba": "full_clinical",
+
+"office": "roster_only"
+
+},
+
+"staff": {
+
+"bcba": "view_only",
+
+"office": "full"
+
+},
+
+"scheduling": {
+
+"bcba": "clinical_scheduling",
+
+"office": "full"
+
+},
+
+"programs_goals": {
+
+"bcba": "full",
+
+"office": "none"
+
+},
+
+"data_reports": {
+
+"bcba": "clinical_reports",
+
+"office": "operational_reports"
+
+},
+
+"billing_authorizations": {
+
+"bcba": "view_only",
+
+"office": "full"
+
+},
+
+"compliance": {
+
+"bcba": "view_only",
+
+"office": "full"
+
+},
+
+"communication": {
+
+"bcba": "full_clinical",
+
+"office": "admin_only"
+
+},
+
+"settings": {
+
+"bcba": "limited",
+
+"office": "full"
+
+}
+
+}
+
+}

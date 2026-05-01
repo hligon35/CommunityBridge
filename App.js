@@ -27,6 +27,7 @@ import ChatsScreen from './src/screens/ChatsScreen';
 import ChatThreadScreen from './src/screens/ChatThreadScreen';
 import NewThreadScreen from './src/screens/NewThreadScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import AdminSettingsHubScreen from './src/screens/AdminSettingsHubScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import HelpScreen from './src/screens/HelpScreen';
 import MyClassScreen from './src/screens/MyClassScreen';
@@ -63,7 +64,7 @@ import TwoFactorScreen from './screens/TwoFactorScreen';
 import { initSentry, Sentry } from './src/sentry';
 import { CommonActions } from '@react-navigation/native';
 import { TenantProvider } from './src/core/tenant/TenantContext';
-import { isAdminRole, isStaffRole, normalizeUserRole } from './src/core/tenant/models';
+import { canAccessAdminWorkspace, isAdminRole, isBcbaRole, isStaffRole, normalizeUserRole } from './src/core/tenant/models';
 import { humanizeScreenLabel } from './src/utils/screenLabels';
 import TabletNavigationShell from './src/components/TabletNavigationShell';
 import useIsTabletLayout from './src/hooks/useIsTabletLayout';
@@ -121,30 +122,31 @@ function ControlsStack() {
       })}
     >
       <ControlsStackNav.Screen name="ControlsMain" component={AdminControlsScreen} options={{ title: 'Dashboard' }} />
-      <ControlsStackNav.Screen name="StudentDirectory" component={StudentDirectoryScreen} options={{ title: 'Student Directory' }} />
-      <ControlsStackNav.Screen name="FacultyDirectory" component={FacultyDirectoryScreen} options={{ title: 'Faculty Directory' }} />
+      <ControlsStackNav.Screen name="StudentDirectory" component={StudentDirectoryScreen} options={{ title: 'Students' }} />
+      <ControlsStackNav.Screen name="FacultyDirectory" component={FacultyDirectoryScreen} options={{ title: 'Staff' }} />
       <ControlsStackNav.Screen name="ParentDirectory" component={ParentDirectoryScreen} options={{ title: 'Parent Directory' }} />
       <ControlsStackNav.Screen name="ParentDetail" component={ParentDetailScreen} options={{ title: 'Parent' }} />
       <ControlsStackNav.Screen name="ChildDetail" component={ChildDetailScreen} options={{ title: 'Student' }} />
       <ControlsStackNav.Screen name="TapTracker" component={TapTrackerScreen} options={{ title: 'Tap Tracker' }} />
       <ControlsStackNav.Screen name="TapLogs" component={TapLogsScreen} options={{ title: 'Tap Logs' }} />
       <ControlsStackNav.Screen name="SummaryReview" component={SummaryReviewScreen} options={{ title: 'Session Report' }} />
-      <ControlsStackNav.Screen name="Reports" component={ReportsScreen} options={{ title: 'Reports' }} />
+      <ControlsStackNav.Screen name="Reports" component={ReportsScreen} options={{ title: 'Data & Reports' }} />
       <ControlsStackNav.Screen name="FacultyDetail" component={FacultyDetailScreen} options={{ title: 'Faculty' }} />
       <ControlsStackNav.Screen name="AdminMemos" component={AdminMemosScreen} options={{ title: 'Compose Memo' }} />
-      <ControlsStackNav.Screen name="AdminChatMonitor" component={AdminChatMonitorScreen} options={{ title: 'Chat Monitor' }} />
+      <ControlsStackNav.Screen name="AdminChatMonitor" component={AdminChatMonitorScreen} options={{ title: 'Communication' }} />
+      <ControlsStackNav.Screen name="AdminSettings" component={AdminSettingsHubScreen} options={{ title: 'Settings' }} />
       <ControlsStackNav.Screen name="UserMonitor" component={UserMonitorScreen} options={{ title: 'User Monitor' }} />
       <ControlsStackNav.Screen name="ChatThread" component={ChatThreadScreen} options={{ title: 'Thread' }} />
       <ControlsStackNav.Screen name="ManagePermissions" component={ManagePermissionsScreen} options={{ title: 'Manage Permissions' }} />
       <ControlsStackNav.Screen name="PrivacyDefaults" component={PrivacyDefaultsScreen} options={{ title: 'Profile Settings' }} />
-      <ControlsStackNav.Screen name="AdminAlerts" component={AdminAlertsScreen} options={{ title: 'Alerts' }} />
+      <ControlsStackNav.Screen name="AdminAlerts" component={AdminAlertsScreen} options={{ title: 'Compliance' }} />
       <ControlsStackNav.Screen name="InsuranceBilling" component={InsuranceBillingScreen} options={{ title: 'Billing & Authorizations' }} />
       
       <ControlsStackNav.Screen name="ImportCenter" component={ImportCenterScreen} options={{ title: 'Import Center' }} />
       <ControlsStackNav.Screen name="ExportData" component={ExportDataScreen} options={{ title: 'Export Data' }} />
       <ControlsStackNav.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
-      <ControlsStackNav.Screen name="ScheduleCalendar" component={ScheduleCalendarScreen} options={{ title: 'Schedule' }} />
-      <ControlsStackNav.Screen name="ProgramDirectory" component={ProgramDirectoryScreen} options={{ title: 'Program Directory' }} />
+      <ControlsStackNav.Screen name="ScheduleCalendar" component={ScheduleCalendarScreen} options={{ title: 'Scheduling' }} />
+      <ControlsStackNav.Screen name="ProgramDirectory" component={ProgramDirectoryScreen} options={{ title: 'Programs & Goals' }} />
       <ControlsStackNav.Screen name="CampusDirectory" component={CampusDirectoryScreen} options={{ title: 'Campus Directory' }} />
       <ControlsStackNav.Screen name="ProgramDocuments" component={ProgramDocumentsScreen} options={{ title: 'Program Documents' }} />
       <ControlsStackNav.Screen name="CampusDocuments" component={CampusDocumentsScreen} options={{ title: 'Campus Documents' }} />
@@ -261,10 +263,11 @@ function MainShell({ currentRoute }) {
 function MainRoutes() {
   const { user } = useAuth();
   const role = normalizeUserRole(user?.role);
-  const isBcbaWorkspace = role === 'bcba';
+  const isBcbaWorkspace = isBcbaRole(role);
+  const hasAdminWorkspace = canAccessAdminWorkspace(role);
 
   const screens = [];
-  if (!isAdminRole(role) && !isBcbaWorkspace) {
+  if (!hasAdminWorkspace) {
     screens.push({ name: 'Home', component: CommunityStack });
   }
   screens.push({ name: 'Chats', component: ChatsStack });
@@ -280,7 +283,7 @@ function MainRoutes() {
   screens.push({ name: 'Settings', component: SettingsStack });
 
   return (
-    <RootStack.Navigator screenOptions={{ headerShown: false }} initialRouteName={isAdminRole(role) || isBcbaWorkspace ? 'Controls' : 'Home'}>
+    <RootStack.Navigator screenOptions={{ headerShown: false }} initialRouteName={hasAdminWorkspace ? 'Controls' : 'Home'}>
       {screens.map(s => (
         <RootStack.Screen key={s.name} name={s.name} component={s.component} />
       ))}

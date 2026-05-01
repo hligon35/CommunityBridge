@@ -10,6 +10,7 @@ import { ScreenWrapper } from '../components/ScreenWrapper';
 import { avatarSourceFor, formatIdForDisplay } from '../utils/idVisibility';
 import * as Api from '../Api';
 import { isAdminRole } from '../core/tenant/models';
+import { getDisplayRoleLabel } from '../utils/roleTerminology';
 
 function AssignedChildrenList({ facultyId }) {
   const { children = [] } = useData();
@@ -77,7 +78,7 @@ export default function FacultyDetailScreen() {
     if (f.name && !f.name.toLowerCase().startsWith('therapist')) return f.name;
     if (f.firstName || f.lastName) return `${f.firstName || ''} ${f.lastName || ''}`.trim();
     // fallback to role if name is not present
-    return f.name || f.role || 'Staff';
+    return getDisplayRoleLabel(f.role || f.name || 'Staff');
   };
 
   // assigned children preview (same matching logic as AssignedChildrenList)
@@ -202,7 +203,7 @@ export default function FacultyDetailScreen() {
         <Image source={avatarSourceFor(faculty)} style={styles.avatar} />
         <View style={{ marginLeft: 12, flex: 1 }}>
           <Text style={styles.name}>{getDisplayName(faculty)}</Text>
-          <Text style={styles.role}>{faculty.role || 'Staff'}</Text>
+          <Text style={styles.role}>{getDisplayRoleLabel(faculty.role || 'Staff')}</Text>
           <Text style={styles.meta}>{formatIdForDisplay(faculty.id)}</Text>
           <View style={[styles.statusPill, { backgroundColor: complianceStatus.bg }]}>
             <Text style={[styles.statusPillText, { color: complianceStatus.color }]}>{complianceStatus.label}</Text>

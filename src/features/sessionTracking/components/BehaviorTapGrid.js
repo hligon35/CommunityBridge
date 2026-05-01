@@ -1,12 +1,27 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function BehaviorTapGrid({ groups = [], queuedEvents = [], disabled = false, onQueueEvent, onUndoLast }) {
   const [variantPicker, setVariantPicker] = useState(null);
   const [textPromptState, setTextPromptState] = useState(null);
   const [textPromptValue, setTextPromptValue] = useState('');
+  const [undoToast, setUndoToast] = useState('');
+  const [lastQueuedId, setLastQueuedId] = useState('');
 
   const queuedPreview = useMemo(() => queuedEvents.slice(-4).reverse(), [queuedEvents]);
+
+  useEffect(() => {
+    if (!undoToast) return undefined;
+    const timer = setTimeout(() => setUndoToast(''), 5000);
+    return () => clearTimeout(timer);
+  }, [undoToast]);
+
+  useEffect(() => {
+    const latestQueuedEvent = queuedEvents[queuedEvents.length - 1];
+    if (!latestQueuedEvent?.localId || latestQueuedEvent.localId === lastQueuedId) return;
+    setLastQueuedId(latestQueuedEvent.localId);
+    setUndoToast(`${latestQueuedEvent.label || 'Event'} queued`);
+  }, [lastQueuedId, queuedEvents]);
 
   function queuePreset(preset, intensityOverride = null, variantOption = null) {
     if (!preset || typeof onQueueEvent !== 'function') return;
@@ -39,21 +54,32 @@ export default function BehaviorTapGrid({ groups = [], queuedEvents = [], disabl
     queuePreset(preset);
   }
 
+  function handleUndoPress() {
+    if (!queuedEvents.length || disabled || typeof onUndoLast !== 'function') return;
+    onUndoLast();
+    setUndoToast('Last queued event removed');
+  }
+
   return (
     <View style={styles.root}>
-      <View style={styles.headerRow}>
-        <View style={styles.instructionsCard}>
-          <Text style={styles.instructionsTitle}>Live Tap Tracker</Text>
-          <Text style={styles.instructionsText}>Tap a button to open the event menu and define the event before it is queued.</Text>
+      {undoToast ? (
+        <View style={styles.toastWrap} pointerEvents="box-none">
+          <View style={styles.toastCard}>
+            <Text style={styles.toastText}>{undoToast}</Text>
+            {queuedEvents.length ? (
+              <TouchableOpacity style={styles.toastUndoButton} onPress={handleUndoPress} disabled={disabled}>
+                <Text style={styles.toastUndoText}>Undo</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
-        <TouchableOpacity style={[styles.undoButton, (!queuedEvents.length || disabled) ? styles.undoButtonDisabled : null]} disabled={!queuedEvents.length || disabled} onPress={onUndoLast}>
-          <Text style={styles.undoButtonText}>Undo Last</Text>
-        </TouchableOpacity>
-      </View>
+      ) : null}
 
       {queuedPreview.length ? (
         <View style={styles.queueWrap}>
-          <Text style={styles.queueTitle}>Queued before sync</Text>
+          <View style={styles.queueHeaderRow}>
+            <Text style={styles.queueTitle}>Queued before sync</Text>
+          </View>
           <View style={styles.queueChipRow}>
             {queuedPreview.map((event) => (
               <View key={event.localId} style={styles.queueChip}>
@@ -72,7 +98,7 @@ export default function BehaviorTapGrid({ groups = [], queuedEvents = [], disabl
             {group.items.map((preset) => (
               <TouchableOpacity
                 key={preset.key}
-                style={[styles.tile, disabled ? styles.tileDisabled : null]}
+                style={[styles.tile, group.items.length === 4 ? styles.tileFourAcross : styles.tileThreeAcross, disabled ? styles.tileDisabled : null]}
                 activeOpacity={0.88}
                 disabled={disabled}
                 onPress={() => handlePress(preset)}
@@ -88,7 +114,7 @@ export default function BehaviorTapGrid({ groups = [], queuedEvents = [], disabl
 
       <Modal transparent visible={!!variantPicker} animationType="fade" onRequestClose={() => setVariantPicker(null)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, styles.selectionModalCard]}>
             <Text style={styles.modalTitle}>{variantPicker?.variantPrompt?.title || variantPicker?.label || 'Choose detail'}</Text>
             <Text style={styles.modalSubtitle}>Add structured detail before the event is queued.</Text>
             <View style={styles.modalOptions}>
@@ -159,27 +185,13 @@ export default function BehaviorTapGrid({ groups = [], queuedEvents = [], disabl
 
 const styles = StyleSheet.create({
   root: { marginTop: 12 },
-  headerRow: { marginBottom: 8 },
-  instructionsCard: {
-    borderRadius: 14,
-    backgroundColor: '#eff6ff',
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
-    padding: 12,
-  },
-  instructionsTitle: { fontSize: 15, fontWeight: '800', color: '#1e3a8a' },
-  instructionsText: { marginTop: 4, color: '#334155', lineHeight: 18 },
-  undoButton: {
-    alignSelf: 'flex-end',
-    marginTop: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: '#e2e8f0',
-  },
-  undoButtonDisabled: { opacity: 0.45 },
-  undoButtonText: { color: '#0f172a', fontWeight: '800' },
+  toastWrap: { position: 'absolute', top: -6, left: 0, right: 0, alignItems: 'center', zIndex: 2 },
+  toastCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: '#0f172a' },
+  toastText: { color: '#ffffff', fontWeight: '700' },
+  toastUndoButton: { marginLeft: 12, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.16)' },
+  toastUndoText: { color: '#ffffff', fontWeight: '800', fontSize: 12 },
   queueWrap: { marginTop: 12 },
+  queueHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   queueTitle: { fontWeight: '700', color: '#334155', marginBottom: 8 },
   queueChipRow: { flexDirection: 'row', flexWrap: 'wrap' },
   queueChip: {
@@ -198,20 +210,22 @@ const styles = StyleSheet.create({
   sectionTitle: { fontWeight: '800', color: '#0f172a', marginBottom: 10, fontSize: 15 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   tile: {
-    width: '48%',
-    minHeight: 104,
+    minHeight: 112,
     borderRadius: 18,
     padding: 14,
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: '#dbeafe',
     marginBottom: 10,
-    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
   },
+  tileFourAcross: { width: '23.5%' },
+  tileThreeAcross: { width: '32%' },
   tileDisabled: { opacity: 0.5 },
   tileLabel: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
-  tileDescription: { marginTop: 8, color: '#475569', lineHeight: 18, fontSize: 12 },
-  tileMetaHint: { marginTop: 8, color: '#2563eb', fontSize: 11, fontWeight: '700' },
+  tileDescription: { marginTop: 4, color: '#475569', lineHeight: 18, fontSize: 12, flexGrow: 1, width: '100%' },
+  tileMetaHint: { marginTop: 10, color: '#2563eb', fontSize: 11, fontWeight: '700' },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.4)',
@@ -222,18 +236,24 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: '#ffffff',
     padding: 18,
+    width: '100%',
+    maxWidth: 460,
   },
+  selectionModalCard: { width: 'auto', maxWidth: 320, alignSelf: 'center', paddingVertical: 14, paddingHorizontal: 14 },
   modalTitle: { fontSize: 17, fontWeight: '800', color: '#0f172a' },
   modalSubtitle: { marginTop: 4, color: '#64748b' },
-  modalOptions: { marginTop: 14 },
+  modalOptions: { marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', alignSelf: 'flex-start' },
   modalOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderRadius: 12,
     backgroundColor: '#eff6ff',
-    marginBottom: 8,
+    marginBottom: 6,
+    marginRight: 6,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
-  modalOptionText: { color: '#1d4ed8', fontWeight: '800' },
+  modalOptionText: { color: '#1d4ed8', fontWeight: '800', fontSize: 12 },
   modalCancel: { marginTop: 4, alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 4 },
   modalCancelText: { color: '#64748b', fontWeight: '700' },
   modalInput: {

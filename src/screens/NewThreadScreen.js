@@ -6,6 +6,7 @@ import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { logPress } from '../utils/logger';
 import { isAdminRole } from '../core/tenant/models';
+import { THERAPY_ROLE_LABELS, getDisplayRoleLabel } from '../utils/roleTerminology';
 
 function normalizeName(s) {
   return (s || '').toString().trim();
@@ -88,7 +89,7 @@ export default function NewThreadScreen({ navigation }) {
     const adminContacts = [{ id: 'admin-1', name: 'Office Admin', subtitle: 'Admin' }];
 
     const normalizedTherapists = (therapists || [])
-      .map((t) => ({ id: t.id, name: normalizeName(t.name), subtitle: normalizeName(t.role) || 'Therapist' }))
+      .map((t) => ({ id: t.id, name: normalizeName(t.name), subtitle: getDisplayRoleLabel(normalizeName(t.role)) || THERAPY_ROLE_LABELS.therapist }))
       .filter((t) => t.id && t.name);
 
     const normalizedParents = (parents || [])
@@ -166,7 +167,7 @@ export default function NewThreadScreen({ navigation }) {
           admins: adminContacts,
           connectedTherapists: normalizedTherapists,
           connectedParents: normalizedParents,
-          note: 'Your account is not linked to a therapist record yet; showing all contacts.',
+          note: `Your account is not linked to an ${THERAPY_ROLE_LABELS.therapist} record yet; showing all contacts.`,
         };
       }
 
@@ -236,7 +237,7 @@ export default function NewThreadScreen({ navigation }) {
           {note ? <Text style={{ marginTop: 8, color: '#6b7280' }}>{note}</Text> : null}
 
           <RoleSection title="Admin" items={admins} selectedId={selected?.id} onPick={pick} />
-          <RoleSection title="Therapists" items={connectedTherapists} selectedId={selected?.id} onPick={pick} />
+          <RoleSection title={THERAPY_ROLE_LABELS.therapists} items={connectedTherapists} selectedId={selected?.id} onPick={pick} />
           <RoleSection title="Parents" items={connectedParents} selectedId={selected?.id} onPick={pick} />
 
           <TouchableOpacity

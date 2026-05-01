@@ -8,6 +8,7 @@ import { isSuperAdminRole, normalizeUserRole } from '../core/tenant/models';
 import { listActiveOrganizations } from '../core/tenant/OrganizationRepository';
 import { listProgramsByOrganization } from '../core/tenant/ProgramRepository';
 import { listCampusesByOrganization } from '../core/tenant/CampusRepository';
+import { THERAPY_ROLE_LABELS, getDisplayRoleLabel } from '../utils/roleTerminology';
 import * as Api from '../Api';
 
 const DEFAULT_ROLES = ['Admin', 'Teacher', 'Therapist', 'Parent', 'Staff'];
@@ -28,7 +29,7 @@ const PERMISSION_GROUPS = [
   {
     key: 'clinical',
     label: 'Clinical',
-    description: 'BCBA and therapist workflows, child editing, and clinical communication.',
+    description: `BCBA and ${THERAPY_ROLE_LABELS.therapist} workflows, child editing, and clinical communication.`,
     roles: ['Therapist', 'Teacher'],
   },
   {
@@ -41,7 +42,7 @@ const PERMISSION_GROUPS = [
 const ROLE_OPTIONS = [
   { value: 'parent', label: 'Parent', adminOnly: false },
   { value: 'faculty', label: 'Faculty', adminOnly: false },
-  { value: 'therapist', label: 'Therapist', adminOnly: false },
+  { value: 'therapist', label: THERAPY_ROLE_LABELS.therapist, adminOnly: false },
   { value: 'bcba', label: 'BCBA', adminOnly: false },
   { value: 'admin', label: 'Admin', adminOnly: true },
   { value: 'campusAdmin', label: 'Campus Admin', adminOnly: true },
@@ -410,13 +411,13 @@ export default function ManagePermissionsScreen(){
           activeOpacity={0.85}
           onPress={() => setRoleSectionsOpen((current) => ({ ...current, [role]: !current[role] }))}
         >
-          <Text style={styles.roleTitle}>{role}</Text>
+          <Text style={styles.roleTitle}>{getDisplayRoleLabel(role)}</Text>
           <MaterialIcons name={open ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={22} color={open ? '#2563eb' : '#6b7280'} />
         </TouchableOpacity>
         {open ? DEFAULT_CAPS.map((c) => (
           <View key={c.id} style={styles.capRow}>
             <Text style={styles.capLabel}>{c.label}</Text>
-            <ImageToggle value={!!caps[c.id]} onValueChange={(v) => toggle(role, c.id, v)} accessibilityLabel={`${role} ${c.label}`} disabled={!canManagePermissions || permissionsSaving} />
+            <ImageToggle value={!!caps[c.id]} onValueChange={(v) => toggle(role, c.id, v)} accessibilityLabel={`${getDisplayRoleLabel(role)} ${c.label}`} disabled={!canManagePermissions || permissionsSaving} />
           </View>
         )) : null}
       </View>
@@ -442,7 +443,7 @@ export default function ManagePermissionsScreen(){
         >
           <View style={styles.userHeaderTextWrap}>
             <Text style={styles.userName}>{userItem.name || 'Unnamed user'}</Text>
-            <Text style={styles.userMeta}>{userItem.email || 'No email'} • {draft.role || 'parent'}</Text>
+            <Text style={styles.userMeta}>{userItem.email || 'No email'} • {getDisplayRoleLabel(draft.role || 'parent')}</Text>
           </View>
           <MaterialIcons name={open ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={22} color={open ? '#2563eb' : '#6b7280'} />
         </TouchableOpacity>

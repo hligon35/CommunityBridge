@@ -9,6 +9,7 @@ import MoodTrackerCard from '../components/MoodTrackerCard';
 import { isAdminRole, isStaffRole } from '../core/tenant/models';
 import SessionSummarySnapshot from '../components/SessionSummarySnapshot';
 import { resolveTherapyWorkspaceTarget } from '../features/sessionTracking/utils/dashboardSessionTarget';
+import { THERAPY_ROLE_LABELS, getDisplayRoleLabel } from '../utils/roleTerminology';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
 const { PREVIEW_CHILD } = require('../features/sessionTracking/utils/previewWorkspace');
@@ -76,14 +77,14 @@ export default function ChildDetailScreen() {
 
       {canManageSession ? (
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Therapy Workspace</Text>
-          <Text style={styles.sectionText}>The therapist workflow now runs through dedicated screens so tracking, summary review, and reporting all share the same session state and preview behavior.</Text>
-          {isSessionPreview ? <Text style={styles.previewBanner}>Preview mode is available from each therapist tool without saving any learner data.</Text> : null}
+          <Text style={styles.sectionTitle}>{THERAPY_ROLE_LABELS.therapist} Workspace</Text>
+          <Text style={styles.sectionText}>The {THERAPY_ROLE_LABELS.therapist} workflow now runs through dedicated screens so tracking, summary review, and reporting all share the same session state and preview behavior.</Text>
+          {isSessionPreview ? <Text style={styles.previewBanner}>Preview mode is available from each {THERAPY_ROLE_LABELS.therapist} tool without saving any learner data.</Text> : null}
           <View style={styles.launchGrid}>
             <TouchableOpacity style={styles.launchCard} onPress={() => openTherapyRoute('TapTracker')}>
               <MaterialIcons name="touch-app" size={20} color="#2563eb" />
               <Text style={styles.launchTitle}>Tap Tracker</Text>
-              <Text style={styles.launchHint}>Open live event capture and therapist notes.</Text>
+              <Text style={styles.launchHint}>Open live event capture and {THERAPY_ROLE_LABELS.therapist.toLowerCase()} notes.</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.launchCard} onPress={() => openTherapyRoute('SummaryReview')}>
               <MaterialIcons name="fact-check" size={20} color="#2563eb" />
@@ -149,13 +150,13 @@ export default function ChildDetailScreen() {
       ) : null}
 
       {!isSessionPreview ? <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Therapists</Text>
+        <Text style={styles.sectionTitle}>{THERAPY_ROLE_LABELS.therapists}</Text>
         {child.amTherapist ? (
           <TouchableOpacity style={styles.personRow} onPress={() => navigation.navigate('FacultyDetail', { facultyId: child.amTherapist.id })}>
             <Image source={avatarSourceFor(child.amTherapist)} style={styles.smallAvatar} />
             <View style={{ marginLeft: 8 }}>
               <Text style={{ fontWeight: '700' }}>{child.amTherapist.name}</Text>
-              <Text style={{ color: '#6b7280' }}>{child.amTherapist.role}</Text>
+              <Text style={{ color: '#6b7280' }}>{getDisplayRoleLabel(child.amTherapist.role)}</Text>
             </View>
           </TouchableOpacity>
         ) : null}
@@ -164,7 +165,7 @@ export default function ChildDetailScreen() {
             <Image source={avatarSourceFor(child.pmTherapist)} style={styles.smallAvatar} />
             <View style={{ marginLeft: 8 }}>
               <Text style={{ fontWeight: '700' }}>{child.pmTherapist.name}</Text>
-              <Text style={{ color: '#6b7280' }}>{child.pmTherapist.role}</Text>
+              <Text style={{ color: '#6b7280' }}>{getDisplayRoleLabel(child.pmTherapist.role)}</Text>
             </View>
           </TouchableOpacity>
         ) : null}
@@ -173,7 +174,7 @@ export default function ChildDetailScreen() {
             <Image source={avatarSourceFor(child.bcaTherapist)} style={styles.smallAvatar} />
             <View style={{ marginLeft: 8 }}>
               <Text style={{ fontWeight: '700' }}>{child.bcaTherapist.name}</Text>
-              <Text style={{ color: '#6b7280' }}>{child.bcaTherapist.role}</Text>
+              <Text style={{ color: '#6b7280' }}>{getDisplayRoleLabel(child.bcaTherapist.role)}</Text>
             </View>
           </TouchableOpacity>
         ) : null}

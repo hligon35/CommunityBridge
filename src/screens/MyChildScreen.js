@@ -11,6 +11,7 @@ import ImageToggle from '../components/ImageToggle';
 import SessionSummarySnapshot from '../components/SessionSummarySnapshot';
 import { childHasParent, findLinkedParentId } from '../utils/directoryLinking';
 import { avatarSourceFor } from '../utils/idVisibility';
+import { THERAPY_ROLE_LABELS, getAssignmentRoleLabel, getDisplayRoleLabel } from '../utils/roleTerminology';
 import { useTenant } from '../core/tenant/TenantContext';
 import { isAdminRole, isStaffRole } from '../core/tenant/models';
 import { getLatestChildSessionSummary } from '../Api';
@@ -355,9 +356,9 @@ export default function MyChildScreen() {
         ) : latestApprovedSummary?.summary ? (
           <SessionSummarySnapshot
             summary={latestApprovedSummary}
-            title="Approved Therapist Summary"
+            title={`Approved ${THERAPY_ROLE_LABELS.therapist} Summary`}
             subtitle={latestApprovedSummarySubtitle}
-            emptyText="No approved therapist summary is available yet."
+            emptyText={`No approved ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} summary is available yet.`}
           />
         ) : (
           <View style={styles.reviewAccordionList}>
@@ -510,18 +511,18 @@ export default function MyChildScreen() {
             </View>
 
             <View style={styles.sectionCompact}>
-              <Text style={styles.sectionTitle}>Therapists</Text>
+              <Text style={styles.sectionTitle}>{THERAPY_ROLE_LABELS.therapists}</Text>
               {studentTherapistCards.length ? (
                 <View style={styles.peopleCardGrid}>
                   {studentTherapistCards.map((therapist, index) => (
                     <View key={therapist?.cardKey || therapist?.id || `therapist-${index}`} style={styles.personCard}>
                       <Image source={avatarSourceFor(therapist)} style={styles.personCardAvatar} />
-                      <Text style={styles.personCardName} numberOfLines={2}>{shortName(therapist?.name, 18) || 'Therapist'}</Text>
+                      <Text style={styles.personCardName} numberOfLines={2}>{shortName(therapist?.name, 18) || THERAPY_ROLE_LABELS.therapist}</Text>
                     </View>
                   ))}
                 </View>
               ) : (
-                <Text style={styles.sectionText}>No therapists assigned yet.</Text>
+                <Text style={styles.sectionText}>{`No ${THERAPY_ROLE_LABELS.therapists.toLowerCase()} assigned yet.`}</Text>
               )}
             </View>
           </>
@@ -533,69 +534,69 @@ export default function MyChildScreen() {
                   <Image source={avatarSourceFor(child.bcaTherapist)} style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#eee' }} />
                   <View style={{ flex: 1, marginLeft: 12 }}>
                     <Text style={styles.name}>{shortName(child.bcaTherapist.name, 20)}</Text>
-                    <Text style={styles.meta}>{child.bcaTherapist.role}</Text>
+                    <Text style={styles.meta}>{getDisplayRoleLabel(child.bcaTherapist.role)}</Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
-                    <TouchableOpacity onPress={() => openPhone(child.bcaTherapist.phone)} style={{ paddingVertical: 6 }} accessibilityLabel="Call BCA therapist">
+                    <TouchableOpacity onPress={() => openPhone(child.bcaTherapist.phone)} style={{ paddingVertical: 6 }} accessibilityLabel="Call BCBA">
                       <MaterialIcons name="call" size={20} color="#2563eb" />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => openEmail(child.bcaTherapist.email)} style={{ paddingVertical: 6 }} accessibilityLabel="Email BCA therapist">
+                    <TouchableOpacity onPress={() => openEmail(child.bcaTherapist.email)} style={{ paddingVertical: 6 }} accessibilityLabel="Email BCBA">
                       <MaterialIcons name="email" size={20} color="#2563eb" />
                     </TouchableOpacity>
                   </View>
                 </>
               ) : (
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.name}>BCA Therapist</Text>
-                  <Text style={styles.meta}>No BCA therapist assigned.</Text>
+                  <Text style={styles.name}>BCBA</Text>
+                  <Text style={styles.meta}>No BCBA assigned.</Text>
                 </View>
               )}
             </View>
 
             <View style={[styles.row, { marginTop: 12 }]}> 
               <View style={[styles.therapistBlock, { marginRight: 8 }]}>
-                <Text style={styles.therapistTitle}>AM Therapist</Text>
+                <Text style={styles.therapistTitle}>{THERAPY_ROLE_LABELS.amTherapist}</Text>
                 {child.amTherapist ? (
                   <View style={styles.therapistInner}>
                     <Image source={avatarSourceFor(child.amTherapist)} style={styles.therapistAvatar} />
                     <View style={{ flex: 1, marginLeft: 8, alignItems: 'center' }}>
                       <Text style={styles.therapistName}>{shortName(child.amTherapist.name, 18)}</Text>
-                      <Text style={styles.therapistRole}>{child.amTherapist.role}</Text>
+                      <Text style={styles.therapistRole}>{getDisplayRoleLabel(child.amTherapist.role)}</Text>
                       <View style={styles.amIconRow}>
-                        <TouchableOpacity onPress={() => openPhone(child.amTherapist.phone)} style={styles.iconTouch} accessibilityLabel="Call AM therapist">
+                        <TouchableOpacity onPress={() => openPhone(child.amTherapist.phone)} style={styles.iconTouch} accessibilityLabel={`Call ${THERAPY_ROLE_LABELS.amTherapist}`}>
                           <MaterialIcons name="call" size={22} color="#2563eb" />
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => openEmail(child.amTherapist.email)} style={styles.iconTouch} accessibilityLabel="Email AM therapist">
+                        <TouchableOpacity onPress={() => openEmail(child.amTherapist.email)} style={styles.iconTouch} accessibilityLabel={`Email ${THERAPY_ROLE_LABELS.amTherapist}`}>
                           <MaterialIcons name="email" size={22} color="#2563eb" />
                         </TouchableOpacity>
                       </View>
                     </View>
                   </View>
                 ) : (
-                  <Text style={styles.sectionText}>No AM therapist assigned.</Text>
+                  <Text style={styles.sectionText}>{`No ${THERAPY_ROLE_LABELS.amTherapist.toLowerCase()} assigned.`}</Text>
                 )}
               </View>
 
               <View style={[styles.therapistBlock, { marginLeft: 8 }]}>
-                <Text style={styles.therapistTitle}>PM Therapist</Text>
+                <Text style={styles.therapistTitle}>{THERAPY_ROLE_LABELS.pmTherapist}</Text>
                 {child.pmTherapist ? (
                   <View style={styles.therapistInner}>
                     <Image source={avatarSourceFor(child.pmTherapist)} style={styles.therapistAvatar} />
                     <View style={{ flex: 1, marginLeft: 8, alignItems: 'center' }}>
                       <Text style={styles.therapistName}>{shortName(child.pmTherapist.name, 18)}</Text>
-                      <Text style={styles.therapistRole}>{child.pmTherapist.role}</Text>
+                      <Text style={styles.therapistRole}>{getDisplayRoleLabel(child.pmTherapist.role)}</Text>
                       <View style={styles.amIconRow}>
-                        <TouchableOpacity onPress={() => openPhone(child.pmTherapist.phone)} style={styles.iconTouch} accessibilityLabel="Call PM therapist">
+                        <TouchableOpacity onPress={() => openPhone(child.pmTherapist.phone)} style={styles.iconTouch} accessibilityLabel={`Call ${THERAPY_ROLE_LABELS.pmTherapist}`}>
                           <MaterialIcons name="call" size={22} color="#2563eb" />
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => openEmail(child.pmTherapist.email)} style={styles.iconTouch} accessibilityLabel="Email PM therapist">
+                        <TouchableOpacity onPress={() => openEmail(child.pmTherapist.email)} style={styles.iconTouch} accessibilityLabel={`Email ${THERAPY_ROLE_LABELS.pmTherapist}`}>
                           <MaterialIcons name="email" size={22} color="#2563eb" />
                         </TouchableOpacity>
                       </View>
                     </View>
                   </View>
                 ) : (
-                  <Text style={styles.sectionText}>No PM therapist assigned.</Text>
+                  <Text style={styles.sectionText}>{`No ${THERAPY_ROLE_LABELS.pmTherapist.toLowerCase()} assigned.`}</Text>
                 )}
               </View>
             </View>

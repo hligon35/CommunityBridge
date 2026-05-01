@@ -1,0 +1,195 @@
+[
+  {
+    "session": {
+      "sessionId": "string",
+      "date": "2026-04-27",
+      "student": {
+        "id": "string",
+        "name": "string"
+      }
+    }
+  },
+
+  {
+    "moodScore": {
+      "scale": [
+        {
+          "value": 1,
+          "label": "Very Upset",
+          "rangeDescription": "Severely dysregulated; crying, yelling, meltdown behavior; unable to participate."
+        },
+        {
+          "value": 2,
+          "label": "Upset",
+          "rangeDescription": "Dysregulated; frustrated or irritable; difficulty transitioning; frequent prompting needed."
+        },
+        {
+          "value": 3,
+          "label": "Neutral",
+          "rangeDescription": "Calm, baseline; participates with typical prompting; stable mood."
+        },
+        {
+          "value": 4,
+          "label": "Happy",
+          "rangeDescription": "Regulated; engaged and cooperative; positive affect."
+        },
+        {
+          "value": 5,
+          "label": "Very Happy",
+          "rangeDescription": "Highly regulated; enthusiastic; initiates interaction; smooth transitions."
+        }
+      ]
+    }
+  },
+
+  {
+    "dailyRecap": {
+      "progressLevel": [
+        "Significant progress",
+        "Moderate progress",
+        "Minimal progress",
+        "No progress",
+        "Regression observed"
+      ],
+      "interferingBehaviorLevel": [
+        "None",
+        "Minimal",
+        "Moderate",
+        "High"
+      ],
+      "independenceLevel": [
+        "Significant increase",
+        "Moderate increase",
+        "Slight increase",
+        "No change",
+        "Decrease"
+      ]
+    }
+  },
+
+  {
+    "monthlyGoal": {
+      "category": [
+        "Communication",
+        "Social Skills",
+        "Play Skills",
+        "Daily Living Skills",
+        "Emotional Regulation",
+        "Tolerance Skills",
+        "Transitions",
+        "Motor Skills",
+        "Academic Readiness",
+        "Safety Skills"
+      ],
+      "description": "string",
+      "targetCriteria": "string"
+    }
+  },
+
+  {
+    "successCriteriaMet": [
+      "Attends to technician signals",
+      "Accepts denial/termination",
+      "Uses items in multiple ways",
+      "Interactive play",
+      "De-escalates when precursors acknowledged",
+      "Follows boundaries",
+      "Responds to peer mands",
+      "Learner readiness",
+      "Maintains engagement",
+      "Completes task independently",
+      "Completes task with prompting"
+    ]
+  },
+
+  {
+    "programsWorkedOn": [
+      "RBT Foundational Care Plan Review",
+      "Respond to Peers' Mands for Items",
+      "Receptive ID Emotions",
+      "Accepting Denial/Termination",
+      "Boundaries",
+      "Attends to Technician's Signals",
+      "Alternative Activity Selection",
+      "Receptive ID Actions",
+      "Uses Items in Multiple Ways",
+      "Interactive Play",
+      "De-escalates When Precursors Acknowledged",
+      "Cooperative Play with Therapist",
+      "Learner Readiness Skills",
+      "Expressive Language",
+      "Manding",
+      "Tacting",
+      "Transitions",
+      "Tolerance Training",
+      "Imitation (Motor/Vocal)",
+      "Listener Responding",
+      "Daily Living Skills",
+      "Behavior Reduction Programs"
+    ]
+  },
+
+  {
+    "interferingBehaviors": {
+      "behavior": [
+        "Tantrum",
+        "Crying",
+        "Screaming",
+        "Aggression",
+        "Self-injury",
+        "Elopement",
+        "Spitting/Snotting",
+        "Property Destruction",
+        "Noncompliance",
+        "Low-intensity meltdown",
+        "High-intensity meltdown",
+        "Stereotypy",
+        "Dropping to floor",
+        "Bolting",
+        "Refusal"
+      ],
+      "frequency": [0, 1, 2, 3, 4, 5],
+      "intensity": [
+        "None",
+        "Precursor",
+        "Low",
+        "Moderate",
+        "High",
+        "Detracting",
+        "Hazardous"
+      ]
+    }
+  },
+
+  {
+    "meals": {
+      "type": [
+        "Breakfast",
+        "Snack",
+        "Lunch",
+        "Dinner"
+      ],
+      "note": [
+        "Ate all",
+        "Ate most",
+        "Ate some",
+        "Refused",
+        "Tried new food"
+      ]
+    }
+  },
+
+  {
+    "toileting": {
+      "status": [
+        "Independent",
+        "Prompted",
+        "Assisted",
+        "Accident – Urine",
+        "Accident – Bowel",
+        "Successful void",
+        "No attempt"
+      ]
+    }
+  }
+]

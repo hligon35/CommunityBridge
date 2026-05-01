@@ -2,7 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
+import { hasFullAdminSectionAccess, ADMIN_SECTION_KEYS } from '../core/tenant/models';
 import * as Api from '../Api';
 
 function normalizeImportedDirectory(payload) {
@@ -18,7 +20,9 @@ function normalizeImportedDirectory(payload) {
 }
 
 export default function ImportCenterScreen() {
+  const { user } = useAuth();
   const { fetchAndSync } = useData();
+  const canManageImports = hasFullAdminSectionAccess(user?.role, ADMIN_SECTION_KEYS.SETTINGS);
   const [pickedFile, setPickedFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [lastImportSummary, setLastImportSummary] = useState(null);
@@ -29,6 +33,16 @@ export default function ImportCenterScreen() {
     parents: [{ id: 'parent-001', name: 'Sample Parent', email: 'parent@example.com' }],
     therapists: [{ id: 'staff-001', name: 'Sample BCBA', role: 'bcba', email: 'bcba@example.com' }],
   }), []);
+
+  if (!canManageImports) {
+    return (
+      <ScreenWrapper style={styles.container}>
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyText}>Import Center is reserved for office admin workflow.</Text>
+        </View>
+      </ScreenWrapper>
+    );
+  }
 
   React.useEffect(() => {
     let mounted = true;
@@ -190,4 +204,6 @@ const styles = StyleSheet.create({
   auditRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
   auditAction: { color: '#0f172a', fontWeight: '700' },
   auditMeta: { marginTop: 4, color: '#64748b' },
+  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  emptyText: { color: '#475569', textAlign: 'center', lineHeight: 22 },
 });

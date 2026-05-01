@@ -1,0 +1,84 @@
+You are the implementation engine for the ABA Family Connection App in this workspace.
+
+Your mission:
+Analyze the entire codebase and implement the complete therapist workflow system while staying fully aligned with the existing design, component patterns, navigation structure, and styling conventions.
+
+The system you must implement includes:
+
+1. Real-time Tap Tracker
+   - Behavior buttons with counters
+   - Long-press for intensity selection
+   - Swipe or undo for removing last event
+   - All taps stored in eventLog[] with timestamps
+
+2. Automatic Session Summary Generator
+   - Convert eventLog[] into a structured summary
+   - Output written to a file named `SessionSummary.txt`
+   - Summary must follow the JSON schema already defined in the app
+   - Summary must be editable before submission
+
+3. Parent Progress Report Integration
+   - After therapist submits the summary, it must populate the parent-facing progress report path
+   - Ensure the parent view only sees the final summary, not raw event logs
+
+4. Therapist Modules to Implement
+   - Session logistics (start/end time, duration, location, service type)
+   - Prompt levels (independent → full physical)
+   - Reinforcement tracking (primary, secondary, token progress)
+   - ABC notes (antecedent, behavior, consequence)
+   - Skill acquisition trial data (correct, incorrect, prompted, no response)
+   - Session notes (free text)
+   - Parent communication log
+   - Attendance/absence tracking
+   - Generalization & maintenance indicators
+   - Safety/incident reporting (optional module)
+   - BCBA review/sign-off (optional module)
+
+5. UI Requirements
+   - Maintain the existing design system, typography, spacing, and component patterns
+   - Build new screens only when necessary
+   - Reuse existing components where possible
+   - Create:
+     - Start Session screen
+     - Tap Tracker screen
+     - Auto-Generated Summary screen
+     - Summary Editor screen
+     - Parent Progress Report view (if missing)
+   - All UI must match the current app’s visual language
+
+6. Data Model Requirements
+   - eventLog[]: raw behavior events with timestamps and intensity
+   - summary{}: final therapist-approved session summary
+   - SessionSummary.txt: generated text file containing the summary
+   - Parent progress report path: must reference the summary
+
+What to analyze:
+- Current folder structure
+- Existing screens, components, hooks, services
+- Navigation flow
+- State management (Redux, Zustand, Context, etc.)
+- Database integration (Firestore, Supabase, REST, etc.)
+- Any existing session or behavior tracking logic
+- Design system tokens, colors, spacing, typography
+- Opportunities for modularization and reuse
+
+What to produce:
+Implement the system directly in the workspace AND create a file named `BEHAVIOR_SYSTEM_IMPLEMENTATION_PLAN.md` containing:
+
+1. Summary of what was added or modified
+2. New components created
+3. New hooks/services created
+4. Updated navigation flow
+5. Updated data models
+6. Any TODOs or follow-up tasks Copilot should continue implementing
+
+Rules:
+- Do NOT break existing functionality.
+- All changes must be additive, modular, and consistent with the current design.
+- Follow the existing coding style, naming conventions, and file structure.
+- If a component already exists that can be reused, reuse it.
+- If logic exists that can be extended, extend it instead of replacing it.
+- Ensure the system is idempotent: running this prompt again should refine, not break, the implementation.
+
+Final instruction:
+Begin implementation now. Analyze the workspace, create the required components, update the data models, integrate the tap tracker and summary system, and generate the implementation plan file.

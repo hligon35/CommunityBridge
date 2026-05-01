@@ -5,6 +5,7 @@ import WebNav from './WebNav';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTenant } from '../core/tenant/TenantContext';
 import { humanizeScreenLabel } from '../utils/screenLabels';
+import useIsTabletLayout from '../hooks/useIsTabletLayout';
 
 export function ScreenWrapper({
   children,
@@ -20,7 +21,9 @@ export function ScreenWrapper({
   const navigation = useNavigation();
   const route = useRoute();
   const tenant = useTenant();
+  const isTabletLayout = useIsTabletLayout();
   const labels = tenant?.labels || {};
+  const isWeb = Platform.OS === 'web';
 
   const nameMap = {
     CommunityMain: 'Home',
@@ -36,6 +39,9 @@ export function ScreenWrapper({
     FacultyDirectory: labels.facultyDirectory || 'Faculty Directory',
     ChildDetail: 'Student',
     FacultyDetail: labels.facultyDetail || 'Faculty',
+    TapTracker: 'Tap Tracker',
+    SummaryReview: 'Session Report',
+    ScheduleCalendar: 'Schedule',
     ManagePermissions: 'Manage Permissions',
     PrivacyDefaults: 'Profile Settings',
     ModeratePosts: 'Moderate Posts',
@@ -43,17 +49,15 @@ export function ScreenWrapper({
   };
 
   const title = bannerTitle || nameMap[route?.name] || humanizeScreenLabel(route?.name) || '';
-  const computedShowBack = navigation && navigation.canGoBack && navigation.canGoBack() && title !== 'Home';
+  const computedShowBack = !isWeb && navigation && navigation.canGoBack && navigation.canGoBack() && title !== 'Home';
   const showBack = (typeof bannerShowBack === 'boolean') ? bannerShowBack : computedShowBack;
-
-  const isWeb = Platform.OS === 'web';
   const resolvedWebBottomSpacerHeight = typeof webBottomSpacerHeight === 'number' ? webBottomSpacerHeight : 24;
   const resolvedBottomSpacerHeight = typeof bottomSpacerHeight === 'number' ? bottomSpacerHeight : 72;
 
   return (
     <View style={[{ flex: 1, width: '100%', backgroundColor: isWeb ? '#f0f2f5' : '#fff' }, style]}>
       {/* web: show top WebNav; mobile: show ScreenHeader */}
-      {isWeb
+      {isWeb && !isTabletLayout
         ? <WebNav />
         : (!hideBanner && <ScreenHeader title={title} showBack={showBack} left={bannerLeft} right={bannerRight} />)}
 
