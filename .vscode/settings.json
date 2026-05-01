@@ -1,0 +1,13 @@
+{
+    "chat.agent.maxRequests": 250,
+    "chat.agent.allowedNetworkDomains": [
+        "*.communitybridge.app",
+        "*.getsparqd.com",
+        "*.lifeprepacademyfoundation.com",
+        "*.blackbridgemindset.com",
+        "*off-season.io",
+        "*.after8app.com",
+        "*.alphazonelabs.com",
+        "*.hldesignedit.com"
+    ]
+}

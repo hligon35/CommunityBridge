@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StatusBar, Platform } from 'react-native';
+import { StatusBar, Platform, AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 // Temporarily remove TailwindProvider if not available at runtime
 import { NavigationContainer } from '@react-navigation/native';
@@ -273,7 +273,12 @@ function MainRoutes() {
   screens.push({ name: 'Chats', component: ChatsStack });
 
   if (isStaffRole(role)) {
-    if (isBcbaWorkspace) screens.push({ name: 'Controls', component: ControlsStack });
+    if (isBcbaWorkspace) {
+      screens.push({ name: 'Controls', component: ControlsStack });
+    } else {
+      // Therapists / faculty: surface the My Class workspace defined in MyClassStack.
+      screens.push({ name: 'MyClass', component: MyClassStack });
+    }
   } else if (isAdminRole(role)) {
     screens.push({ name: 'Controls', component: ControlsStack });
   } else {
@@ -373,6 +378,57 @@ function AppNavigator() {
       // ignore
     }
   }, [auth?.loading, auth?.token, auth?.needsMfa]);
+
+  useEffect(() => {
+    // Drain any writes that were queued during a network outage.
+    // Triggered: when auth becomes available, when the app returns to the
+    // foreground (native), and when the browser regains the `online` event
+    // (web). Failures inside the queue are swallowed so this never disrupts
+    // the UI.
+    if (!auth?.token || auth?.needsMfa) return undefined;
+
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      try {
+        // Lazy-require so this module doesn't get pulled in unless auth is ready.
+        // eslint-disable-next-line global-require
+        const { flushOfflineQueue } = require('./src/Api');
+        if (typeof flushOfflineQueue === 'function') {
+          flushOfflineQueue().catch(() => {});
+        }
+      } catch (_) { /* ignore */ }
+    };
+
+    run();
+
+    let appStateSub = null;
+    try {
+      if (Platform.OS !== 'web' && AppState && typeof AppState.addEventListener === 'function') {
+        appStateSub = AppState.addEventListener('change', (next) => {
+          if (next === 'active') run();
+        });
+      }
+    } catch (_) { /* ignore */ }
+
+    let onlineHandler = null;
+    try {
+      if (Platform.OS === 'web' && typeof globalThis.addEventListener === 'function') {
+        onlineHandler = () => run();
+        globalThis.addEventListener('online', onlineHandler);
+      }
+    } catch (_) { /* ignore */ }
+
+    return () => {
+      cancelled = true;
+      try { appStateSub?.remove?.(); } catch (_) { /* ignore */ }
+      try {
+        if (onlineHandler && typeof globalThis.removeEventListener === 'function') {
+          globalThis.removeEventListener('online', onlineHandler);
+        }
+      } catch (_) { /* ignore */ }
+    };
+  }, [auth?.token, auth?.needsMfa]);
 
   return (
     <NavigationContainer

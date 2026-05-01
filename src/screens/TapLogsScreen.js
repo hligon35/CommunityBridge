@@ -1,5 +1,5 @@
-import React from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useData } from '../DataContext';
@@ -7,6 +7,7 @@ import { useAuth } from '../AuthContext';
 import { isAdminRole, isStaffRole } from '../core/tenant/models';
 import { useTherapySessionWorkspace } from '../features/sessionTracking/hooks/useTherapySessionWorkspace';
 import { THERAPY_ROLE_LABELS } from '../utils/roleTerminology';
+import * as Api from '../Api';
 
 export default function TapLogsScreen() {
   const route = useRoute();
@@ -22,11 +23,51 @@ export default function TapLogsScreen() {
   const workspace = useTherapySessionWorkspace({ child, preview, canManageSession, fetchAndSync });
   const items = inactivePreview ? [] : [...(workspace.recentEvents || [])];
 
+  const [pendingRequest, setPendingRequest] = useState(null);
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const sessionId = workspace?.activeSession?.id || null;
+
+  function openRequest(action, item) {
+    if (!sessionId) {
+      Alert.alert('No active session', 'Change requests can only be filed against the current session.');
+      return;
+    }
+    if (!item?.feedId) {
+      Alert.alert('Cannot request change', 'This event is not yet synced. Try again in a moment.');
+      return;
+    }
+    setReason('');
+    setPendingRequest({ action, eventId: item.feedId, label: item.label || 'event' });
+  }
+
+  async function submitRequest() {
+    if (!pendingRequest || submitting) return;
+    setSubmitting(true);
+    try {
+      await Api.requestTherapyEventChange({
+        sessionId,
+        eventId: pendingRequest.eventId,
+        action: pendingRequest.action,
+        reason: reason.trim(),
+      });
+      setPendingRequest(null);
+      setReason('');
+      Alert.alert('Request submitted', 'An admin will review your request and follow up.');
+    } catch (e) {
+      const msg = e?.message || 'Could not submit change request.';
+      Alert.alert('Request failed', String(msg));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <ScreenWrapper bannerTitle="Tap Logs" style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Tap Logs</Text>
-        <Text style={styles.subtitle}>{inactivePreview ? 'Start a sessions to activate' : `Review logged session events. Post-submission edits still need admin approval routing, but the ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} review screen is now available from the left rail.`}</Text>
+        <Text style={styles.subtitle}>{inactivePreview ? 'Start a sessions to activate' : `Review logged session events. Submit an edit or removal request to route to admin via the audit log; the ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} review screen is also available from the left rail.`}</Text>
         {inactivePreview ? (
           <View style={[styles.card, styles.inactiveCard]}>
             <Text style={styles.inactiveTitle}>Start a sessions to activate</Text>
@@ -40,10 +81,10 @@ export default function TapLogsScreen() {
               <View style={styles.detailActionRow}>
                 <Text style={[styles.cardMeta, styles.cardMetaInline]}>{item.detailLabel || item.intensity || 'Logged event'}</Text>
                 <View style={styles.actions}>
-                  <TouchableOpacity style={[styles.secondaryBtn, styles.secondaryBtnInline]} onPress={() => Alert.alert('Edit request', 'Admin approval routing for therapy-event edits still needs a dedicated server mutation path.')}>
+                  <TouchableOpacity style={[styles.secondaryBtn, styles.secondaryBtnInline]} onPress={() => openRequest('edit', item)}>
                     <Text style={styles.secondaryBtnText}>Request Edit</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.secondaryBtn, styles.secondaryBtnInline]} onPress={() => Alert.alert('Remove request', 'Admin approval routing for therapy-event removals still needs a dedicated server mutation path.')}>
+                  <TouchableOpacity style={[styles.secondaryBtn, styles.secondaryBtnInline]} onPress={() => openRequest('remove', item)}>
                     <Text style={styles.secondaryBtnText}>Request Remove</Text>
                   </TouchableOpacity>
                 </View>
@@ -53,6 +94,41 @@ export default function TapLogsScreen() {
           </View>
         )) : (!inactivePreview ? <Text style={styles.empty}>No logged events yet.</Text> : null)}
       </ScrollView>
+
+      <Modal visible={!!pendingRequest} transparent animationType="fade" onRequestClose={() => setPendingRequest(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{pendingRequest?.action === 'remove' ? 'Request removal' : 'Request edit'}</Text>
+            <Text style={styles.modalSubtitle} numberOfLines={2}>Event: {pendingRequest?.label || ''}</Text>
+            <TextInput
+              value={reason}
+              onChangeText={setReason}
+              placeholder="Reason (optional, max 1000 chars)"
+              multiline
+              numberOfLines={4}
+              style={styles.modalInput}
+              maxLength={1000}
+              editable={!submitting}
+            />
+            <View style={styles.modalRow}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnGhost]}
+                onPress={() => { if (!submitting) setPendingRequest(null); }}
+                disabled={submitting}
+              >
+                <Text style={styles.modalBtnGhostText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnPrimary, submitting ? styles.modalBtnDisabled : null]}
+                onPress={submitRequest}
+                disabled={submitting}
+              >
+                <Text style={styles.modalBtnPrimaryText}>{submitting ? 'Submitting...' : 'Submit'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenWrapper>
   );
 }
@@ -75,4 +151,16 @@ const styles = StyleSheet.create({
   inactiveCard: { opacity: 0.6 },
   inactiveTitle: { fontWeight: '800', color: '#0f172a' },
   empty: { marginTop: 20, color: '#64748b' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  modalCard: { width: '100%', maxWidth: 480, backgroundColor: '#fff', borderRadius: 16, padding: 18 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a' },
+  modalSubtitle: { marginTop: 4, color: '#64748b' },
+  modalInput: { marginTop: 12, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 10, color: '#0f172a', minHeight: 100, textAlignVertical: 'top' },
+  modalRow: { marginTop: 16, flexDirection: 'row', justifyContent: 'flex-end' },
+  modalBtn: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, marginLeft: 8 },
+  modalBtnGhost: { backgroundColor: '#f1f5f9' },
+  modalBtnGhostText: { color: '#0f172a', fontWeight: '700' },
+  modalBtnPrimary: { backgroundColor: '#2563eb' },
+  modalBtnPrimaryText: { color: '#fff', fontWeight: '700' },
+  modalBtnDisabled: { opacity: 0.6 },
 });

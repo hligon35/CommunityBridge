@@ -38,6 +38,40 @@ import { httpsCallable } from 'firebase/functions';
 
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 
+import {
+  enqueueOfflineWrite as _enqueueOfflineWrite,
+  registerOfflineDispatcher as _registerOfflineDispatcher,
+  flushOfflineQueue as _flushOfflineQueue,
+  getOfflineQueueSize as _getOfflineQueueSize,
+} from './utils/offlineQueue';
+
+function _wrapWithOfflineFallback(kind, impl) {
+  // Register the underlying impl as the dispatcher so flushOfflineQueue can
+  // re-issue the original mutation when connectivity returns. The wrapper
+  // returned from this helper preserves the impl's success contract; on a
+  // network failure it enqueues and throws an error tagged `queued: true`
+  // so callers that opt in can present an optimistic "Saved locally" state.
+  _registerOfflineDispatcher(kind, (args) => impl(...(Array.isArray(args) ? args : [args])));
+  return async function offlineFallbackWrapped(...callArgs) {
+    try {
+      return await impl(...callArgs);
+    } catch (e) {
+      if (isLikelyNetworkError(e)) {
+        try { await _enqueueOfflineWrite(kind, callArgs); } catch (_) { /* ignore */ }
+        const queuedErr = new Error('Saved locally; will sync when connection returns.');
+        queuedErr.code = 'BB_QUEUED_OFFLINE';
+        queuedErr.queued = true;
+        queuedErr.kind = kind;
+        throw queuedErr;
+      }
+      throw e;
+    }
+  };
+}
+
+export const flushOfflineQueue = _flushOfflineQueue;
+export const getOfflineQueueSize = _getOfflineQueueSize;
+
 const DEFAULT_API_TIMEOUT_MS = 15000;
 const MEDIA_FETCH_TIMEOUT_MS = 45000;
 
@@ -1928,7 +1962,7 @@ export async function getAttendanceForDate(date) {
   return { ok: true, dateKey: json.dateKey || dateKey, items: Array.isArray(json.items) ? json.items : [] };
 }
 
-export async function saveAttendance(payload) {
+export async function _saveAttendanceImpl(payload) {
   const u = requireUser();
   const apiBase = String(BASE_URL || '').replace(/\/$/, '');
   if (!apiBase) {
@@ -1953,6 +1987,7 @@ export async function saveAttendance(payload) {
   }
   return { ok: true, dateKey: json.dateKey || '', saved: Number(json.saved) || 0 };
 }
+export const saveAttendance = _wrapWithOfflineFallback('saveAttendance', _saveAttendanceImpl);
 
 export async function getAttendanceHistory(childId, limit = 365) {
   const u = requireUser();
@@ -2004,7 +2039,7 @@ export async function getMoodHistory(childId, limit = 60) {
   return { ok: true, childId: json.childId || resolvedChildId, items: Array.isArray(json.items) ? json.items : [] };
 }
 
-export async function saveMoodEntry(childId, payload) {
+export async function _saveMoodEntryImpl(childId, payload) {
   const u = requireUser();
   const apiBase = String(BASE_URL || '').replace(/\/$/, '');
   if (!apiBase) {
@@ -2030,6 +2065,7 @@ export async function saveMoodEntry(childId, payload) {
   }
   return { ok: true, item: json.item || null };
 }
+export const saveMoodEntry = _wrapWithOfflineFallback('saveMoodEntry', _saveMoodEntryImpl);
 
 export async function startTherapySession(payload) {
   const u = requireUser();
@@ -2082,7 +2118,7 @@ export async function getActiveTherapySession(childId) {
   return { ok: true, item: json.item || null };
 }
 
-export async function appendTherapySessionEvent(sessionId, payload) {
+export async function _appendTherapySessionEventImpl(sessionId, payload) {
   const u = requireUser();
   const apiBase = String(BASE_URL || '').replace(/\/$/, '');
   if (!apiBase) {
@@ -2108,8 +2144,9 @@ export async function appendTherapySessionEvent(sessionId, payload) {
   }
   return { ok: true, item: json.item || null };
 }
+export const appendTherapySessionEvent = _wrapWithOfflineFallback('appendTherapySessionEvent', _appendTherapySessionEventImpl);
 
-export async function appendTherapySessionEventsBulk(sessionId, events) {
+export async function _appendTherapySessionEventsBulkImpl(sessionId, events) {
   const u = requireUser();
   const apiBase = String(BASE_URL || '').replace(/\/$/, '');
   if (!apiBase) {
@@ -2134,6 +2171,43 @@ export async function appendTherapySessionEventsBulk(sessionId, events) {
     throw err;
   }
   return { ok: true, items: Array.isArray(json.items) ? json.items : [] };
+}
+export const appendTherapySessionEventsBulk = _wrapWithOfflineFallback('appendTherapySessionEventsBulk', _appendTherapySessionEventsBulkImpl);
+
+export async function requestTherapyEventChange({ sessionId, eventId, action, reason, proposed } = {}) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy event change requests require the API server.');
+    err.code = 'BB_THERAPY_EVENT_CHANGE_API_REQUIRED';
+    throw err;
+  }
+  const sid = String(sessionId || '').trim();
+  const eid = String(eventId || '').trim();
+  if (!sid || !eid) {
+    const err = new Error('sessionId and eventId are required.');
+    err.code = 'BB_THERAPY_EVENT_CHANGE_BAD_INPUT';
+    throw err;
+  }
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(
+    `${apiBase}/api/therapy-sessions/${encodeURIComponent(sid)}/events/${encodeURIComponent(eid)}/change-request`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({ action, reason, proposed }),
+    }
+  );
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not submit change request.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, requestId: json.requestId || null, status: json.status || 'pending' };
 }
 
 export async function getTherapySessionEvents(sessionId, limit = 40) {
@@ -2669,6 +2743,7 @@ export default {
   getActiveTherapySession,
   appendTherapySessionEvent,
   appendTherapySessionEventsBulk,
+  requestTherapyEventChange,
   getTherapySessionEvents,
   endTherapySession,
   generateTherapySessionSummary,

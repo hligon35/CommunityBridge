@@ -48,6 +48,7 @@
     "smoke:therapy": "node ./scripts/smoke-therapy-session.js",
     "smoke:therapy:mock": "cross-env BB_BASE_URL=http://127.0.0.1:3006 node ./scripts/smoke-therapy-session.js",
     "smoke:therapy:server": "cross-env BB_BASE_URL=http://127.0.0.1:3005 node ./scripts/smoke-therapy-session.js",
+    "validate:full": "node ./scripts/validate-full-stack.js",
     "db:dups": "node ./scripts/find-duplicate-users.js",
     "db:migrate:pg": "node ./scripts/migrate-sqlite-to-postgres.js",
     "seed:tenant-directory": "node ./scripts/seed-tenant-directory.js",

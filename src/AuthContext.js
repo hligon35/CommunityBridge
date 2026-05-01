@@ -29,6 +29,8 @@ export function AuthProvider({ children }) {
   const [mfaLoading, setMfaLoading] = useState(false);
 
   const mfaRequiredRef = useRef(false);
+  // Mutex: coalesce concurrent refreshMfaState() calls so callers share a single token-refresh + profile-read pass.
+  const inFlightRefreshRef = useRef(null);
   useEffect(() => {
     mfaRequiredRef.current = Boolean(mfaRequired);
   }, [mfaRequired]);
@@ -126,6 +128,15 @@ export function AuthProvider({ children }) {
   }
 
   async function refreshMfaState() {
+    if (inFlightRefreshRef.current) return inFlightRefreshRef.current;
+    const promise = _refreshMfaStateImpl().finally(() => {
+      if (inFlightRefreshRef.current === promise) inFlightRefreshRef.current = null;
+    });
+    inFlightRefreshRef.current = promise;
+    return promise;
+  }
+
+  async function _refreshMfaStateImpl() {
     const a = getAuthInstance();
     const fbUser = a?.currentUser || null;
     if (!fbUser) {

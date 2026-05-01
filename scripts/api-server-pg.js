@@ -2723,6 +2723,53 @@ app.post('/api/therapy-sessions/:sessionId/events/bulk', authMiddleware, require
   }
 });
 
+// Therapy-event change request: a therapist submits a request to edit or remove
+// an already-recorded therapy event. Stored in audit_logs and visible via the
+// existing /api/audit-logs admin viewer. Mutation of the underlying event row
+// is intentionally deferred to a follow-up admin review flow.
+app.post('/api/therapy-sessions/:sessionId/events/:eventId/change-request', authMiddleware, requireChildCareWriteAccess, async (req, res) => {
+  try {
+    const sessionId = safeString(req.params && req.params.sessionId).trim();
+    const eventId = safeString(req.params && req.params.eventId).trim();
+    if (!sessionId || !eventId) return res.status(400).json({ ok: false, error: 'sessionId and eventId required' });
+    const session = await getTherapySessionRowPg(sessionId);
+    if (!session) return res.status(404).json({ ok: false, error: 'Session not found' });
+    const visibleChildIds = new Set(await getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(session.child_id)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+    const eventRow = await pgQueryOne('SELECT * FROM therapy_session_events WHERE id = $1 AND session_id = $2', [eventId, sessionId]);
+    if (!eventRow) return res.status(404).json({ ok: false, error: 'Event not found' });
+
+    const body = req.body || {};
+    const action = String(body.action || '').trim().toLowerCase();
+    if (action !== 'edit' && action !== 'remove') {
+      return res.status(400).json({ ok: false, error: 'action must be "edit" or "remove"' });
+    }
+    const reason = safeString(body.reason).trim().slice(0, 1000);
+    const proposed = (action === 'edit' && body.proposed && typeof body.proposed === 'object') ? body.proposed : null;
+
+    const requestId = nanoId();
+    await recordAuditLog({
+      actorId: req.user?.id,
+      action: 'therapy_event.change_request_submitted',
+      targetType: 'therapy_session_event',
+      targetId: eventId,
+      status: 'pending',
+      details: {
+        requestId,
+        sessionId,
+        eventId,
+        childId: session.child_id,
+        changeAction: action,
+        reason: reason || null,
+        proposed,
+      },
+    });
+    return res.status(201).json({ ok: true, requestId, status: 'pending' });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
 app.post('/api/therapy-sessions/:sessionId/end', authMiddleware, requireChildCareWriteAccess, async (req, res) => {
   try {
     const sessionId = safeString(req.params && req.params.sessionId).trim();

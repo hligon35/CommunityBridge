@@ -11,6 +11,7 @@ import { avatarSourceFor, formatIdForDisplay } from '../utils/idVisibility';
 import * as Api from '../Api';
 import { isAdminRole } from '../core/tenant/models';
 import { getDisplayRoleLabel } from '../utils/roleTerminology';
+import DateField from '../components/DateField';
 
 function AssignedChildrenList({ facultyId }) {
   const { children = [] } = useData();
@@ -301,10 +302,10 @@ export default function FacultyDetailScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Credentials & Expiration</Text>
           <TextInput value={credentials.certification} onChangeText={(value) => setCredentials((current) => ({ ...current, certification: value }))} editable={canEditWorkspace} placeholder="RBT / BCBA certification" style={styles.input} />
-          <TextInput value={credentials.certificationExpiration} onChangeText={(value) => setCredentials((current) => ({ ...current, certificationExpiration: value }))} editable={canEditWorkspace} placeholder="Certification expiration" style={styles.input} />
-          <TextInput value={credentials.cprExpiration} onChangeText={(value) => setCredentials((current) => ({ ...current, cprExpiration: value }))} editable={canEditWorkspace} placeholder="CPR / First Aid expiration" style={styles.input} />
-          <TextInput value={credentials.backgroundCheckDate} onChangeText={(value) => setCredentials((current) => ({ ...current, backgroundCheckDate: value }))} editable={canEditWorkspace} placeholder="Background check date" style={styles.input} />
-          <TextInput value={credentials.tbTestDate} onChangeText={(value) => setCredentials((current) => ({ ...current, tbTestDate: value }))} editable={canEditWorkspace} placeholder="TB test date" style={styles.input} />
+          <DateField value={credentials.certificationExpiration} onChangeText={(value) => setCredentials((current) => ({ ...current, certificationExpiration: value }))} editable={canEditWorkspace} placeholder="Certification expiration (YYYY-MM-DD)" inputStyle={styles.input} accessibilityLabel="Certification expiration" />
+          <DateField value={credentials.cprExpiration} onChangeText={(value) => setCredentials((current) => ({ ...current, cprExpiration: value }))} editable={canEditWorkspace} placeholder="CPR / First Aid expiration (YYYY-MM-DD)" inputStyle={styles.input} accessibilityLabel="CPR expiration" />
+          <DateField value={credentials.backgroundCheckDate} onChangeText={(value) => setCredentials((current) => ({ ...current, backgroundCheckDate: value }))} editable={canEditWorkspace} placeholder="Background check date (YYYY-MM-DD)" inputStyle={styles.input} accessibilityLabel="Background check date" />
+          <DateField value={credentials.tbTestDate} onChangeText={(value) => setCredentials((current) => ({ ...current, tbTestDate: value }))} editable={canEditWorkspace} placeholder="TB test date (YYYY-MM-DD)" inputStyle={styles.input} accessibilityLabel="TB test date" />
           {canEditWorkspace ? (
             <TouchableOpacity style={styles.primaryButton} onPress={() => persistWorkspace({ credentials })} disabled={workspaceSaving}>
               <Text style={styles.primaryButtonText}>{workspaceSaving ? 'Saving...' : 'Save Credentials'}</Text>
