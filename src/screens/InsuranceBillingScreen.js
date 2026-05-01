@@ -20,11 +20,13 @@ export default function InsuranceBillingScreen() {
   const insurance = user?.insurance || {};
   const [jobs, setJobs] = useState([]);
   const [auditItems, setAuditItems] = useState([]);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
+        setLoadError('');
         const [jobResult, auditResult] = await Promise.all([
           Api.listExportJobs(10),
           Api.getAuditLogs(10).catch(() => ({ items: [] })),
@@ -32,8 +34,9 @@ export default function InsuranceBillingScreen() {
         if (!mounted) return;
         setJobs((jobResult?.items || []).filter((item) => String(item?.category || '').trim() === 'billing'));
         setAuditItems(Array.isArray(auditResult?.items) ? auditResult.items : []);
-      } catch (_) {
+      } catch (error) {
         if (mounted) {
+          setLoadError(String(error?.message || error || 'Could not load billing workflow data.'));
           setJobs([]);
           setAuditItems([]);
         }
@@ -56,6 +59,8 @@ export default function InsuranceBillingScreen() {
           <Text style={styles.title}>Insurance and billing workflow</Text>
           <Text style={styles.subtitle}>{isBcba ? 'BCBA view only. Review authorization context, session verification, and billing status here.' : 'Office control. Manage authorizations, verification, and billing export handoff here.'}</Text>
         </View>
+
+        {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
 
         <View style={styles.splitRow}>
           <Block title="Authorizations" style={styles.splitCard}>
@@ -98,6 +103,7 @@ const styles = StyleSheet.create({
   hero: { borderRadius: 22, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', padding: 18 },
   eyebrow: { color: '#1d4ed8', fontWeight: '800', fontSize: 12, textTransform: 'uppercase' },
   title: { marginTop: 6, fontSize: 24, fontWeight: '800', color: '#0f172a' },
+  errorText: { color: '#b91c1c', marginTop: 12 },
   subtitle: { marginTop: 8, color: '#475569', lineHeight: 20 },
   splitRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
   card: { marginTop: 12, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },

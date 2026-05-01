@@ -13,11 +13,13 @@ export default function AdminAlertsScreen() {
   const [tab, setTab] = useState('tracker');
   const [staffWorkspaceMap, setStaffWorkspaceMap] = useState({});
   const [auditItems, setAuditItems] = useState([]);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
+        setLoadError('');
         const [workspaceResult, auditResult] = await Promise.all([
           Api.listStaffWorkspaces((therapists || []).map((staff) => staff?.id)),
           Api.getAuditLogs(16).catch(() => ({ items: [] })),
@@ -29,8 +31,9 @@ export default function AdminAlertsScreen() {
         });
         setStaffWorkspaceMap(next);
         setAuditItems(Array.isArray(auditResult?.items) ? auditResult.items : []);
-      } catch (_) {
+      } catch (error) {
         if (mounted) {
+          setLoadError(String(error?.message || error || 'Could not load compliance data.'));
           setStaffWorkspaceMap({});
           setAuditItems([]);
         }
@@ -71,6 +74,8 @@ export default function AdminAlertsScreen() {
           <Text style={styles.title}>Track staff compliance and documentation</Text>
           <Text style={styles.subtitle}>{isBcba ? 'BCBA users can review credential and document status here.' : 'Office users can upload documents, track expirations, and review the compliance audit trail here.'}</Text>
         </View>
+
+        {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
 
         <View style={styles.tabRow}>
           {[
@@ -129,6 +134,7 @@ const styles = StyleSheet.create({
   eyebrow: { color: '#1d4ed8', fontWeight: '800', fontSize: 12, textTransform: 'uppercase' },
   title: { marginTop: 6, fontSize: 24, fontWeight: '800', color: '#0f172a' },
   subtitle: { marginTop: 8, color: '#475569', lineHeight: 20 },
+  errorText: { color: '#b91c1c', marginTop: 12 },
   tabRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 14 },
   tabButton: { borderRadius: 999, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#f1f5f9', marginRight: 8, marginBottom: 8 },
   tabButtonActive: { backgroundColor: '#2563eb' },

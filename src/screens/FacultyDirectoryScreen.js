@@ -28,11 +28,13 @@ export default function FacultyDirectoryScreen() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [selectedStaffId, setSelectedStaffId] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
+        setLoadError('');
         const response = await Api.listStaffWorkspaces((therapists || []).map((item) => item?.id));
         if (!mounted) return;
         const next = {};
@@ -40,8 +42,11 @@ export default function FacultyDirectoryScreen() {
           if (item?.id) next[item.id] = item;
         });
         setWorkspaceMap(next);
-      } catch (_) {
-        if (mounted) setWorkspaceMap({});
+      } catch (error) {
+        if (mounted) {
+          setWorkspaceMap({});
+          setLoadError(String(error?.message || error || 'Could not load staff workspace details.'));
+        }
       }
     })();
     return () => {
@@ -140,6 +145,7 @@ export default function FacultyDirectoryScreen() {
   return (
     <ScreenWrapper style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
         <View style={styles.hero}>
           <Text style={styles.eyebrow}>Staff</Text>
           <Text style={styles.title}>Manage staff, credentials, and caseloads</Text>
@@ -204,6 +210,7 @@ export default function FacultyDirectoryScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#f8fafc' },
   content: { padding: 16 },
+  errorText: { color: '#b91c1c', marginBottom: 12 },
   hero: { borderRadius: 22, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', padding: 18 },
   eyebrow: { color: '#1d4ed8', fontWeight: '800', fontSize: 12, textTransform: 'uppercase' },
   title: { marginTop: 6, fontSize: 24, fontWeight: '800', color: '#0f172a' },

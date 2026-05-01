@@ -139,7 +139,9 @@ export default function HomeScreen() {
     try {
       setRefreshing(true);
       await fetchAndSync({ force: true });
-    } catch (e) {}
+    } catch (e) {
+      Alert.alert('Refresh failed', String(e?.message || e || 'Could not refresh the home feed.'));
+    }
     setRefreshing(false);
   }
 

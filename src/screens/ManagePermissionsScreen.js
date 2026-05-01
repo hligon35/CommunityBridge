@@ -82,6 +82,21 @@ function normalizeManagedUsers(items) {
   }));
 }
 
+function isValidEmail(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+}
+
+function getPasswordPolicyError(value) {
+  const password = String(value || '');
+  if (!password) return '';
+  if (password.length < 8) return 'Password must be at least 8 characters.';
+  if (!/[A-Z]/.test(password)) return 'Password must include at least 1 capital letter.';
+  if (!/[^A-Za-z0-9]/.test(password)) return 'Password must include at least 1 special character.';
+  return '';
+}
+
 function buildDefaultMapping() {
   const init = {};
   DEFAULT_ROLES.forEach((role) => {
@@ -150,6 +165,7 @@ export default function ManagePermissionsScreen(){
         setOrganizations(Array.isArray(items) ? items : []);
       } catch (_) {
         setOrganizations([]);
+        setUsersError((current) => current || 'Could not load organization directory options.');
       }
     })();
   }, []);
@@ -245,6 +261,7 @@ export default function ManagePermissionsScreen(){
       setProgramsByOrg((current) => ({ ...current, [orgId]: Array.isArray(items) ? items : [] }));
     } catch (_) {
       setProgramsByOrg((current) => ({ ...current, [orgId]: [] }));
+      setUsersError((current) => current || 'Could not load programs for the selected organization.');
     }
   }
 
@@ -256,6 +273,7 @@ export default function ManagePermissionsScreen(){
       setCampusesByOrg((current) => ({ ...current, [orgId]: Array.isArray(items) ? items : [] }));
     } catch (_) {
       setCampusesByOrg((current) => ({ ...current, [orgId]: [] }));
+      setUsersError((current) => current || 'Could not load campuses for the selected organization.');
     }
   }
 
@@ -318,11 +336,33 @@ export default function ManagePermissionsScreen(){
 
   async function saveUser(userItem) {
     const draft = userDrafts[userItem.id] || createUserDraft(userItem);
+    const trimmedName = String(draft.name || '').trim();
+    const trimmedEmail = String(draft.email || '').trim().toLowerCase();
+    const trimmedPhone = String(draft.phone || '').trim();
+    const trimmedAddress = String(draft.address || '').trim();
+    const trimmedPassword = String(draft.password || '').trim();
+    if (!trimmedName) {
+      Alert.alert('Name required', 'Enter a full name before saving.');
+      return;
+    }
+    if (!trimmedEmail || !isValidEmail(trimmedEmail)) {
+      Alert.alert('Valid email required', 'Enter a valid email address before saving.');
+      return;
+    }
+    if (trimmedPhone && trimmedPhone.replace(/\D/g, '').length !== 10) {
+      Alert.alert('Valid phone required', 'Phone numbers must contain 10 digits.');
+      return;
+    }
+    const passwordError = getPasswordPolicyError(trimmedPassword);
+    if (passwordError) {
+      Alert.alert('Invalid password', passwordError);
+      return;
+    }
     const payload = {};
-    if (String(draft.name || '').trim() !== String(userItem.name || '').trim()) payload.name = String(draft.name || '').trim();
-    if (String(draft.email || '').trim().toLowerCase() !== String(userItem.email || '').trim().toLowerCase()) payload.email = String(draft.email || '').trim().toLowerCase();
-    if (String(draft.phone || '').trim() !== String(userItem.phone || '').trim()) payload.phone = String(draft.phone || '').trim();
-    if (String(draft.address || '').trim() !== String(userItem.address || '').trim()) payload.address = String(draft.address || '').trim();
+    if (trimmedName !== String(userItem.name || '').trim()) payload.name = trimmedName;
+    if (trimmedEmail !== String(userItem.email || '').trim().toLowerCase()) payload.email = trimmedEmail;
+    if (trimmedPhone !== String(userItem.phone || '').trim()) payload.phone = trimmedPhone;
+    if (trimmedAddress !== String(userItem.address || '').trim()) payload.address = trimmedAddress;
     if (normalizeUserRole(draft.role) !== normalizeUserRole(userItem.role)) payload.role = normalizeUserRole(draft.role);
     const nextOrganizationId = String(draft.organizationId || '').trim();
     const nextProgramIds = Array.isArray(draft.programIds) ? draft.programIds.map(String) : [];
@@ -338,7 +378,7 @@ export default function ManagePermissionsScreen(){
     if (JSON.stringify(nextCampusIds) !== JSON.stringify(currentCampusIds)) payload.campusIds = nextCampusIds;
     const memberships = buildMembershipsForDraft(draft);
     if (JSON.stringify(memberships) !== JSON.stringify(Array.isArray(userItem.memberships) ? userItem.memberships : [])) payload.memberships = memberships;
-    if (String(draft.password || '').trim()) payload.password = String(draft.password);
+    if (trimmedPassword) payload.password = trimmedPassword;
 
     const normalizedRole = normalizeUserRole(draft.role);
     if ((normalizedRole === 'orgAdmin' || normalizedRole === 'campusAdmin') && !nextOrganizationId) {
@@ -452,16 +492,16 @@ export default function ManagePermissionsScreen(){
         {open ? (
           <View style={styles.userBody}>
             <Text style={styles.fieldLabel}>Name</Text>
-            <TextInput value={draft.name} onChangeText={(value) => updateUserDraft(userItem.id, 'name', value)} style={styles.input} placeholder="Full name" />
+            <TextInput value={draft.name} onChangeText={(value) => updateUserDraft(userItem.id, 'name', String(value || '').slice(0, 120))} style={styles.input} placeholder="Full name" maxLength={120} />
 
             <Text style={styles.fieldLabel}>Email</Text>
-            <TextInput value={draft.email} onChangeText={(value) => updateUserDraft(userItem.id, 'email', value)} style={styles.input} placeholder="Email" autoCapitalize="none" keyboardType="email-address" />
+            <TextInput value={draft.email} onChangeText={(value) => updateUserDraft(userItem.id, 'email', String(value || '').slice(0, 254))} style={styles.input} placeholder="Email" autoCapitalize="none" keyboardType="email-address" maxLength={254} />
 
             <Text style={styles.fieldLabel}>Phone</Text>
-            <TextInput value={draft.phone} onChangeText={(value) => updateUserDraft(userItem.id, 'phone', value)} style={styles.input} placeholder="555-123-4567" autoCapitalize="none" keyboardType="phone-pad" />
+            <TextInput value={draft.phone} onChangeText={(value) => updateUserDraft(userItem.id, 'phone', value)} style={styles.input} placeholder="555-123-4567" autoCapitalize="none" keyboardType="phone-pad" maxLength={12} />
 
             <Text style={styles.fieldLabel}>Address</Text>
-            <TextInput value={draft.address} onChangeText={(value) => updateUserDraft(userItem.id, 'address', value)} style={[styles.input, styles.multilineInput]} placeholder="Address" multiline />
+            <TextInput value={draft.address} onChangeText={(value) => updateUserDraft(userItem.id, 'address', String(value || '').slice(0, 300))} style={[styles.input, styles.multilineInput]} placeholder="Address" multiline maxLength={300} />
 
             <Text style={styles.fieldLabel}>Role</Text>
             <View style={styles.roleChipWrap}>
@@ -551,7 +591,7 @@ export default function ManagePermissionsScreen(){
             ) : null}
 
             <Text style={styles.fieldLabel}>Reset password</Text>
-            <TextInput value={draft.password} onChangeText={(value) => updateUserDraft(userItem.id, 'password', value)} style={styles.input} placeholder="Leave blank to keep current password" secureTextEntry />
+            <TextInput value={draft.password} onChangeText={(value) => updateUserDraft(userItem.id, 'password', String(value || '').slice(0, 128))} style={styles.input} placeholder="Leave blank to keep current password" secureTextEntry maxLength={128} />
             <Text style={styles.helperText}>Use this only for office-managed account recovery. End users should still use the standard reset-password flow from login.</Text>
 
             <View style={styles.userActionRow}>

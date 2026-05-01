@@ -27,6 +27,7 @@ export default function ImportCenterScreen() {
   const [busy, setBusy] = useState(false);
   const [lastImportSummary, setLastImportSummary] = useState(null);
   const [auditItems, setAuditItems] = useState([]);
+  const [auditError, setAuditError] = useState('');
 
   const samplePayload = useMemo(() => ({
     children: [{ id: 'child-001', name: 'Sample Learner', age: '6', room: 'A1' }],
@@ -48,12 +49,16 @@ export default function ImportCenterScreen() {
     let mounted = true;
     (async () => {
       try {
+        setAuditError('');
         const response = await Api.getAuditLogs(12);
         if (!mounted) return;
         const items = Array.isArray(response?.items) ? response.items : [];
         setAuditItems(items.filter((item) => String(item?.action || '').toLowerCase().includes('directory') || String(item?.action || '').toLowerCase().includes('import')));
       } catch (_) {
-        if (mounted) setAuditItems([]);
+        if (mounted) {
+          setAuditItems([]);
+          setAuditError('Could not load recent import audit activity.');
+        }
       }
     })();
     return () => {
@@ -169,6 +174,7 @@ export default function ImportCenterScreen() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Recent import-related audit activity</Text>
+          {auditError ? <Text style={styles.errorText}>{auditError}</Text> : null}
           {auditItems.length ? auditItems.map((item) => (
             <View key={item.id || item.createdAt} style={styles.auditRow}>
               <Text style={styles.auditAction}>{String(item.action || 'audit.event')}</Text>
@@ -192,6 +198,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 15, fontWeight: '800', color: '#111827', marginBottom: 8 },
   codeBlock: { borderRadius: 12, backgroundColor: '#0f172a', color: '#e2e8f0', padding: 12, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12 },
   helperText: { color: '#64748b', lineHeight: 18 },
+  errorText: { color: '#b91c1c', marginBottom: 8 },
   buttonRow: { flexDirection: 'row', marginTop: 12 },
   primaryButton: { flex: 1, backgroundColor: '#2563eb', paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginRight: 8 },
   primaryButtonText: { color: '#fff', fontWeight: '800' },

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
@@ -291,9 +291,13 @@ export default function RoleDashboardScreen({ navigation }) {
       onPress: () => {
         const url = 'https://centriahealthcare.com/parent-resources/?utm_source=mobile-app&utm_medium=homepage&utm_campaign=family-connect';
         if (Platform.OS === 'web') {
-          Linking.openURL(url).catch(() => {});
+          Linking.openURL(url).catch(() => {
+            Alert.alert('Unable to open resource', 'Your device could not open the resource link.');
+          });
         } else {
-          WebBrowser.openBrowserAsync(url).catch(() => Linking.openURL(url).catch(() => {}));
+          WebBrowser.openBrowserAsync(url).catch(() => Linking.openURL(url).catch(() => {
+            Alert.alert('Unable to open resource', 'Your device could not open the resource link.');
+          }));
         }
       },
     },

@@ -56,6 +56,7 @@ export default function FacultyDetailScreen() {
   const [selectedTab, setSelectedTab] = useState('overview');
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [workspaceSaving, setWorkspaceSaving] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState('');
   const [credentials, setCredentials] = useState({
     certification: '',
     certificationExpiration: '',
@@ -108,6 +109,7 @@ export default function FacultyDetailScreen() {
     (async () => {
       try {
         setWorkspaceLoading(true);
+        setWorkspaceError('');
         const result = await Api.getStaffWorkspace(faculty.id);
         if (disposed) return;
         const item = result?.item && typeof result.item === 'object' ? result.item : {};
@@ -123,8 +125,9 @@ export default function FacultyDetailScreen() {
           notes: String(item?.availability?.notes || ''),
         });
         setDocuments(Array.isArray(item?.documents) ? item.documents : []);
-      } catch (_) {
+      } catch (error) {
         if (!disposed) {
+          setWorkspaceError(String(error?.message || error || 'Could not load staff workspace.'));
           setCredentials({ certification: '', certificationExpiration: '', cprExpiration: '', backgroundCheckDate: '', tbTestDate: '' });
           setAvailability({ weekdays: '', notes: '' });
           setDocuments([]);
@@ -138,15 +141,67 @@ export default function FacultyDetailScreen() {
     };
   }, [faculty.id]);
 
-  const openPhone = (p) => { if (!p) return; Linking.openURL(`tel:${p}`).catch(() => {}); };
-  const openEmail = (e) => { if (!e) return; Linking.openURL(`mailto:${e}`).catch(() => {}); };
+  const openPhone = (p) => {
+    if (!p) return;
+    Linking.openURL(`tel:${p}`).catch(() => {
+      Alert.alert('Unable to place call', 'Your device could not open the phone app.');
+    });
+  };
+
+  const openEmail = (e) => {
+    if (!e) return;
+    Linking.openURL(`mailto:${e}`).catch(() => {
+      Alert.alert('Unable to open email', 'Your device could not open the email app.');
+    });
+  };
+
+  const openDocument = (url) => {
+    const normalized = String(url || '').trim();
+    if (!normalized) return;
+    Linking.openURL(normalized).catch(() => {
+      Alert.alert('Unable to open document', 'Your device could not open this document.');
+    });
+  };
+
+  function isIsoDateInput(value) {
+    const normalized = String(value || '').trim();
+    if (!normalized) return true;
+    return /^\d{4}-\d{2}-\d{2}$/.test(normalized);
+  }
+
+  function getWorkspaceValidationError(nextCredentials, nextAvailability) {
+    if (String(nextCredentials?.certification || '').trim().length > 120) return 'Certification must be 120 characters or fewer.';
+    if (!isIsoDateInput(nextCredentials?.certificationExpiration)) return 'Certification expiration must use YYYY-MM-DD.';
+    if (!isIsoDateInput(nextCredentials?.cprExpiration)) return 'CPR expiration must use YYYY-MM-DD.';
+    if (!isIsoDateInput(nextCredentials?.backgroundCheckDate)) return 'Background check date must use YYYY-MM-DD.';
+    if (!isIsoDateInput(nextCredentials?.tbTestDate)) return 'TB test date must use YYYY-MM-DD.';
+    if (String(nextAvailability?.weekdays || '').trim().length > 120) return 'Weekday coverage must be 120 characters or fewer.';
+    if (String(nextAvailability?.notes || '').trim().length > 2000) return 'Availability notes must be 2000 characters or fewer.';
+    return '';
+  }
+
+  function getMemoValidationError(subject, body) {
+    const trimmedSubject = String(subject || '').trim();
+    const trimmedBody = String(body || '').trim();
+    if (!trimmedSubject && !trimmedBody) return 'Add a subject or message body before sending.';
+    if (trimmedSubject.length > 120) return 'Memo subject must be 120 characters or fewer.';
+    if (trimmedBody.length > 5000) return 'Memo body must be 5000 characters or fewer.';
+    return '';
+  }
 
   async function persistWorkspace(next = {}) {
+    const nextCredentials = next.credentials || credentials;
+    const nextAvailability = next.availability || availability;
+    const validationError = getWorkspaceValidationError(nextCredentials, nextAvailability);
+    if (validationError) {
+      Alert.alert('Invalid input', validationError);
+      return;
+    }
     try {
       setWorkspaceSaving(true);
       await Api.updateStaffWorkspace(faculty.id, {
-        credentials: next.credentials || credentials,
-        availability: next.availability || availability,
+        credentials: nextCredentials,
+        availability: nextAvailability,
         documents: next.documents || documents,
       });
     } catch (e) {
@@ -288,6 +343,7 @@ export default function FacultyDetailScreen() {
       </View>
 
       {workspaceLoading ? <View style={styles.loadingWrap}><ActivityIndicator color="#2563eb" /></View> : null}
+      {!workspaceLoading && workspaceError ? <Text style={styles.errorText}>{workspaceError}</Text> : null}
 
       {!workspaceLoading && selectedTab === 'overview' ? (
         <View style={styles.sectionCard}>
@@ -302,7 +358,7 @@ export default function FacultyDetailScreen() {
       {!workspaceLoading && selectedTab === 'credentials' ? (
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Credentials & Expiration</Text>
-          <TextInput value={credentials.certification} onChangeText={(value) => setCredentials((current) => ({ ...current, certification: value }))} editable={canEditWorkspace} placeholder="RBT / BCBA certification" style={styles.input} />
+          <TextInput value={credentials.certification} onChangeText={(value) => setCredentials((current) => ({ ...current, certification: String(value || '').slice(0, 120) }))} editable={canEditWorkspace} placeholder="RBT / BCBA certification" style={styles.input} maxLength={120} />
           <DateField value={credentials.certificationExpiration} onChangeText={(value) => setCredentials((current) => ({ ...current, certificationExpiration: value }))} editable={canEditWorkspace} placeholder="Certification expiration (YYYY-MM-DD)" inputStyle={styles.input} accessibilityLabel="Certification expiration" />
           <DateField value={credentials.cprExpiration} onChangeText={(value) => setCredentials((current) => ({ ...current, cprExpiration: value }))} editable={canEditWorkspace} placeholder="CPR / First Aid expiration (YYYY-MM-DD)" inputStyle={styles.input} accessibilityLabel="CPR expiration" />
           <DateField value={credentials.backgroundCheckDate} onChangeText={(value) => setCredentials((current) => ({ ...current, backgroundCheckDate: value }))} editable={canEditWorkspace} placeholder="Background check date (YYYY-MM-DD)" inputStyle={styles.input} accessibilityLabel="Background check date" />
@@ -325,8 +381,8 @@ export default function FacultyDetailScreen() {
       {!workspaceLoading && selectedTab === 'availability' ? (
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Availability</Text>
-          <TextInput value={availability.weekdays} onChangeText={(value) => setAvailability((current) => ({ ...current, weekdays: value }))} editable={canEditWorkspace} placeholder="Weekdays / shift coverage" style={styles.input} />
-          <TextInput value={availability.notes} onChangeText={(value) => setAvailability((current) => ({ ...current, notes: value }))} editable={canEditWorkspace} placeholder="Availability notes" multiline style={[styles.input, styles.multilineInput]} />
+          <TextInput value={availability.weekdays} onChangeText={(value) => setAvailability((current) => ({ ...current, weekdays: String(value || '').slice(0, 120) }))} editable={canEditWorkspace} placeholder="Weekdays / shift coverage" style={styles.input} maxLength={120} />
+          <TextInput value={availability.notes} onChangeText={(value) => setAvailability((current) => ({ ...current, notes: String(value || '').slice(0, 2000) }))} editable={canEditWorkspace} placeholder="Availability notes" multiline style={[styles.input, styles.multilineInput]} maxLength={2000} />
           {canEditWorkspace ? (
             <TouchableOpacity style={styles.primaryButton} onPress={() => persistWorkspace({ availability })} disabled={workspaceSaving}>
               <Text style={styles.primaryButtonText}>{workspaceSaving ? 'Saving...' : 'Save Availability'}</Text>
@@ -347,7 +403,7 @@ export default function FacultyDetailScreen() {
           </View>
           {documents.length ? documents.map((item) => (
             <View key={item.id || item.url} style={styles.documentRow}>
-              <TouchableOpacity style={{ flex: 1 }} onPress={() => item.url ? Linking.openURL(item.url).catch(() => {}) : null}>
+              <TouchableOpacity style={{ flex: 1 }} onPress={() => openDocument(item.url)}>
                 <Text style={styles.documentTitle}>{item.title || 'Document'}</Text>
                 <Text style={styles.documentMeta}>{item.uploadedAt ? new Date(item.uploadedAt).toLocaleString() : 'Recently added'}</Text>
               </TouchableOpacity>
@@ -371,13 +427,18 @@ export default function FacultyDetailScreen() {
               <TouchableWithoutFeedback>
                 <View style={{ width: '90%', backgroundColor: '#fff', padding: 12, borderRadius: 8 }}>
                   <Text style={{ fontWeight: '700', marginBottom: 8 }}>Send Urgent Memo</Text>
-                  <TextInput placeholder="Subject" value={memoSubject} onChangeText={setMemoSubject} style={{ borderWidth: 1, borderColor: '#e5e7eb', padding: 8, borderRadius: 8, marginBottom: 8 }} />
-                  <TextInput placeholder="Message" value={memoBody} onChangeText={setMemoBody} multiline style={{ borderWidth: 1, borderColor: '#e5e7eb', padding: 8, borderRadius: 8, height: 120, marginBottom: 12 }} />
+                  <TextInput placeholder="Subject" value={memoSubject} onChangeText={(value) => setMemoSubject(String(value || '').slice(0, 120))} style={{ borderWidth: 1, borderColor: '#e5e7eb', padding: 8, borderRadius: 8, marginBottom: 8 }} maxLength={120} />
+                  <TextInput placeholder="Message" value={memoBody} onChangeText={(value) => setMemoBody(String(value || '').slice(0, 5000))} multiline style={{ borderWidth: 1, borderColor: '#e5e7eb', padding: 8, borderRadius: 8, height: 120, marginBottom: 12 }} maxLength={5000} />
                   <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
                     <TouchableOpacity onPress={() => setShowMemoModal(false)} style={{ marginRight: 8, padding: 8 }}><Text>Cancel</Text></TouchableOpacity>
                     <TouchableOpacity onPress={async () => {
                       try {
-                        await sendAdminMemo({ recipients: [{ id: faculty.id }], subject: memoSubject || `Message about ${faculty.name || 'staff'}`, body: memoBody || '' });
+                        const memoError = getMemoValidationError(memoSubject, memoBody);
+                        if (memoError) {
+                          Alert.alert('Invalid memo', memoError);
+                          return;
+                        }
+                        await sendAdminMemo({ recipients: [{ id: faculty.id }], subject: String(memoSubject || `Message about ${faculty.name || 'staff'}`).trim(), body: String(memoBody || '').trim() });
                         Alert.alert('Sent', 'Urgent memo sent');
                         setShowMemoModal(false);
                         setMemoSubject(''); setMemoBody('');
@@ -434,6 +495,7 @@ const styles = StyleSheet.create({
   link: { color: '#0066FF', marginTop: 6 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   loadingWrap: { paddingVertical: 20, alignItems: 'center' },
+  errorText: { color: '#b91c1c', marginBottom: 12 },
   tabRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 14 },
   tabChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#f1f5f9', marginRight: 8, marginBottom: 8 },
   tabChipActive: { backgroundColor: '#2563eb' },

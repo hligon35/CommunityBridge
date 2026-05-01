@@ -11,6 +11,7 @@ import ImageToggle from '../components/ImageToggle';
 import SessionSummarySnapshot from '../components/SessionSummarySnapshot';
 import { childHasParent, findLinkedParentId } from '../utils/directoryLinking';
 import { avatarSourceFor } from '../utils/idVisibility';
+import { maskEmailDisplay, maskPhoneDisplay } from '../utils/inputFormat';
 import { THERAPY_ROLE_LABELS, getAssignmentRoleLabel, getDisplayRoleLabel } from '../utils/roleTerminology';
 import { useTenant } from '../core/tenant/TenantContext';
 import { isAdminRole, isStaffRole } from '../core/tenant/models';
@@ -78,6 +79,7 @@ export default function MyChildScreen() {
   const [expandedReviewSection, setExpandedReviewSection] = useState(null);
   const [latestApprovedSummary, setLatestApprovedSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState('');
 
   async function submitProposal(offsetMillis) {
     try {
@@ -119,27 +121,15 @@ export default function MyChildScreen() {
 
   const openPhone = (phone) => {
     if (!phone) return;
-    Linking.openURL(`tel:${phone}`).catch(() => {});
+    Linking.openURL(`tel:${phone}`).catch(() => {
+      Alert.alert('Unable to place call', 'Your device could not open the phone app.');
+    });
   };
   const openEmail = (email) => {
     if (!email) return;
-    Linking.openURL(`mailto:${email}`).catch(() => {});
-  };
-
-  const maskPhoneDisplay = (value) => {
-    const digits = String(value || '').replace(/\D/g, '');
-    if (!digits) return '';
-    return digits.length <= 4 ? digits : `***-***-${digits.slice(-4)}`;
-  };
-
-  const maskEmailDisplay = (value) => {
-    const normalized = String(value || '').trim().toLowerCase();
-    const atIndex = normalized.indexOf('@');
-    if (atIndex <= 0) return normalized;
-    const local = normalized.slice(0, atIndex);
-    const domain = normalized.slice(atIndex + 1);
-    const visible = local.slice(0, Math.min(3, local.length));
-    return `${visible}${local.length > visible.length ? '***' : '*' }@${domain}`;
+    Linking.openURL(`mailto:${email}`).catch(() => {
+      Alert.alert('Unable to open email', 'Your device could not open the email app.');
+    });
   };
 
   const dailyReviewSections = useMemo(() => ([
@@ -179,11 +169,15 @@ export default function MyChildScreen() {
         return;
       }
       setSummaryLoading(true);
+      setSummaryError('');
       try {
         const result = await getLatestChildSessionSummary(child.id);
         if (!disposed) setLatestApprovedSummary(result?.item || null);
-      } catch (_) {
-        if (!disposed) setLatestApprovedSummary(null);
+      } catch (error) {
+        if (!disposed) {
+          setLatestApprovedSummary(null);
+          setSummaryError(String(error?.message || error || 'Could not load the approved summary.'));
+        }
       } finally {
         if (!disposed) setSummaryLoading(false);
       }
@@ -369,6 +363,8 @@ export default function MyChildScreen() {
           <View style={styles.summaryLoadingWrap}>
             <ActivityIndicator size="small" color="#2563eb" />
           </View>
+        ) : summaryError ? (
+          <Text style={styles.summaryErrorText}>{summaryError}</Text>
         ) : latestApprovedSummary?.summary ? (
           <SessionSummarySnapshot
             summary={latestApprovedSummary}
@@ -674,6 +670,7 @@ const styles = StyleSheet.create({
   reportsLinkButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#dbeafe' },
   reportsLinkButtonText: { color: '#1d4ed8', fontWeight: '800', fontSize: 12 },
   summaryLoadingWrap: { paddingVertical: 24, alignItems: 'center', justifyContent: 'center' },
+  summaryErrorText: { color: '#b91c1c', paddingVertical: 12 },
   reviewAccordionList: { marginTop: 8 },
   reviewAccordionCard: {
     backgroundColor: '#ffffff',

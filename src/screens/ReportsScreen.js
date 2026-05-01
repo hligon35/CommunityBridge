@@ -58,6 +58,7 @@ export default function ReportsScreen() {
   const [selectedChildId, setSelectedChildId] = useState(reportChildren[0]?.id || null);
   const [tab, setTab] = useState(isBcba ? 'clinical' : 'operational');
   const [jobs, setJobs] = useState([]);
+  const [jobsError, setJobsError] = useState('');
   const [transferBusy, setTransferBusy] = useState(false);
   const selectedChild = useMemo(() => resolveSelectedDashboardChild(reportChildren, selectedChildId), [reportChildren, selectedChildId]);
   const { loading, childReports, schoolWide, sessionSummariesByChild } = useBehaviorSystemReports({
@@ -76,9 +77,11 @@ export default function ReportsScreen() {
     const loadJobs = async () => {
       try {
         const result = await Api.listExportJobs(12);
+        if (mounted) setJobsError('');
         if (mounted) setJobs(Array.isArray(result?.items) ? result.items : []);
-      } catch (_) {
+      } catch (error) {
         if (mounted) setJobs([]);
+        if (mounted) setJobsError(String(error?.message || error || 'Could not load recent transfer jobs.'));
       }
     };
     loadJobs();
@@ -103,9 +106,11 @@ export default function ReportsScreen() {
   async function refreshJobs() {
     try {
       const result = await Api.listExportJobs(12);
+      setJobsError('');
       setJobs(Array.isArray(result?.items) ? result.items : []);
-    } catch (_) {
+    } catch (error) {
       setJobs([]);
+      setJobsError(String(error?.message || error || 'Could not load recent transfer jobs.'));
     }
   }
 
@@ -301,6 +306,14 @@ export default function ReportsScreen() {
               </View>
             </SectionCard>
             <SectionCard title="Recent transfer jobs">
+              {jobsError ? (
+                <View style={styles.errorCard}>
+                  <Text style={styles.errorText}>{jobsError}</Text>
+                  <TouchableOpacity style={styles.retryButton} onPress={refreshJobs}>
+                    <Text style={styles.retryButtonText}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
               {jobs.length ? jobs.map((job) => <View key={job.id} style={styles.jobRow}><View style={styles.jobTextWrap}><Text style={styles.jobTitle}>{job.title || 'Transfer'}</Text><Text style={styles.rowText}>{String(job.format || 'csv').toUpperCase()} • {String(job.status || 'ready').toUpperCase()}</Text></View><Text style={styles.jobMeta}>{job.createdAt ? new Date(job.createdAt).toLocaleString() : 'Recently'}</Text></View>) : <Text style={styles.rowText}>No transfer jobs have been created yet.</Text>}
             </SectionCard>
           </>
@@ -354,6 +367,10 @@ const styles = StyleSheet.create({
   transferButton: { marginTop: 10, alignSelf: 'flex-start', borderRadius: 10, backgroundColor: '#2563eb', paddingVertical: 8, paddingHorizontal: 12 },
   transferButtonDisabled: { opacity: 0.6 },
   transferButtonText: { color: '#ffffff', fontWeight: '800' },
+  errorCard: { borderRadius: 12, borderWidth: 1, borderColor: '#fecaca', backgroundColor: '#fef2f2', padding: 12, marginBottom: 12 },
+  errorText: { color: '#991b1b' },
+  retryButton: { alignSelf: 'flex-start', marginTop: 8, borderRadius: 999, backgroundColor: '#991b1b', paddingVertical: 8, paddingHorizontal: 12 },
+  retryButtonText: { color: '#ffffff', fontWeight: '700' },
   jobRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 14, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', padding: 12, marginBottom: 10 },
   jobTextWrap: { flex: 1, paddingRight: 12 },
   jobTitle: { color: '#0f172a', fontWeight: '800', marginBottom: 4 },

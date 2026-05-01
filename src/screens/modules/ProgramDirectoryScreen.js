@@ -18,6 +18,7 @@ export default function ProgramDirectoryScreen() {
   const [draftMasteryCriteria, setDraftMasteryCriteria] = useState('80% across 3 consecutive sessions');
   const [draftGeneralizationPlan, setDraftGeneralizationPlan] = useState('Practice across settings, people, and materials.');
   const [status, setStatus] = useState('idle');
+  const [loadError, setLoadError] = useState('');
   const sortedPrograms = useMemo(() => [...(programs || [])].sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''))), [programs]);
   const editorDraftKey = `program_editor_draft_${String(currentOrganization?.id || 'org')}_${String(currentProgramId || 'default')}`;
   const skillTemplates = useMemo(() => sortedPrograms.filter((program) => !String(program?.type || '').toLowerCase().includes('behavior')).slice(0, 6), [sortedPrograms]);
@@ -34,6 +35,7 @@ export default function ProgramDirectoryScreen() {
     let mounted = true;
     (async () => {
       try {
+        setLoadError('');
         const shared = currentProgramId ? await Api.getProgramWorkspace(currentProgramId).catch(() => null) : null;
         if (shared?.item && mounted) {
           setDraftTarget(String(shared.item.targetName || ''));
@@ -49,8 +51,8 @@ export default function ProgramDirectoryScreen() {
         setDraftPromptHierarchy(String(parsed?.draftPromptHierarchy || 'Least-to-most prompting'));
         setDraftMasteryCriteria(String(parsed?.draftMasteryCriteria || '80% across 3 consecutive sessions'));
         setDraftGeneralizationPlan(String(parsed?.draftGeneralizationPlan || 'Practice across settings, people, and materials.'));
-      } catch (_) {
-        // ignore cache issues
+      } catch (error) {
+        setLoadError(String(error?.message || error || 'Could not load saved program editor state.'));
       }
     })();
     return () => {
@@ -65,6 +67,22 @@ export default function ProgramDirectoryScreen() {
   async function persistProgram(reviewedAt = null) {
     if (!currentProgramId) {
       Alert.alert('No program selected', 'Select a program before saving changes.');
+      return;
+    }
+    if (!String(draftTarget || '').trim()) {
+      Alert.alert('Target required', 'Enter a target before saving program changes.');
+      return;
+    }
+    if (!String(draftPromptHierarchy || '').trim()) {
+      Alert.alert('Prompt hierarchy required', 'Enter a prompt hierarchy before saving program changes.');
+      return;
+    }
+    if (!String(draftMasteryCriteria || '').trim()) {
+      Alert.alert('Mastery criteria required', 'Enter mastery criteria before saving program changes.');
+      return;
+    }
+    if (!String(draftGeneralizationPlan || '').trim()) {
+      Alert.alert('Generalization plan required', 'Enter a generalization plan before saving program changes.');
       return;
     }
     try {
@@ -166,10 +184,11 @@ export default function ProgramDirectoryScreen() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Program editor</Text>
             <Text style={styles.listMeta}>Targets, prompt hierarchy, mastery criteria, and generalization planning are all editable here.</Text>
-            <TextInput value={draftTarget} onChangeText={setDraftTarget} placeholder="Targets" style={styles.input} />
-            <TextInput value={draftPromptHierarchy} onChangeText={setDraftPromptHierarchy} placeholder="Prompt hierarchy" style={styles.input} />
-            <TextInput value={draftMasteryCriteria} onChangeText={setDraftMasteryCriteria} placeholder="Mastery criteria" style={styles.input} />
-            <TextInput value={draftGeneralizationPlan} onChangeText={setDraftGeneralizationPlan} placeholder="Generalization plan" multiline style={[styles.input, styles.multiline]} />
+            {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
+            <TextInput value={draftTarget} onChangeText={(value) => setDraftTarget(String(value || '').slice(0, 160))} placeholder="Targets" style={styles.input} maxLength={160} />
+            <TextInput value={draftPromptHierarchy} onChangeText={(value) => setDraftPromptHierarchy(String(value || '').slice(0, 160))} placeholder="Prompt hierarchy" style={styles.input} maxLength={160} />
+            <TextInput value={draftMasteryCriteria} onChangeText={(value) => setDraftMasteryCriteria(String(value || '').slice(0, 160))} placeholder="Mastery criteria" style={styles.input} maxLength={160} />
+            <TextInput value={draftGeneralizationPlan} onChangeText={(value) => setDraftGeneralizationPlan(String(value || '').slice(0, 2000))} placeholder="Generalization plan" multiline style={[styles.input, styles.multiline]} maxLength={2000} />
             <View style={styles.actionRow}>
               <TouchableOpacity style={styles.primaryButton} onPress={() => quickAction('Add program')}><Text style={styles.primaryButtonText}>Add Program</Text></TouchableOpacity>
               <TouchableOpacity style={styles.secondaryButton} onPress={() => quickAction('Edit program')}><Text style={styles.secondaryButtonText}>Edit Program</Text></TouchableOpacity>
@@ -201,6 +220,7 @@ const styles = StyleSheet.create({
   listRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
   listTitle: { fontWeight: '800', color: '#0f172a' },
   listMeta: { marginTop: 4, color: '#64748b', lineHeight: 20 },
+  errorText: { color: '#b91c1c', marginBottom: 8 },
   input: { marginTop: 12, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#fff' },
   multiline: { minHeight: 110, textAlignVertical: 'top' },
   actionRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 14 },

@@ -76,18 +76,21 @@ export default function CampusDirectoryScreen() {
   const [fallbackOrganizations, setFallbackOrganizations] = useState([]);
   const [fallbackPrograms, setFallbackPrograms] = useState([]);
   const [fallbackCampuses, setFallbackCampuses] = useState([]);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       if (organizations.length || programs.length || campuses.length) {
         if (!mounted) return;
+        setLoadError('');
         setFallbackOrganizations([]);
         setFallbackPrograms([]);
         setFallbackCampuses([]);
         return;
       }
       try {
+        setLoadError('');
         const publicOrganizations = await listActiveOrganizations();
         const [programGroups, campusGroups] = await Promise.all([
           Promise.all((publicOrganizations || []).map((organization) => listProgramsByOrganization(organization?.id))),
@@ -105,8 +108,9 @@ export default function CampusDirectoryScreen() {
             collection.findIndex((item) => String(item?.id || '') === String(campus?.id || '')) === index
           ))
         );
-      } catch (_) {
+      } catch (error) {
         if (!mounted) return;
+        setLoadError(String(error?.message || error || 'Could not load directory listings.'));
         setFallbackOrganizations([]);
         setFallbackPrograms([]);
         setFallbackCampuses([]);
@@ -179,6 +183,7 @@ export default function CampusDirectoryScreen() {
           <Text style={moduleStyles.title}>Campus Directory</Text>
           <Text style={moduleStyles.subtitle}>{currentProgram?.name ? `${currentProgram.name} campuses` : 'All campuses'}</Text>
         </View>
+        {loadError ? <Text style={[moduleStyles.cardMeta, { color: '#b91c1c', marginBottom: 12 }]}>{loadError}</Text> : null}
 
         {sortedOrganizations.length > 0 ? (
           <View style={{ marginBottom: 16 }}>
