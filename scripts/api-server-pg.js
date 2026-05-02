@@ -378,6 +378,15 @@ function normalizeEmail(input) {
   return e.includes('@') ? e : '';
 }
 
+function validatePasswordPolicy(password) {
+  const raw = String(password || '');
+  if (raw.length < 8) return 'password must be at least 8 characters';
+  if (!/[a-z]/.test(raw) || !/[A-Z]/.test(raw) || !/[0-9]/.test(raw)) {
+    return 'password must include uppercase, lowercase, and a number';
+  }
+  return '';
+}
+
 function jsonb(value) {
   if (value == null) return null;
   return JSON.stringify(value);

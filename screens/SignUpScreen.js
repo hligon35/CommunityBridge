@@ -14,26 +14,37 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   TouchableOpacity,
+  Linking,
   useWindowDimensions,
 } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as Api from '../src/Api';
 import { logger } from '../src/utils/logger';
 import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportError';
-import { getAuthInitError, getFirebaseAppInitError } from '../src/firebase';
+import { getAuthInitError, getAuthInstance, getFirebaseAppInitError } from '../src/firebase';
 import { MaterialIcons } from '@expo/vector-icons';
 import { USER_ROLES } from '../src/core/tenant/models';
-import { THERAPY_ROLE_LABELS } from '../src/utils/roleTerminology';
+import { useAuth } from '../src/AuthContext';
 
 const signupLogoImage = require('../assets/titlelogo.png');
+const SUPPORT_EMAIL = (() => {
+  try {
+    const value = (typeof process !== 'undefined' && process.env && process.env.EXPO_PUBLIC_SUPPORT_EMAIL)
+      ? String(process.env.EXPO_PUBLIC_SUPPORT_EMAIL)
+      : '';
+    return value.trim() || 'support@communitybridge.app';
+  } catch (_) {
+    return 'support@communitybridge.app';
+  }
+})();
 
 export default function SignUpScreen({ onDone, onCancel }) {
+  const auth = useAuth();
   const { height: windowHeight } = useWindowDimensions();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState(USER_ROLES.PARENT);
   const [organizationId, setOrganizationId] = useState('');
   const [programId, setProgramId] = useState('');
   const [enrollmentCode, setEnrollmentCode] = useState('');
@@ -42,13 +53,7 @@ export default function SignUpScreen({ onDone, onCancel }) {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [activeMenu, setActiveMenu] = useState('');
-
-  const roleOptions = [
-    { value: USER_ROLES.PARENT, label: 'Parent' },
-    { value: USER_ROLES.FACULTY, label: 'Faculty' },
-    { value: USER_ROLES.THERAPIST, label: THERAPY_ROLE_LABELS.therapist },
-    { value: USER_ROLES.BCBA, label: 'BCBA' },
-  ];
+  const role = USER_ROLES.PARENT;
 
   useEffect(() => {
     let mounted = true;
@@ -104,13 +109,34 @@ export default function SignUpScreen({ onDone, onCancel }) {
     [programs]
   );
 
-  const menuOptions = activeMenu === 'role'
-    ? roleOptions
-    : activeMenu === 'organization'
+  const menuOptions = activeMenu === 'organization'
       ? organizationOptions
       : activeMenu === 'program'
         ? programOptions
         : [];
+
+  async function requestStaffAccess() {
+    const subject = encodeURIComponent('CommunityBridge staff/admin access request');
+    const body = encodeURIComponent(
+      'I need staff or administrator access for CommunityBridge.\n\n' +
+      'Organization: \n' +
+      'Program: \n' +
+      'Requested role: \n' +
+      'Work email: \n\n' +
+      'Please send the appropriate invite or next steps.'
+    );
+    const url = `mailto:${encodeURIComponent(SUPPORT_EMAIL)}?subject=${subject}&body=${body}`;
+
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+        return;
+      }
+    } catch (_) {}
+
+    Alert.alert('Staff/Admin access', `Staff, faculty, therapist, BCBA, and admin access must be invited by an existing administrator. Contact ${SUPPORT_EMAIL} from your work email if you need help getting an invite.`);
+  }
 
   function splitNameParts(fullName) {
     const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
@@ -184,13 +210,30 @@ export default function SignUpScreen({ onDone, onCancel }) {
         await SecureStore.setItemAsync('bb_bio_user', JSON.stringify(res?.user || {}));
       } catch (_) {}
 
+      const gate = await auth?.refreshMfaState?.().catch(() => null);
+      if (gate?.needsMfa) {
+        auth?.markMfaRequired?.();
+        Alert.alert('Account created', 'Enter the verification code we sent to your email to finish creating your account.');
+        if (onDone) onDone({ authed: true, needsMfa: true, email: cleanedEmail, fromSignup: true });
+        return;
+      }
+
       Alert.alert('Success', 'Account created');
-      if (onDone) onDone({ authed: true });
+      if (onDone) onDone({ authed: true, email: cleanedEmail });
     } catch (e) {
       const code = e?.code ? String(e.code) : '';
       const msg = e?.message || String(e) || 'Signup failed';
       const fbAppErr = getFirebaseAppInitError();
       const fbAuthErr = getAuthInitError();
+
+      const currentUser = getAuthInstance()?.currentUser || null;
+      const permissionDenied = code === 'permission-denied' || String(msg).toLowerCase().includes('missing or insufficient permissions');
+      if (permissionDenied && currentUser) {
+        auth?.markMfaRequired?.();
+        Alert.alert('Verify your email', 'Your account was created. Enter the verification code we sent to your email to finish signing in.');
+        if (onDone) onDone({ authed: true, needsMfa: true, email: currentUser.email || cleanedEmail, fromSignup: true });
+        return;
+      }
 
       logger.warn('auth', 'Signup failed', { code, message: msg });
 
@@ -240,6 +283,20 @@ export default function SignUpScreen({ onDone, onCancel }) {
 
             <View style={styles.formCard}>
               <Text style={styles.title}>Register</Text>
+              <View style={styles.infoCard}>
+                <Text style={styles.infoTitle}>Parent registration only</Text>
+                <Text style={styles.infoBody}>
+                  Staff, faculty, therapists, BCBAs, and administrators must be invited by an existing organization administrator before they can activate an account.
+                </Text>
+                <TouchableOpacity
+                  style={styles.staffAccessBtn}
+                  onPress={requestStaffAccess}
+                  accessibilityRole="button"
+                  accessibilityLabel="Request staff or admin access"
+                >
+                  <Text style={styles.staffAccessBtnText}>Request Staff/Admin Access</Text>
+                </TouchableOpacity>
+              </View>
 
               <View style={styles.fieldWidth}>
                 <TextInput
@@ -330,17 +387,9 @@ export default function SignUpScreen({ onDone, onCancel }) {
 
               <View style={styles.fieldWidth}>
                 <Text style={styles.sectionLabel}>Account type</Text>
-                <TouchableOpacity
-                  style={styles.dropdownTrigger}
-                  onPress={() => setActiveMenu('role')}
-                  accessibilityRole="button"
-                  accessibilityLabel="Choose account type"
-                >
-                  <Text style={styles.dropdownTriggerText}>
-                    {roleOptions.find((option) => option.value === role)?.label || 'Select account type'}
-                  </Text>
-                  <MaterialIcons name={activeMenu === 'role' ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={22} color="#475569" />
-                </TouchableOpacity>
+                <View style={styles.readonlyBadge}>
+                  <Text style={styles.readonlyBadgeText}>Parent</Text>
+                </View>
               </View>
 
               <View style={styles.actionsRow}>
@@ -375,10 +424,10 @@ export default function SignUpScreen({ onDone, onCancel }) {
                     <TouchableWithoutFeedback>
                       <View style={styles.dropdownModalCard}>
                         <Text style={styles.dropdownModalTitle}>
-                          {activeMenu === 'organization' ? 'Select organization' : activeMenu === 'program' ? 'Select program' : 'Select account type'}
+                          {activeMenu === 'organization' ? 'Select organization' : 'Select program'}
                         </Text>
                         {menuOptions.map((option) => {
-                          const currentValue = activeMenu === 'organization' ? organizationId : activeMenu === 'program' ? programId : role;
+                          const currentValue = activeMenu === 'organization' ? organizationId : programId;
                           const isSelected = option.value === currentValue;
                           return (
                             <TouchableOpacity
@@ -388,10 +437,8 @@ export default function SignUpScreen({ onDone, onCancel }) {
                                 if (activeMenu === 'organization') {
                                   setOrganizationId(option.value);
                                   setProgramId('');
-                                } else if (activeMenu === 'program') {
-                                  setProgramId(option.value);
                                 } else {
-                                  setRole(option.value);
+                                  setProgramId(option.value);
                                 }
                                 setActiveMenu('');
                               }}
@@ -426,6 +473,11 @@ const styles = StyleSheet.create({
   logo: { width: '100%', maxWidth: 520, resizeMode: 'contain' },
   formCard: { width: '100%', maxWidth: 420, alignSelf: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
   title: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
+  infoCard: { width: '100%', maxWidth: 360, borderRadius: 12, borderWidth: 1, borderColor: '#dbeafe', backgroundColor: '#eff6ff', padding: 12, marginBottom: 14 },
+  infoTitle: { fontSize: 14, fontWeight: '800', color: '#1d4ed8', marginBottom: 6 },
+  infoBody: { fontSize: 13, lineHeight: 18, color: '#1e3a8a' },
+  staffAccessBtn: { marginTop: 10, alignSelf: 'flex-start', backgroundColor: '#1d4ed8', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12 },
+  staffAccessBtnText: { color: '#fff', fontWeight: '800' },
   fieldWidth: { width: '100%', maxWidth: 360 },
   sectionLabel: { fontSize: 13, fontWeight: '700', color: '#475569', marginBottom: 8 },
   input: { borderWidth: 1, borderColor: '#ccc', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12, borderRadius: 10, backgroundColor: '#fff' },
@@ -433,6 +485,8 @@ const styles = StyleSheet.create({
   dropdownTriggerText: { color: '#111827', fontSize: 15 },
   dropdownTriggerDisabled: { backgroundColor: '#f8fafc', borderColor: '#e5e7eb' },
   dropdownTriggerTextDisabled: { color: '#94a3b8' },
+  readonlyBadge: { borderWidth: 1, borderColor: '#bfdbfe', backgroundColor: '#eff6ff', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 12, marginBottom: 12 },
+  readonlyBadgeText: { color: '#1d4ed8', fontSize: 15, fontWeight: '700' },
   passwordFieldWrap: { position: 'relative' },
   passwordInput: { paddingRight: 42 },
   peekIconBtn: { position: 'absolute', right: 10, top: '50%', marginTop: -25, width: 28, height: 40, alignItems: 'center', justifyContent: 'center' },

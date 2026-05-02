@@ -64,7 +64,12 @@ service cloud.firestore {
 
       // Users may create their own profile on first sign-in.
       allow create: if signedIn() && request.auth.uid == uid &&
-        (request.resource.data.role == 'parent');
+        (
+          request.resource.data.role == 'parent' ||
+          request.resource.data.role == 'faculty' ||
+          request.resource.data.role == 'therapist' ||
+          request.resource.data.role == 'bcba'
+        );
 
       // Users may update their own profile, but may not change role.
       allow update: if signedIn() && request.auth.uid == uid &&

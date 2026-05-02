@@ -526,6 +526,12 @@ export async function signup(payload) {
             cred = await signInWithEmailAndPassword(a, email, password);
           } catch (signInError) {
             const signInCode = String(signInError?.code || '');
+            if (signInCode === 'auth/network-request-failed' || isLikelyNetworkError(signInError)) {
+              const existsError = new Error('An account already exists for this email address. Try logging in or resetting your password.');
+              existsError.code = 'auth/email-already-in-use';
+              existsError.cause = signInError;
+              throw existsError;
+            }
             if (signInCode === 'auth/invalid-credential' || signInCode === 'auth/invalid-login-credentials' || signInCode === 'auth/wrong-password') {
               const existsError = new Error('An account already exists for this email address. Try logging in or resetting your password.');
               existsError.code = 'auth/email-already-in-use';

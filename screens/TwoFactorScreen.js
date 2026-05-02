@@ -26,7 +26,7 @@ function getRetryAfterSeconds(error) {
   return 0;
 }
 
-export default function TwoFactorScreen({ navigation }) {
+export default function TwoFactorScreen({ navigation, route }) {
   const auth = useAuth();
   const { height: windowHeight } = useWindowDimensions();
   const [code, setCode] = useState('');
@@ -37,7 +37,9 @@ export default function TwoFactorScreen({ navigation }) {
   const [resendAvailableAt, setResendAvailableAt] = useState(0);
   const [countdownNow, setCountdownNow] = useState(Date.now());
   const didAutoSendRef = useRef(false);
-  const email = auth?.user?.email ? String(auth.user.email) : '';
+  const routeEmail = route?.params?.email ? String(route.params.email) : '';
+  const flowOrigin = route?.params?.origin ? String(route.params.origin) : '';
+  const email = auth?.user?.email ? String(auth.user.email) : routeEmail;
 
   const fieldWidthStyle = useMemo(() => ({ width: '100%', maxWidth: 360 }), []);
   const resendSecondsRemaining = resendAvailableAt > countdownNow
@@ -195,7 +197,9 @@ export default function TwoFactorScreen({ navigation }) {
           <View style={styles.card}>
             <Text style={styles.title}>Two-step verification</Text>
             <Text style={styles.subtitle}>
-              {email ? `Enter the code we sent to ${email}.` : 'Enter the verification code we sent to you.'}
+              {flowOrigin === 'signup'
+                ? (email ? `Enter the code we sent to ${email} to finish creating your account.` : 'Enter the verification code we sent to finish creating your account.')
+                : (email ? `Enter the code we sent to ${email}.` : 'Enter the verification code we sent to you.')}
             </Text>
             {resendStatus ? (
               <Text style={[

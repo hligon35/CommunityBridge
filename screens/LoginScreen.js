@@ -678,11 +678,19 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
             <SignUpScreen
               onDone={(result) => {
                 setShowSignUp(false);
-                    if (result && result.authed) {
-                      auth.refreshMfaState()
-                        .then((gate) => navigation.replace(gate?.needsMfa ? 'TwoFactor' : 'Main'))
-                        .catch(() => navigation.replace('Main'));
-                    }
+                if (result && result.authed) {
+                  if (result.needsMfa) {
+                    navigation.replace('TwoFactor', {
+                      email: result.email || '',
+                      origin: result.fromSignup ? 'signup' : 'login',
+                    });
+                    return;
+                  }
+
+                  auth.refreshMfaState()
+                    .then((gate) => navigation.replace(gate?.needsMfa ? 'TwoFactor' : 'Main'))
+                    .catch(() => navigation.replace('Main'));
+                }
               }}
               onCancel={() => setShowSignUp(false)}
             />
