@@ -2272,11 +2272,11 @@ async function createFirebasePublicSignupUser(payload) {
   const password = safeString(payload?.password);
   const role = safeString(payload?.role || 'parent').trim() || 'parent';
   const organizationId = safeString(payload?.organizationId).trim();
-  const organizationName = safeString(payload?.organizationName).trim();
+  let organizationName = safeString(payload?.organizationName).trim();
   const programId = safeString(payload?.programId).trim();
-  const programName = safeString(payload?.programName).trim();
-  const campusId = safeString(payload?.campusId).trim();
-  const campusName = safeString(payload?.campusName).trim();
+  let programName = safeString(payload?.programName).trim();
+  let campusId = safeString(payload?.campusId).trim();
+  let campusName = safeString(payload?.campusName).trim();
   const enrollmentCode = safeString(payload?.enrollmentCode).trim().toUpperCase();
 
   if (!email || !password || !name) {
@@ -2300,11 +2300,58 @@ async function createFirebasePublicSignupUser(payload) {
     err.httpStatus = 403;
     throw err;
   }
-  if (!organizationId || !programId || !campusId || !enrollmentCode) {
-    const err = new Error('organizationId, programId, campusId, and enrollmentCode are required');
+  if (!organizationId || !programId || !enrollmentCode) {
+    const err = new Error('organizationId, programId, and enrollmentCode are required');
     err.httpStatus = 400;
     throw err;
   }
+
+  const orgRef = firestore.collection('organizations').doc(organizationId);
+  const programRef = orgRef.collection('programs').doc(programId);
+  const [orgSnap, programSnap] = await Promise.all([orgRef.get(), programRef.get()]);
+
+  if (!orgSnap.exists || orgSnap.data()?.active === false) {
+    const err = new Error('Organization not found.');
+    err.httpStatus = 404;
+    throw err;
+  }
+  if (!programSnap.exists || programSnap.data()?.active === false) {
+    const err = new Error('Program not found.');
+    err.httpStatus = 404;
+    throw err;
+  }
+
+  organizationName = organizationName || safeString(orgSnap.data()?.name || orgSnap.data()?.displayName).trim();
+  programName = programName || safeString(programSnap.data()?.name || programSnap.data()?.displayName).trim();
+
+  let campusData = null;
+  if (campusId) {
+    const campusSnap = await orgRef.collection('campuses').doc(campusId).get();
+    campusData = campusSnap.exists ? (campusSnap.data() || {}) : null;
+    const campusCodes = normalizedPublicEnrollmentCodes(campusData);
+    if (!campusSnap.exists || campusData?.active === false || safeString(campusData?.programId || campusData?.branchId).trim() !== programId) {
+      const err = new Error('Campus not found for this program.');
+      err.httpStatus = 404;
+      throw err;
+    }
+    if (!campusCodes.includes(enrollmentCode)) {
+      const err = new Error('Enrollment code did not match the selected campus.');
+      err.httpStatus = 403;
+      throw err;
+    }
+  } else {
+    const campusSnap = await orgRef.collection('campuses').where('active', '==', true).where('programId', '==', programId).get();
+    const matchedCampus = campusSnap.docs.find((docSnap) => normalizedPublicEnrollmentCodes(docSnap.data()).includes(enrollmentCode));
+    if (!matchedCampus) {
+      const err = new Error('Enrollment code did not match an active campus.');
+      err.httpStatus = 403;
+      throw err;
+    }
+    campusId = matchedCampus.id;
+    campusData = matchedCampus.data() || {};
+  }
+
+  campusName = campusName || safeString(campusData?.name || campusData?.displayName).trim();
 
   try {
     const existing = await auth.getUserByEmail(email);
