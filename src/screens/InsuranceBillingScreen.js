@@ -17,6 +17,7 @@ function Block({ title, children, style }) {
 export default function InsuranceBillingScreen() {
   const { user } = useAuth();
   const isBcba = isBcbaRole(user?.role);
+  const isParent = String(user?.role || '').trim().toLowerCase().includes('parent');
   const insurance = user?.insurance || {};
   const [jobs, setJobs] = useState([]);
   const [auditItems, setAuditItems] = useState([]);
@@ -25,6 +26,12 @@ export default function InsuranceBillingScreen() {
   useEffect(() => {
     let mounted = true;
     (async () => {
+      if (isParent) {
+        setJobs([]);
+        setAuditItems([]);
+        setLoadError('');
+        return;
+      }
       try {
         setLoadError('');
         const [jobResult, auditResult] = await Promise.all([
@@ -45,7 +52,7 @@ export default function InsuranceBillingScreen() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [isParent]);
 
   function action(title) {
     Alert.alert(title, isBcba ? 'BCBA users can review this workflow, but office users retain edit and submission control.' : `${title} is available from the office workflow surface.`);
@@ -56,8 +63,8 @@ export default function InsuranceBillingScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <Text style={styles.eyebrow}>Billing & Authorizations</Text>
-          <Text style={styles.title}>Insurance and billing workflow</Text>
-          <Text style={styles.subtitle}>{isBcba ? 'BCBA view only. Review authorization context, session verification, and billing status here.' : 'Office control. Manage authorizations, verification, and billing export handoff here.'}</Text>
+          <Text style={styles.title}>{isParent ? 'Insurance and billing summary' : 'Insurance and billing workflow'}</Text>
+          <Text style={styles.subtitle}>{isParent ? 'Review your family insurance status, authorization details, and any signature items that still need attention.' : (isBcba ? 'BCBA view only. Review authorization context, session verification, and billing status here.' : 'Office control. Manage authorizations, verification, and billing export handoff here.')}</Text>
         </View>
 
         {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
@@ -69,29 +76,39 @@ export default function InsuranceBillingScreen() {
             <Text style={styles.rowText}>Expiration date: {insurance.expirationDate || 'N/A'}</Text>
           </Block>
 
-          <Block title="Session verification" style={styles.splitCard}>
+          <Block title={isParent ? 'Session paperwork' : 'Session verification'} style={styles.splitCard}>
             <Text style={styles.rowText}>Timesheets: {insurance.timesheetStatus || 'Pending verification'}</Text>
             <Text style={styles.rowText}>Parent signatures: {insurance.parentSignatureStatus || 'No signature on file'}</Text>
             <Text style={styles.rowText}>Session status: {insurance.sessionStatus || 'Pending verification'}</Text>
-            {!isBcba ? <TouchableOpacity style={styles.primaryButton} onPress={() => action('Approve verification')}><Text style={styles.primaryButtonText}>Approve Verification</Text></TouchableOpacity> : null}
+            {!isParent && !isBcba ? <TouchableOpacity style={styles.primaryButton} onPress={() => action('Approve verification')}><Text style={styles.primaryButtonText}>Approve Verification</Text></TouchableOpacity> : null}
           </Block>
         </View>
 
-        <Block title="Billing exports">
-          <View style={styles.exportRow}>
-            {['837P', 'CSV'].map((format) => (
-              <View key={format} style={styles.exportCard}>
-                <Text style={styles.exportTitle}>{format}</Text>
-                <Text style={styles.exportText}>{format === '837P' ? 'Reserved for future support.' : 'Available for export handoff.'}</Text>
+        {isParent ? (
+          <Block title="Need help?">
+            <Text style={styles.rowText}>Questions about billing: {insurance.billingContact || 'Contact your center billing team.'}</Text>
+            <Text style={styles.rowText}>Insurance plan: {insurance.planName || insurance.provider || 'No plan on file'}</Text>
+            <Text style={styles.rowText}>Member ID: {insurance.memberId || 'Not available'}</Text>
+          </Block>
+        ) : (
+          <>
+            <Block title="Billing exports">
+              <View style={styles.exportRow}>
+                {['837P', 'CSV'].map((format) => (
+                  <View key={format} style={styles.exportCard}>
+                    <Text style={styles.exportTitle}>{format}</Text>
+                    <Text style={styles.exportText}>{format === '837P' ? 'Reserved for future support.' : 'Available for export handoff.'}</Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
-          {jobs.length ? jobs.map((job) => <Text key={job.id} style={styles.rowText}>{job.title || 'Billing export'} • {String(job.status || 'ready').toUpperCase()}</Text>) : <Text style={styles.rowText}>No billing exports queued yet.</Text>}
-        </Block>
+              {jobs.length ? jobs.map((job) => <Text key={job.id} style={styles.rowText}>{job.title || 'Billing export'} • {String(job.status || 'ready').toUpperCase()}</Text>) : <Text style={styles.rowText}>No billing exports queued yet.</Text>}
+            </Block>
 
-        <Block title="Audit log">
-          {auditItems.length ? auditItems.slice(0, 6).map((item, index) => <Text key={item?.id || index} style={styles.rowText}>{String(item?.action || 'audit.event')} • {item?.createdAt ? new Date(item.createdAt).toLocaleString() : 'Unknown time'}</Text>) : <Text style={styles.rowText}>No billing audit activity available yet.</Text>}
-        </Block>
+            <Block title="Audit log">
+              {auditItems.length ? auditItems.slice(0, 6).map((item, index) => <Text key={item?.id || index} style={styles.rowText}>{String(item?.action || 'audit.event')} • {item?.createdAt ? new Date(item.createdAt).toLocaleString() : 'Unknown time'}</Text>) : <Text style={styles.rowText}>No billing audit activity available yet.</Text>}
+            </Block>
+          </>
+        )}
       </ScrollView>
     </ScreenWrapper>
   );

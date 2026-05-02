@@ -352,7 +352,7 @@ export default function MyChildScreen() {
       <View style={styles.scheduleWrap}>
         <View style={styles.scheduleHeaderRow}>
           <Text style={styles.scheduleGroupTitle}>Daily Review</Text>
-          {child?.id ? (
+          {child?.id && !isParent ? (
             <TouchableOpacity style={styles.reportsLinkButton} onPress={() => navigation.navigate('Reports', { childId: child.id })}>
               <Text style={styles.reportsLinkButtonText}>Open Reports</Text>
             </TouchableOpacity>

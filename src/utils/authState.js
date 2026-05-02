@@ -1,6 +1,6 @@
 const DEV_SWITCH_EMAIL = 'dev@communitybridge.app';
 const APP_REVIEW_EMAIL = 'appreview@communitybridge.app';
-const DEFAULT_MFA_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const DEFAULT_MFA_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DEV_MFA_WINDOW_MS = 4 * 60 * 60 * 1000;
 
 function normalizeRoleOverride(role) {

@@ -4,7 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { useTenant } from '../core/tenant/TenantContext';
-import { ADMIN_SECTION_KEYS, canAccessAdminSection, canAccessAdminWorkspace, isBcbaRole, isStaffRole } from '../core/tenant/models';
+import { ADMIN_SECTION_KEYS, canAccessAdminSection, canAccessAdminWorkspace, isStaffRole } from '../core/tenant/models';
 import { isChildLinkedToTherapist } from '../features/sessionTracking/utils/dashboardSessionTarget';
 import useIsTabletLayout from '../hooks/useIsTabletLayout';
 import { navigationRef } from '../navigationRef';
@@ -41,8 +41,8 @@ export default function TabletNavigationShell({ currentRoute, children }) {
   const [quickLogType, setQuickLogType] = useState('');
   const [quickLogValue, setQuickLogValue] = useState('');
   const isStaff = isStaffRole(user?.role);
-  const isBcbaWorkspace = isBcbaRole(user?.role);
   const showAdminWorkspace = canAccessAdminWorkspace(user?.role);
+  const isParentWorkspace = !showAdminWorkspace && !isStaff;
   const greeting = String(user?.name || user?.firstName || '').trim() || (showAdminWorkspace ? 'Welcome back' : 'Hello');
   const showQuickAdd = !showAdminWorkspace && isStaff;
   const activeRouteParams = navigationRef?.getCurrentRoute?.()?.params || null;
@@ -107,6 +107,18 @@ export default function TabletNavigationShell({ currentRoute, children }) {
       ];
     }
 
+    if (isParentWorkspace) {
+      return [{
+        label: 'Parent Workspace',
+        items: [
+          { key: 'dashboard', label: labels.dashboard || 'Dashboard', icon: 'dashboard', target: { root: 'Home', screen: 'CommunityMain' } },
+          { key: 'messages', label: 'Chats', icon: 'chat', target: { root: 'Chats', screen: 'ChatsList' } },
+          { key: 'my-child', label: 'My Child', icon: 'child-care', target: { root: 'MyChild', screen: 'MyChildMain' } },
+          { key: 'settings', label: 'Settings', icon: 'settings', target: { root: 'Settings', screen: 'SettingsMain' } },
+        ],
+      }];
+    }
+
     const therapistItems = [
       { key: 'dashboard', label: labels.dashboard || 'Dashboard', icon: 'dashboard', target: { root: 'Home', screen: 'CommunityMain' } },
       { key: 'tap-tracker', label: 'Tap Tracker', icon: 'touch-app', target: { root: 'Home', screen: 'TapTracker', params: { sessionPreview: true } } },
@@ -117,84 +129,87 @@ export default function TabletNavigationShell({ currentRoute, children }) {
       { key: 'settings', label: 'Settings', icon: 'settings', target: { root: 'Settings', screen: 'SettingsMain' } },
     ];
 
-    return [{ label: isStaff ? THERAPY_ROLE_LABELS.therapist : 'Workspace', items: therapistItems }];
-  }, [isBcbaWorkspace, isStaff, labels.dashboard, showAdminWorkspace, user?.role]);
+    return [{ label: `${THERAPY_ROLE_LABELS.therapist} Workspace`, items: therapistItems }];
+  }, [isParentWorkspace, isStaff, labels.dashboard, showAdminWorkspace, user?.role]);
 
   if (!isTabletLayout) return children;
 
   return (
-    <View style={styles.shell}>
-      <View style={[styles.drawer, { paddingTop: 20 + insets.top, paddingBottom: 20 + Math.max(insets.bottom, 0) }, collapsed ? styles.drawerCollapsed : null]}>
-        {Platform.OS !== 'web' ? (
-          <TouchableOpacity style={styles.drawerToggle} onPress={() => setCollapsed((value) => !value)}>
-            <MaterialIcons name={collapsed ? 'menu' : 'menu-open'} size={22} color="#e2e8f0" />
-            {!collapsed ? <Text style={styles.drawerToggleText}>Collapse</Text> : null}
-          </TouchableOpacity>
-        ) : null}
-
-        {navGroups.map((group) => (
-          <View key={group.label} style={styles.group}>
-            {!collapsed ? <Text style={styles.groupLabel}>{group.label}</Text> : null}
-            {group.items.map((item) => {
-              const active = currentRoute === (item.target.screen || item.target.root);
-              return (
-                <TouchableOpacity key={item.key} style={[styles.navItem, active ? styles.navItemActive : null]} onPress={() => openTarget(item.target)}>
-                  <MaterialIcons name={item.icon} size={20} color={active ? '#0f172a' : '#cbd5e1'} />
-                  {!collapsed ? <Text style={[styles.navLabel, active ? styles.navLabelActive : null]}>{item.label}</Text> : null}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        ))}
-
-        <TouchableOpacity style={styles.logoutButton} onPress={() => logout?.()}>
-          <MaterialIcons name="logout" size={20} color="#fecaca" />
-          {!collapsed ? <Text style={styles.logoutText}>Logout</Text> : null}
-        </TouchableOpacity>
-      </View>
-
-      <View style={[styles.contentWrap, { paddingTop: Math.max(insets.top, 12), paddingBottom: Math.max(insets.bottom, 12) }]}>
-        {showQuickAdd && quickMenuOpen ? <TouchableOpacity style={styles.quickMenuDismissLayer} activeOpacity={1} onPress={() => setQuickMenuOpen(false)} /> : null}
-        <View style={styles.topBar}>
-          <View style={styles.brandRow}>
-            <LogoTitle width={150} height={48} />
-            {!collapsed ? (
-              <View style={styles.greetingWrap}>
-                <Text style={styles.topEyebrow}>{showAdminWorkspace ? 'Admin Workspace' : `${THERAPY_ROLE_LABELS.therapist} Workspace`}</Text>
-                <Text style={styles.topTitle}>Hello, {greeting}</Text>
-              </View>
-            ) : null}
-          </View>
-          <View style={styles.headerActions}>
-            {showQuickAdd ? (
-              <View style={styles.quickAddAnchor}>
-                <TouchableOpacity style={[styles.iconOnlyButton, styles.quickAddButton, quickMenuOpen ? styles.iconOnlyButtonActive : null]} onPress={() => setQuickMenuOpen((value) => !value)}>
-                  <MaterialIcons name="add" size={20} color="#1d4ed8" />
-                </TouchableOpacity>
-                {quickMenuOpen ? (
-                  <View style={[styles.quickHeaderMenu, { width: quickMenuWidth }]}>
-                    {['Quick Note', 'Incident', 'Unexpected Data'].map((item) => (
-                      <TouchableOpacity
-                        key={item}
-                        style={styles.quickHeaderMenuItem}
-                        onPress={() => {
-                          setQuickMenuOpen(false);
-                          setQuickLogType(item);
-                        }}
-                      >
-                        <Text style={styles.quickHeaderMenuText}>{item}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
-            <TouchableOpacity style={styles.iconOnlyButton} onPress={() => openTarget({ root: 'Settings', screen: 'Help' })}>
-              <MaterialIcons name="help-outline" size={20} color="#1d4ed8" />
+    <View style={styles.shellFrame}>
+      {Platform.OS !== 'web' && insets.top > 0 ? <View style={{ height: insets.top, backgroundColor: '#e2e8f0' }} /> : null}
+      <View style={styles.shell}>
+        <View style={[styles.drawer, { paddingTop: 20, paddingBottom: 20 + Math.max(insets.bottom, 0) }, collapsed ? styles.drawerCollapsed : null]}>
+          {Platform.OS !== 'web' ? (
+            <TouchableOpacity style={styles.drawerToggle} onPress={() => setCollapsed((value) => !value)}>
+              <MaterialIcons name={collapsed ? 'menu' : 'menu-open'} size={22} color="#e2e8f0" />
+              {!collapsed ? <Text style={styles.drawerToggleText}>Collapse</Text> : null}
             </TouchableOpacity>
-          </View>
+          ) : null}
+
+          {navGroups.map((group) => (
+            <View key={group.label} style={styles.group}>
+              {!collapsed ? <Text style={styles.groupLabel}>{group.label}</Text> : null}
+              {group.items.map((item) => {
+                const active = currentRoute === (item.target.screen || item.target.root);
+                return (
+                  <TouchableOpacity key={item.key} style={[styles.navItem, active ? styles.navItemActive : null]} onPress={() => openTarget(item.target)}>
+                    <MaterialIcons name={item.icon} size={20} color={active ? '#0f172a' : '#cbd5e1'} />
+                    {!collapsed ? <Text style={[styles.navLabel, active ? styles.navLabelActive : null]}>{item.label}</Text> : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))}
+
+          <TouchableOpacity style={styles.logoutButton} onPress={() => logout?.()}>
+            <MaterialIcons name="logout" size={20} color="#fecaca" />
+            {!collapsed ? <Text style={styles.logoutText}>Logout</Text> : null}
+          </TouchableOpacity>
         </View>
-        <View style={styles.screenWrap}>{children}</View>
+
+        <View style={[styles.contentWrap, { paddingTop: 12, paddingBottom: Math.max(insets.bottom, 12) }]}>
+          {showQuickAdd && quickMenuOpen ? <TouchableOpacity style={styles.quickMenuDismissLayer} activeOpacity={1} onPress={() => setQuickMenuOpen(false)} /> : null}
+          <View style={styles.topBar}>
+            <View style={styles.brandRow}>
+              <LogoTitle width={150} height={48} />
+              {!collapsed ? (
+                <View style={styles.greetingWrap}>
+                  <Text style={styles.topEyebrow}>{showAdminWorkspace ? 'Admin Workspace' : (isParentWorkspace ? 'Parent Workspace' : `${THERAPY_ROLE_LABELS.therapist} Workspace`)}</Text>
+                  <Text style={styles.topTitle}>Hello, {greeting}</Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.headerActions}>
+              {showQuickAdd ? (
+                <View style={styles.quickAddAnchor}>
+                  <TouchableOpacity style={[styles.iconOnlyButton, styles.quickAddButton, quickMenuOpen ? styles.iconOnlyButtonActive : null]} onPress={() => setQuickMenuOpen((value) => !value)}>
+                    <MaterialIcons name="add" size={20} color="#1d4ed8" />
+                  </TouchableOpacity>
+                  {quickMenuOpen ? (
+                    <View style={[styles.quickHeaderMenu, { width: quickMenuWidth }]}>
+                      {['Quick Note', 'Incident', 'Unexpected Data'].map((item) => (
+                        <TouchableOpacity
+                          key={item}
+                          style={styles.quickHeaderMenuItem}
+                          onPress={() => {
+                            setQuickMenuOpen(false);
+                            setQuickLogType(item);
+                          }}
+                        >
+                          <Text style={styles.quickHeaderMenuText}>{item}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+              <TouchableOpacity style={styles.iconOnlyButton} onPress={() => openTarget({ root: 'Settings', screen: 'Help' })}>
+                <MaterialIcons name="help-outline" size={20} color="#1d4ed8" />
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.screenWrap}>{children}</View>
+        </View>
       </View>
       <Modal transparent visible={!!quickLogType} animationType="fade" onRequestClose={() => setQuickLogType('')}>
         <View style={styles.modalOverlay}>
@@ -218,6 +233,7 @@ export default function TabletNavigationShell({ currentRoute, children }) {
 }
 
 const styles = StyleSheet.create({
+  shellFrame: { flex: 1, backgroundColor: '#e2e8f0' },
   shell: { flex: 1, flexDirection: 'row', backgroundColor: '#e2e8f0' },
   drawer: { width: 280, backgroundColor: '#0f172a', paddingHorizontal: 16 },
   drawerCollapsed: { width: 92, paddingHorizontal: 10 },

@@ -52,7 +52,9 @@ export default function ReportsScreen() {
   const { user } = useAuth();
   const { children = [], parents = [], urgentMemos = [], messages = [] } = useData();
   const { width } = useWindowDimensions();
+  const role = String(user?.role || '').trim().toLowerCase();
   const isBcba = isBcbaRole(user?.role);
+  const isParent = role.includes('parent');
   const isWideLayout = width >= 900;
   const reportChildren = useMemo(() => findReportChildren(user, children, parents), [user, children, parents]);
   const [selectedChildId, setSelectedChildId] = useState(reportChildren[0]?.id || null);
@@ -102,6 +104,18 @@ export default function ReportsScreen() {
     title: message?.subject || message?.body || 'Message thread',
     when: message?.createdAt ? new Date(message.createdAt).toLocaleString() : 'Recently',
   })), [messages]);
+
+  if (isParent) {
+    return (
+      <ScreenWrapper>
+        <View style={styles.parentBlockedCard}>
+          <Text style={styles.parentBlockedEyebrow}>Parent Workspace</Text>
+          <Text style={styles.parentBlockedTitle}>Reports are not available on the parent path.</Text>
+          <Text style={styles.parentBlockedText}>Use Dashboard, Chats, My Child, Calendar, and Billing & Insurance from the parent workspace instead.</Text>
+        </View>
+      </ScreenWrapper>
+    );
+  }
 
   async function refreshJobs() {
     try {
@@ -327,6 +341,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   content: { padding: 16 },
   contentWide: { width: '100%', maxWidth: 1180, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 28 },
+  parentBlockedCard: { borderRadius: 22, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#bfdbfe', padding: 18, margin: 16 },
+  parentBlockedEyebrow: { color: '#1d4ed8', fontWeight: '800', fontSize: 12, textTransform: 'uppercase' },
+  parentBlockedTitle: { marginTop: 6, fontSize: 24, fontWeight: '800', color: '#0f172a' },
+  parentBlockedText: { marginTop: 8, color: '#475569', lineHeight: 20 },
   hero: { borderRadius: 22, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', padding: 18 },
   eyebrow: { color: '#1d4ed8', fontWeight: '800', fontSize: 12, textTransform: 'uppercase' },
   title: { marginTop: 6, fontSize: 24, fontWeight: '800', color: '#0f172a' },

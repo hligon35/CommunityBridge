@@ -16,7 +16,7 @@ service cloud.firestore {
     function mfaWindowFresh(userData) {
       return (userData.devUser == true)
         ? userData.mfaVerifiedAt > request.time - duration.value(4, 'h')
-        : userData.mfaVerifiedAt > request.time - duration.value(30, 'd');
+        : userData.mfaVerifiedAt > request.time - duration.value(24, 'h');
     }
 
     // Narrow carve-out: the controlled dev account

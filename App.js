@@ -92,10 +92,11 @@ function getDeepestRouteName(state) {
 
 const MyClassStackNav = createNativeStackNavigator();
 function MyClassStack() {
+  const isTabletLayout = useIsTabletLayout();
   return (
     <MyClassStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
-        headerShown: SHOW_STACK_HEADERS,
+        headerShown: SHOW_STACK_HEADERS && !isTabletLayout,
         title: humanizeScreenLabel(route?.name),
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
@@ -110,10 +111,11 @@ function MyClassStack() {
 
 const ControlsStackNav = createNativeStackNavigator();
 function ControlsStack() {
+  const isTabletLayout = useIsTabletLayout();
   return (
     <ControlsStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
-        headerShown: SHOW_STACK_HEADERS,
+        headerShown: SHOW_STACK_HEADERS && !isTabletLayout,
         title: humanizeScreenLabel(route?.name),
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
@@ -156,10 +158,11 @@ function ControlsStack() {
 
 const CommunityStackNav = createNativeStackNavigator();
 function CommunityStack() {
+  const isTabletLayout = useIsTabletLayout();
   return (
     <CommunityStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
-        headerShown: SHOW_STACK_HEADERS,
+        headerShown: SHOW_STACK_HEADERS && !isTabletLayout,
         title: humanizeScreenLabel(route?.name),
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
@@ -185,10 +188,11 @@ function CommunityStack() {
 
 const MyChildStackNav = createNativeStackNavigator();
 function MyChildStack() {
+  const isTabletLayout = useIsTabletLayout();
   return (
     <MyChildStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
-        headerShown: SHOW_STACK_HEADERS,
+        headerShown: SHOW_STACK_HEADERS && !isTabletLayout,
         title: humanizeScreenLabel(route?.name),
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
@@ -197,17 +201,17 @@ function MyChildStack() {
       })}
     >
       <MyChildStackNav.Screen name="MyChildMain" component={MyChildScreen} options={{ title: 'My Child' }} />
-      <MyChildStackNav.Screen name="Reports" component={ReportsScreen} options={{ title: 'Reports' }} />
     </MyChildStackNav.Navigator>
   );
 }
 
 const ChatsStackNav = createNativeStackNavigator();
 function ChatsStack() {
+  const isTabletLayout = useIsTabletLayout();
   return (
     <ChatsStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
-        headerShown: SHOW_STACK_HEADERS,
+        headerShown: SHOW_STACK_HEADERS && !isTabletLayout,
         title: humanizeScreenLabel(route?.name),
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,
@@ -224,10 +228,11 @@ function ChatsStack() {
 
 const SettingsStackNav = createNativeStackNavigator();
 function SettingsStack() {
+  const isTabletLayout = useIsTabletLayout();
   return (
     <SettingsStackNav.Navigator
       screenOptions={({ navigation, route, back }) => ({
-        headerShown: SHOW_STACK_HEADERS,
+        headerShown: SHOW_STACK_HEADERS && !isTabletLayout,
         title: humanizeScreenLabel(route?.name),
         headerTitleAlign: 'center',
         headerTitle: () => <LogoTitle width={HEADER_LOGO_WIDTH} height={HEADER_LOGO_HEIGHT} />,

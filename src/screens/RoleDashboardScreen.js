@@ -9,6 +9,7 @@ import { useData } from '../DataContext';
 import { useTenant } from '../core/tenant/TenantContext';
 import { avatarSourceFor } from '../utils/idVisibility';
 import { THERAPY_ROLE_LABELS } from '../utils/roleTerminology';
+import useIsTabletLayout from '../hooks/useIsTabletLayout';
 const { logPress } = require('../utils/logger');
 const { isSpecialAccessUser } = require('../utils/authState');
 const { getEffectiveChatIdentity } = require('../utils/demoIdentity');
@@ -93,6 +94,7 @@ export default function RoleDashboardScreen({ navigation }) {
   const { user } = useAuth();
   const { children = [], urgentMemos = [], directoryLoading = false, directoryError = '', fetchAndSync } = useData();
   const tenant = useTenant();
+  const isTabletLayout = useIsTabletLayout();
   const role = String(user?.role || 'parent').trim().toLowerCase();
   const effectiveUser = useMemo(() => getEffectiveChatIdentity(user), [user]);
   const allowSpecialAccessFallback = isSpecialAccessUser(user?.email);
@@ -317,6 +319,7 @@ export default function RoleDashboardScreen({ navigation }) {
     .map((key) => cardDefinitions[key])
     .filter((card) => {
       if (!card) return false;
+      if (!isTherapist && card.key === 'reports') return false;
       if (isTherapist && (card.key === 'progress-report' || card.key === 'mood-score' || card.key === 'care-team' || card.key === 'resources' || card.key === 'reports')) return false;
       const gate = cardFlagGates[card.key];
       return gate ? gate() : true;
@@ -336,7 +339,7 @@ export default function RoleDashboardScreen({ navigation }) {
   };
 
   return (
-    <ScreenWrapper bannerShowBack={false} style={styles.container}>
+    <ScreenWrapper bannerShowBack={false} hideBanner={isTabletLayout} style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={[styles.hero, isTherapist ? styles.heroTherapist : null]}>
           {isTherapist ? (
@@ -422,7 +425,6 @@ export default function RoleDashboardScreen({ navigation }) {
                 </View>
                 <Text style={styles.cardTitle}>{card.title}</Text>
                 <Text style={styles.cardValue}>{card.value}</Text>
-                {card.hint ? <Text style={styles.cardHint}>{card.hint}</Text> : null}
               </>
             );
 
@@ -483,5 +485,4 @@ const styles = StyleSheet.create({
   cardImageIcon: { width: 30, height: 30 },
   cardTitle: { marginTop: 8, fontSize: 13, fontWeight: '800', color: '#0f172a', lineHeight: 16 },
   cardValue: { marginTop: 4, fontSize: 11, fontWeight: '600', color: '#475569', lineHeight: 14 },
-  cardHint: { marginTop: 8, color: '#64748b', lineHeight: 18 },
 });

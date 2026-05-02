@@ -5,6 +5,7 @@ import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { isBcbaRole, isOfficeAdminRole } from '../core/tenant/models';
 import { THERAPY_ROLE_LABELS } from '../utils/roleTerminology';
+import { childHasParent, findLinkedParentId } from '../utils/directoryLinking';
 const { isChildLinkedToTherapist } = require('../features/sessionTracking/utils/dashboardSessionTarget');
 
 function todayStamp(hours = 9, minutes = 0) {
@@ -33,13 +34,15 @@ function buildSessionCards(children = []) {
 
 export default function ScheduleCalendarScreen() {
   const { user } = useAuth();
-  const { children = [] } = useData();
+  const { children = [], parents = [] } = useData();
   const role = String(user?.role || '').trim().toLowerCase();
   const isBcba = isBcbaRole(user?.role);
   const isTherapist = role === 'therapist';
+  const isParent = role.includes('parent');
   const isOffice = isOfficeAdminRole(user?.role);
   const [viewMode, setViewMode] = useState('day');
   const [focusMode, setFocusMode] = useState('staff');
+  const linkedParentId = isParent ? (findLinkedParentId(user, parents) || user?.id || null) : null;
 
   const filteredChildren = useMemo(() => {
     if (!isTherapist) return children;
@@ -55,17 +58,27 @@ export default function ScheduleCalendarScreen() {
     });
   }, [children, isTherapist, user?.displayName, user?.email, user?.id, user?.name]);
 
-  const sessions = useMemo(() => buildSessionCards(filteredChildren), [filteredChildren]);
+  const parentChildren = useMemo(() => {
+    if (!isParent) return [];
+    if (!linkedParentId) return [];
+    return (Array.isArray(children) ? children : []).filter((child) => childHasParent(child, linkedParentId));
+  }, [children, isParent, linkedParentId]);
+
+  const visibleChildren = isParent ? parentChildren : filteredChildren;
+
+  const sessions = useMemo(() => buildSessionCards(visibleChildren), [visibleChildren]);
   const grouped = useMemo(() => {
     const groups = new Map();
     sessions.forEach((session) => {
-      const key = isTherapist ? viewMode.toUpperCase() : (focusMode === 'student' ? session.student : focusMode === 'room' ? session.location : session.staff);
+      const key = isTherapist
+        ? viewMode.toUpperCase()
+        : (isParent ? 'Upcoming sessions' : (focusMode === 'student' ? session.student : focusMode === 'room' ? session.location : session.staff));
       const next = groups.get(key) || [];
       next.push(session);
       groups.set(key, next);
     });
     return Array.from(groups.entries()).map(([key, value]) => ({ key, value }));
-  }, [focusMode, isTherapist, sessions, viewMode]);
+  }, [focusMode, isParent, isTherapist, sessions, viewMode]);
 
   function action(title, message) {
     Alert.alert(title, message);
@@ -76,8 +89,8 @@ export default function ScheduleCalendarScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <Text style={styles.eyebrow}>Scheduling</Text>
-          <Text style={styles.title}>{isTherapist ? 'Your work schedule' : 'Master scheduling for students, staff, and rooms'}</Text>
-          <Text style={styles.subtitle}>{isTherapist ? `This view only shows sessions assigned to your ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} profile.` : 'Switch between day, week, and month context while reviewing session cards by staff, student, or room.'}</Text>
+          <Text style={styles.title}>{isTherapist ? 'Your work schedule' : (isParent ? 'Family calendar' : 'Master scheduling for students, staff, and rooms')}</Text>
+          <Text style={styles.subtitle}>{isTherapist ? `This view only shows sessions assigned to your ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} profile.` : (isParent ? 'Review upcoming sessions for children linked to your family account.' : 'Switch between day, week, and month context while reviewing session cards by staff, student, or room.')}</Text>
         </View>
 
         <View style={styles.controlsCard}>
@@ -87,7 +100,7 @@ export default function ScheduleCalendarScreen() {
                 <Text style={[styles.chipText, viewMode === mode ? styles.chipTextActive : null]}>{mode.toUpperCase()}</Text>
               </TouchableOpacity>
             ))}
-            {!isTherapist ? ['staff', 'student', 'room'].map((mode) => (
+            {!isTherapist && !isParent ? ['staff', 'student', 'room'].map((mode) => (
               <TouchableOpacity key={mode} style={[styles.chip, focusMode === mode ? styles.chipActive : null]} onPress={() => setFocusMode(mode)}>
                 <Text style={[styles.chipText, focusMode === mode ? styles.chipTextActive : null]}>{mode === 'room' ? 'Room view' : `${mode.charAt(0).toUpperCase()}${mode.slice(1)} view`}</Text>
               </TouchableOpacity>
@@ -95,7 +108,7 @@ export default function ScheduleCalendarScreen() {
           </ScrollView>
         </View>
 
-        {!isTherapist ? <View style={styles.actionRow}>
+        {!isTherapist && !isParent ? <View style={styles.actionRow}>
           <TouchableOpacity style={styles.primaryButton} onPress={() => action('Add session', 'Session creation can be completed from this scheduling hub.')}>
             <Text style={styles.primaryButtonText}>Add Session</Text>
           </TouchableOpacity>
@@ -112,7 +125,7 @@ export default function ScheduleCalendarScreen() {
               <View key={session.id} style={styles.sessionCard}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sessionTitle}>{session.student}</Text>
-                  <Text style={styles.sessionMeta}>Staff: {session.staff}</Text>
+                  <Text style={styles.sessionMeta}>{isParent ? `${THERAPY_ROLE_LABELS.therapist}: ${session.staff}` : `Staff: ${session.staff}`}</Text>
                   <Text style={styles.sessionMeta}>Location: {session.location}</Text>
                   <Text style={styles.sessionMeta}>Time: {session.start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {session.end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</Text>
                 </View>
@@ -123,7 +136,7 @@ export default function ScheduleCalendarScreen() {
             ))}
           </View>
         ))}
-        {!grouped.length ? <View style={styles.groupCard}><Text style={styles.groupTitle}>Assigned sessions</Text><Text style={styles.groupSubtitle}>{`No sessions are assigned to your ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} profile right now.`}</Text></View> : null}
+        {!grouped.length ? <View style={styles.groupCard}><Text style={styles.groupTitle}>{isParent ? 'Family calendar' : 'Assigned sessions'}</Text><Text style={styles.groupSubtitle}>{isParent ? 'No upcoming sessions are linked to your family account right now.' : `No sessions are assigned to your ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} profile right now.`}</Text></View> : null}
       </ScrollView>
     </ScreenWrapper>
   );
