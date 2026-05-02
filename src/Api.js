@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import { logger } from './utils/logger';
-import { getAuthInstance, getAuthInitError, getFirebaseConfigDebugInfo, probeFirebaseAuthNetwork, probeFirebasePasswordSignIn, db, storage, functions } from './firebase';
+import { getAuthInstance, getAuthInitError, getFirebaseConfigDebugInfo, probeFirebaseAuthNetwork, probeFirebasePasswordSignIn, createFirebaseUserWithPasswordViaRest, db, storage, functions } from './firebase';
 import { BASE_URL } from './config';
 import { DEFAULT_AVATAR_TOKEN } from './utils/idVisibility';
 import { isAdminRole } from './core/tenant/models';
@@ -135,6 +135,59 @@ async function callFirebaseFunction(name, payload) {
   return result?.data || null;
 }
 
+async function callPublicLookupApi(pathname, { method = 'GET', query = null, body = null } = {}) {
+  const apiBase = String(BASE_URL || API_BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('API base URL is not configured.');
+    err.code = 'BB_API_BASE_URL_REQUIRED';
+    throw err;
+  }
+
+  const url = new URL(`${apiBase}${pathname}`);
+  if (query && typeof query === 'object') {
+    Object.entries(query).forEach(([key, value]) => {
+      const normalized = String(value ?? '').trim();
+      if (normalized) url.searchParams.set(key, normalized);
+    });
+  }
+
+  const resp = await fetchWithTimeout(url.toString(), {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    const err = new Error(String(json?.error || json?.message || 'Lookup request failed.'));
+    err.code = `BB_LOOKUP_API_${resp.status || 0}`;
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return json || null;
+}
+
+async function callPublicFirebaseSignupApi(payload) {
+  return callPublicLookupApi('/api/public/firebase-signup', {
+    method: 'POST',
+    body: payload || {},
+  });
+}
+
+async function callLookupWithFallback(firebaseCall, fallbackCall, timeoutMs = 2500) {
+  try {
+    return await Promise.race([
+      firebaseCall(),
+      new Promise((_, reject) => {
+        const err = new Error(`Lookup timed out after ${timeoutMs}ms.`);
+        err.code = 'BB_LOOKUP_TIMEOUT';
+        setTimeout(() => reject(err), timeoutMs);
+      }),
+    ]);
+  } catch (_) {
+    return fallbackCall();
+  }
+}
+
 function isLikelyNetworkError(e) {
   try {
     const msg = String(e?.message || e || '').toLowerCase();
@@ -235,19 +288,38 @@ export function setAuthToken(_) {
 }
 
 export async function listOrganizations() {
-  return callFirebaseFunction('listOrganizationsPublic');
+  return callLookupWithFallback(
+    () => callFirebaseFunction('listOrganizationsPublic'),
+    () => callPublicLookupApi('/api/public/organizations')
+  );
 }
 
 export async function listPrograms(organizationId) {
-  return callFirebaseFunction('listProgramsPublic', { organizationId });
+  return callLookupWithFallback(
+    () => callFirebaseFunction('listProgramsPublic', { organizationId }),
+    () => callPublicLookupApi('/api/public/programs', {
+      query: { organizationId },
+    })
+  );
 }
 
 export async function listCampuses({ organizationId, programId }) {
-  return callFirebaseFunction('listCampusesPublic', { organizationId, programId });
+  return callLookupWithFallback(
+    () => callFirebaseFunction('listCampusesPublic', { organizationId, programId }),
+    () => callPublicLookupApi('/api/public/campuses', {
+      query: { organizationId, programId },
+    })
+  );
 }
 
 export async function resolveEnrollmentContext(payload) {
-  return callFirebaseFunction('resolveEnrollmentContextPublic', payload);
+  return callLookupWithFallback(
+    () => callFirebaseFunction('resolveEnrollmentContextPublic', payload),
+    () => callPublicLookupApi('/api/public/enrollment-context', {
+      method: 'POST',
+      body: payload || {},
+    })
+  );
 }
 
 async function getUserProfile(uid) {
@@ -394,7 +466,126 @@ export async function signup(payload) {
     }
   }
 
-  const cred = await createUserWithEmailAndPassword(a, email, password);
+  let cred;
+  try {
+    cred = await createUserWithEmailAndPassword(a, email, password);
+  } catch (error) {
+    const code = String(error?.code || '');
+    if (code === 'auth/network-request-failed' || isLikelyNetworkError(error)) {
+      const configInfo = getFirebaseConfigDebugInfo();
+      logger.warn('auth', 'Firebase signup network failure diagnostics: config', configInfo);
+      try {
+        const probe = await probeFirebaseAuthNetwork();
+        logger.warn('auth', 'Firebase signup network failure diagnostics: probe', probe);
+        error.firebaseNetworkProbe = probe;
+      } catch (probeError) {
+        logger.warn('auth', 'Firebase signup network failure diagnostics: probe failed', {
+          message: String(probeError?.message || probeError || ''),
+        });
+      }
+
+      try {
+        const serverSignup = await callPublicFirebaseSignupApi({
+          name,
+          firstName,
+          lastName,
+          email,
+          password,
+          role,
+          organizationId: enrollmentContext?.organization?.id || organizationId || '',
+          organizationName: enrollmentContext?.organization?.name || '',
+          programId: enrollmentContext?.program?.id || programId || '',
+          programName: enrollmentContext?.program?.name || '',
+          campusId: enrollmentContext?.campus?.id || campusId || '',
+          campusName: enrollmentContext?.campus?.name || '',
+          enrollmentCode: enrollmentContext?.campus?.enrollmentCode || enrollmentCode || '',
+        });
+        logger.warn('auth', 'Firebase signup network failure diagnostics: serverSignup', {
+          ok: Boolean(serverSignup?.ok),
+          uid: String(serverSignup?.uid || ''),
+        });
+
+        try {
+          cred = await signInWithEmailAndPassword(a, email, password);
+        } catch (signInError) {
+          logger.warn('auth', 'Firebase signup server fallback created account but SDK sign-in failed', {
+            code: String(signInError?.code || ''),
+            message: String(signInError?.message || signInError || ''),
+          });
+          const recoveryError = new Error('Your account was created, but the app could not finish signing you in. Please log in with the email and password you just created.');
+          recoveryError.code = 'BB_SIGNUP_CREATED_LOGIN_REQUIRED';
+          recoveryError.serverSignup = serverSignup;
+          throw recoveryError;
+        }
+      } catch (serverSignupError) {
+        if (serverSignupError?.code === 'BB_SIGNUP_CREATED_LOGIN_REQUIRED') throw serverSignupError;
+
+        const status = Number(serverSignupError?.httpStatus || 0);
+        if (status === 409) {
+          try {
+            cred = await signInWithEmailAndPassword(a, email, password);
+          } catch (signInError) {
+            const signInCode = String(signInError?.code || '');
+            if (signInCode === 'auth/invalid-credential' || signInCode === 'auth/invalid-login-credentials' || signInCode === 'auth/wrong-password') {
+              const existsError = new Error('An account already exists for this email address. Try logging in or resetting your password.');
+              existsError.code = 'auth/email-already-in-use';
+              throw existsError;
+            }
+            throw signInError;
+          }
+        }
+
+        logger.warn('auth', 'Firebase signup network failure diagnostics: serverSignup failed', {
+          code: String(serverSignupError?.code || ''),
+          status,
+          message: String(serverSignupError?.message || serverSignupError || ''),
+        });
+      }
+
+      if (cred) {
+        // The server fallback created the auth user/profile; continue with the normal post-auth path.
+      } else try {
+        const signupProbe = await createFirebaseUserWithPasswordViaRest(email, password);
+        logger.warn('auth', 'Firebase signup network failure diagnostics: signupProbe', signupProbe);
+        error.firebaseSignupProbe = signupProbe;
+
+        if (signupProbe.ok) {
+          try {
+            cred = await signInWithEmailAndPassword(a, email, password);
+          } catch (signInError) {
+            logger.warn('auth', 'Firebase signup REST fallback created account but SDK sign-in failed', {
+              code: String(signInError?.code || ''),
+              message: String(signInError?.message || signInError || ''),
+            });
+            const recoveryError = new Error('Your account was created, but the app could not finish signing you in. Please log in with the email and password you just created.');
+            recoveryError.code = 'BB_SIGNUP_CREATED_LOGIN_REQUIRED';
+            recoveryError.firebaseSignupProbe = signupProbe;
+            throw recoveryError;
+          }
+        } else if (signupProbe.errorMessage === 'EMAIL_EXISTS') {
+          try {
+            cred = await signInWithEmailAndPassword(a, email, password);
+          } catch (signInError) {
+            const signInCode = String(signInError?.code || '');
+            if (signInCode === 'auth/invalid-credential' || signInCode === 'auth/invalid-login-credentials' || signInCode === 'auth/wrong-password') {
+              const existsError = new Error('An account already exists for this email address. Try logging in or resetting your password.');
+              existsError.code = 'auth/email-already-in-use';
+              existsError.firebaseSignupProbe = signupProbe;
+              throw existsError;
+            }
+            throw signInError;
+          }
+        }
+      } catch (recoveryError) {
+        if (recoveryError?.code) throw recoveryError;
+        logger.warn('auth', 'Firebase signup network failure diagnostics: signupProbe failed', {
+          message: String(recoveryError?.message || recoveryError || ''),
+        });
+      }
+    }
+
+    if (!cred) throw error;
+  }
   try {
     if (name) await updateProfile(cred.user, { displayName: name });
   } catch (_) {

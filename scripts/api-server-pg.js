@@ -2031,10 +2031,278 @@ async function getVisibleChildIdsForUser(user) {
   return Array.from(outChildIds);
 }
 
+function sanitizePublicLookupDoc(id, data, extras) {
+  const payload = data && typeof data === 'object' ? data : {};
+  return {
+    id: safeString(id).trim(),
+    name: safeString(payload.name || payload.displayName || payload.title).trim(),
+    active: payload.active !== false,
+    ...extras,
+  };
+}
+
+function normalizedPublicEnrollmentCodes(data) {
+  const values = [];
+  const single = safeString(data?.enrollmentCode).trim();
+  if (single) values.push(single);
+  const list = Array.isArray(data?.enrollmentCodes) ? data.enrollmentCodes : [];
+  list.forEach((code) => {
+    const value = safeString(code).trim();
+    if (value) values.push(value);
+  });
+  return Array.from(new Set(values.map((value) => value.toUpperCase())));
+}
+
+async function createFirebasePublicSignupUser(payload) {
+  const admin = getFirebaseAdmin();
+  const auth = admin.auth();
+  const firestore = admin.firestore();
+
+  const name = safeString(payload?.name).trim();
+  const firstName = safeString(payload?.firstName).trim();
+  const lastName = safeString(payload?.lastName).trim();
+  const email = normalizeEmail(payload?.email);
+  const password = safeString(payload?.password);
+  const role = safeString(payload?.role || 'parent').trim() || 'parent';
+  const organizationId = safeString(payload?.organizationId).trim();
+  const organizationName = safeString(payload?.organizationName).trim();
+  const programId = safeString(payload?.programId).trim();
+  const programName = safeString(payload?.programName).trim();
+  const campusId = safeString(payload?.campusId).trim();
+  const campusName = safeString(payload?.campusName).trim();
+  const enrollmentCode = safeString(payload?.enrollmentCode).trim().toUpperCase();
+
+  if (!email || !password || !name) {
+    const err = new Error('name, email, and password are required');
+    err.httpStatus = 400;
+    throw err;
+  }
+  if (name.length > 120) {
+    const err = new Error('name is too long');
+    err.httpStatus = 400;
+    throw err;
+  }
+  const passwordPolicyError = validatePasswordPolicy(password);
+  if (passwordPolicyError) {
+    const err = new Error(passwordPolicyError);
+    err.httpStatus = 400;
+    throw err;
+  }
+  if (isRestrictedSignupRole(role)) {
+    const err = new Error('elevated roles must be provisioned by an existing administrator');
+    err.httpStatus = 403;
+    throw err;
+  }
+  if (!organizationId || !programId || !campusId || !enrollmentCode) {
+    const err = new Error('organizationId, programId, campusId, and enrollmentCode are required');
+    err.httpStatus = 400;
+    throw err;
+  }
+
+  try {
+    const existing = await auth.getUserByEmail(email);
+    const err = new Error('email already exists');
+    err.httpStatus = 409;
+    err.uid = existing?.uid || '';
+    throw err;
+  } catch (error) {
+    const code = safeString(error?.code).toLowerCase();
+    if (error?.httpStatus === 409) throw error;
+    if (code && !code.includes('user-not-found')) throw error;
+  }
+
+  let userRecord = null;
+  try {
+    userRecord = await auth.createUser({
+      email,
+      password,
+      displayName: name,
+    });
+
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    await firestore.collection('users').doc(userRecord.uid).set({
+      id: userRecord.uid,
+      name,
+      firstName,
+      lastName,
+      email,
+      role,
+      organizationId,
+      organizationName,
+      programId,
+      programName,
+      campusId,
+      campusName,
+      enrollmentCode,
+      avatar: 'default',
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    }, { merge: true });
+
+    if (String(role).toLowerCase().includes('parent')) {
+      await firestore.collection('parents').doc(userRecord.uid).set({
+        id: userRecord.uid,
+        uid: userRecord.uid,
+        name,
+        email,
+        familyId: userRecord.uid,
+        createdAt: now,
+        updatedAt: now,
+      }, { merge: true });
+
+      await firestore.collection('directoryLinks').doc(userRecord.uid).set({
+        role: 'parent',
+        parentId: userRecord.uid,
+        createdAt: now,
+        updatedAt: now,
+      }, { merge: true });
+    }
+
+    return { ok: true, uid: userRecord.uid };
+  } catch (error) {
+    if (userRecord?.uid) {
+      await firestore.collection('users').doc(userRecord.uid).delete().catch(() => {});
+      await firestore.collection('parents').doc(userRecord.uid).delete().catch(() => {});
+      await firestore.collection('directoryLinks').doc(userRecord.uid).delete().catch(() => {});
+      await auth.deleteUser(userRecord.uid).catch(() => {});
+    }
+    throw error;
+  }
+}
+
 app.get('/api/health', (req, res) => {
   const payload = { ok: !shuttingDown, uptime: process.uptime(), shuttingDown };
   if (shuttingDown) return res.status(503).json(payload);
   return res.json(payload);
+});
+
+app.get('/api/public/organizations', async (_req, res) => {
+  try {
+    const admin = getFirebaseAdmin();
+    const snap = await admin.firestore().collection('organizations').where('active', '==', true).get();
+    const items = snap.docs
+      .map((docSnap) => sanitizePublicLookupDoc(docSnap.id, docSnap.data(), {
+        shortCode: safeString(docSnap.data()?.shortCode || docSnap.data()?.code).trim(),
+      }))
+      .filter((item) => item.id && item.name);
+    return res.json({ items });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error?.message || 'Could not load organizations.' });
+  }
+});
+
+app.get('/api/public/programs', async (req, res) => {
+  const organizationId = safeString(req.query?.organizationId).trim();
+  if (!organizationId) {
+    return res.status(400).json({ ok: false, error: 'organizationId is required.' });
+  }
+  try {
+    const admin = getFirebaseAdmin();
+    const snap = await admin.firestore().collection('organizations').doc(organizationId).collection('programs').where('active', '==', true).get();
+    const items = snap.docs
+      .map((docSnap) => sanitizePublicLookupDoc(docSnap.id, docSnap.data(), {
+        organizationId,
+        type: safeString(docSnap.data()?.type).trim(),
+      }))
+      .filter((item) => item.id && item.name);
+    return res.json({ items });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error?.message || 'Could not load programs.' });
+  }
+});
+
+app.get('/api/public/campuses', async (req, res) => {
+  const organizationId = safeString(req.query?.organizationId).trim();
+  const programId = safeString(req.query?.programId || req.query?.branchId).trim();
+  if (!organizationId) {
+    return res.status(400).json({ ok: false, error: 'organizationId is required.' });
+  }
+  try {
+    const admin = getFirebaseAdmin();
+    let queryRef = admin.firestore().collection('organizations').doc(organizationId).collection('campuses').where('active', '==', true);
+    if (programId) queryRef = queryRef.where('programId', '==', programId);
+    const snap = await queryRef.get();
+    const items = snap.docs
+      .map((docSnap) => sanitizePublicLookupDoc(docSnap.id, docSnap.data(), {
+        organizationId,
+        programId: safeString(docSnap.data()?.programId || docSnap.data()?.branchId).trim(),
+      }))
+      .filter((item) => item.id && item.name);
+    return res.json({ items });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error?.message || 'Could not load campuses.' });
+  }
+});
+
+app.post('/api/public/enrollment-context', async (req, res) => {
+  const organizationId = safeString(req.body?.organizationId).trim();
+  const programId = safeString(req.body?.programId || req.body?.branchId).trim();
+  const campusId = safeString(req.body?.campusId).trim();
+  const enrollmentCode = safeString(req.body?.enrollmentCode).trim().toUpperCase();
+
+  if (!organizationId || !programId || !enrollmentCode) {
+    return res.status(400).json({ ok: false, error: 'organizationId, programId, and enrollmentCode are required.' });
+  }
+
+  try {
+    const admin = getFirebaseAdmin();
+    const orgRef = admin.firestore().collection('organizations').doc(organizationId);
+    const programRef = orgRef.collection('programs').doc(programId);
+    const [orgSnap, programSnap] = await Promise.all([orgRef.get(), programRef.get()]);
+
+    if (!orgSnap.exists || orgSnap.data()?.active === false) {
+      return res.status(404).json({ ok: false, error: 'Organization not found.' });
+    }
+    if (!programSnap.exists || programSnap.data()?.active === false) {
+      return res.status(404).json({ ok: false, error: 'Program not found.' });
+    }
+
+    if (campusId) {
+      const scopedSnap = await orgRef.collection('campuses').doc(campusId).get();
+      const scopedData = scopedSnap.exists ? (scopedSnap.data() || {}) : null;
+      if (!scopedSnap.exists || scopedData.active === false || safeString(scopedData.programId || scopedData.branchId).trim() !== programId) {
+        return res.status(404).json({ ok: false, error: 'Campus not found for this program.' });
+      }
+      const codes = normalizedPublicEnrollmentCodes(scopedData);
+      if (!codes.includes(enrollmentCode)) {
+        return res.status(403).json({ ok: false, error: 'Enrollment code did not match the selected campus.' });
+      }
+      return res.json({
+        organization: sanitizePublicLookupDoc(orgSnap.id, orgSnap.data(), {
+          shortCode: safeString(orgSnap.data()?.shortCode || orgSnap.data()?.code).trim(),
+        }),
+        program: sanitizePublicLookupDoc(programSnap.id, programSnap.data(), { organizationId, type: safeString(programSnap.data()?.type).trim() }),
+        campus: sanitizePublicLookupDoc(scopedSnap.id, scopedData, { organizationId, programId }),
+      });
+    }
+
+    const campusSnap = await orgRef.collection('campuses').where('active', '==', true).where('programId', '==', programId).get();
+    const matchedCampus = campusSnap.docs.find((docSnap) => normalizedPublicEnrollmentCodes(docSnap.data()).includes(enrollmentCode));
+    if (!matchedCampus) {
+      return res.status(403).json({ ok: false, error: 'Enrollment code did not match an active campus.' });
+    }
+
+    return res.json({
+      organization: sanitizePublicLookupDoc(orgSnap.id, orgSnap.data(), {
+        shortCode: safeString(orgSnap.data()?.shortCode || orgSnap.data()?.code).trim(),
+      }),
+      program: sanitizePublicLookupDoc(programSnap.id, programSnap.data(), { organizationId, type: safeString(programSnap.data()?.type).trim() }),
+      campus: sanitizePublicLookupDoc(matchedCampus.id, matchedCampus.data(), { organizationId, programId }),
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error?.message || 'Could not resolve enrollment context.' });
+  }
+});
+
+app.post('/api/public/firebase-signup', authRateLimit, async (req, res) => {
+  try {
+    const result = await createFirebasePublicSignupUser(req.body || {});
+    return res.status(201).json(result);
+  } catch (error) {
+    const status = Number(error?.httpStatus || 0) || (safeString(error?.code).toLowerCase().includes('already-exists') ? 409 : 500);
+    return res.status(status).json({ ok: false, error: error?.message || 'firebase signup failed' });
+  }
 });
 
 // Directory (Postgres-backed). Admin-only for now.

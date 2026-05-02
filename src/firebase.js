@@ -6,6 +6,40 @@ import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
 
+const CANONICAL_FIREBASE_WEB_CONFIG = Object.freeze({
+  apiKey: 'AIzaSyC0Q3xKa55tizgve_q9E5bD0oGdnVtNKiQ',
+  authDomain: 'communitybridge-26apr.firebaseapp.com',
+  projectId: 'communitybridge-26apr',
+  storageBucket: 'communitybridge-26apr.firebasestorage.app',
+  messagingSenderId: '752508556236',
+  appId: '1:752508556236:web:dc183f4851108dd8c14369',
+  measurementId: 'G-HYK2C00ZRK',
+  functionsRegion: 'us-central1',
+});
+
+function getCanonicalFirebaseWebValue(key) {
+  switch (String(key || '')) {
+    case 'EXPO_PUBLIC_FIREBASE_API_KEY':
+      return CANONICAL_FIREBASE_WEB_CONFIG.apiKey;
+    case 'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN':
+      return CANONICAL_FIREBASE_WEB_CONFIG.authDomain;
+    case 'EXPO_PUBLIC_FIREBASE_PROJECT_ID':
+      return CANONICAL_FIREBASE_WEB_CONFIG.projectId;
+    case 'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET':
+      return CANONICAL_FIREBASE_WEB_CONFIG.storageBucket;
+    case 'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID':
+      return CANONICAL_FIREBASE_WEB_CONFIG.messagingSenderId;
+    case 'EXPO_PUBLIC_FIREBASE_APP_ID':
+      return CANONICAL_FIREBASE_WEB_CONFIG.appId;
+    case 'EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID':
+      return CANONICAL_FIREBASE_WEB_CONFIG.measurementId;
+    case 'EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION':
+      return CANONICAL_FIREBASE_WEB_CONFIG.functionsRegion;
+    default:
+      return '';
+  }
+}
+
 function getExpoExtraValue(key) {
   try {
     return (
@@ -148,31 +182,42 @@ function isJsSdkFirebaseAppId(value) {
   return isWebFirebaseAppId(value);
 }
 
+function shouldUseCanonicalFirebaseWebConfig() {
+  const rawAppId = String(getExpoPublicEnv('EXPO_PUBLIC_FIREBASE_APP_ID') || '').trim();
+  if (!rawAppId) return true;
+  return !isWebFirebaseAppId(rawAppId);
+}
+
 function getFirebaseConfigValue(key) {
   const envValue = getExpoPublicEnv(key);
+  const canonicalValue = getCanonicalFirebaseWebValue(key);
+  const preferCanonicalWebConfig = shouldUseCanonicalFirebaseWebConfig();
 
   if (Platform.OS === 'web') {
+    if (preferCanonicalWebConfig && canonicalValue) return canonicalValue;
     if (key === 'EXPO_PUBLIC_FIREBASE_APP_ID') {
-      return isWebFirebaseAppId(envValue) ? envValue : '';
+      return isWebFirebaseAppId(envValue) ? envValue : canonicalValue;
     }
-    return envValue;
+    return envValue || canonicalValue;
   }
 
   if (Platform.OS === 'ios') {
+    if (preferCanonicalWebConfig && canonicalValue) return canonicalValue;
     if (key === 'EXPO_PUBLIC_FIREBASE_APP_ID') {
-      return isJsSdkFirebaseAppId(envValue) ? envValue : '';
+      return isJsSdkFirebaseAppId(envValue) ? envValue : canonicalValue;
     }
-    return envValue;
+    return envValue || canonicalValue;
   }
 
   if (Platform.OS === 'android') {
+    if (preferCanonicalWebConfig && canonicalValue) return canonicalValue;
     if (key === 'EXPO_PUBLIC_FIREBASE_APP_ID') {
-      return isJsSdkFirebaseAppId(envValue) ? envValue : '';
+      return isJsSdkFirebaseAppId(envValue) ? envValue : canonicalValue;
     }
-    return envValue;
+    return envValue || canonicalValue;
   }
 
-  return envValue;
+  return envValue || canonicalValue;
 }
 
 const firebaseConfig = {
@@ -316,6 +361,29 @@ export async function probeFirebasePasswordSignIn(email, password) {
   const signInUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(apiKey)}`;
 
   const result = await probeFirebaseJsonEndpoint('passwordSignIn', signInUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: String(email || '').trim(),
+      password: String(password || ''),
+      returnSecureToken: true,
+    }),
+  });
+
+  return {
+    name: result.name,
+    ok: result.ok,
+    status: result.status,
+    errorMessage: String(result?.json?.error?.message || result?.errorMessage || ''),
+    localIdHint: maskValue(result?.json?.localId || '', 6, 4),
+  };
+}
+
+export async function createFirebaseUserWithPasswordViaRest(email, password) {
+  const apiKey = String(firebaseConfig.apiKey || '').trim();
+  const signUpUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(apiKey)}`;
+
+  const result = await probeFirebaseJsonEndpoint('passwordSignUp', signUpUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
