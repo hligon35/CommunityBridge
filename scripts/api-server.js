@@ -418,6 +418,8 @@ const SMTP_URL = (process.env.CB_SMTP_URL || process.env.BB_SMTP_URL || '').trim
 const EMAIL_FROM = (process.env.CB_EMAIL_FROM || process.env.BB_EMAIL_FROM || '').trim();
 const EMAIL_2FA_SUBJECT = (process.env.CB_EMAIL_2FA_SUBJECT || process.env.BB_EMAIL_2FA_SUBJECT || 'CommunityBridge verification code').trim();
 const EMAIL_PASSWORD_RESET_SUBJECT = (process.env.CB_EMAIL_PASSWORD_RESET_SUBJECT || process.env.BB_EMAIL_PASSWORD_RESET_SUBJECT || 'CommunityBridge password reset').trim();
+const EMAIL_STAFF_INVITE_SUBJECT = (process.env.CB_EMAIL_STAFF_INVITE_SUBJECT || process.env.BB_EMAIL_STAFF_INVITE_SUBJECT || 'CommunityBridge staff invite').trim();
+const EMAIL_ONBOARDING_APPROVAL_SUBJECT = (process.env.CB_EMAIL_ONBOARDING_APPROVAL_SUBJECT || process.env.BB_EMAIL_ONBOARDING_APPROVAL_SUBJECT || 'CommunityBridge organization approval').trim();
 
 const RETURN_PASSWORD_RESET_CODE = envFlag(process.env.CB_RETURN_PASSWORD_RESET_CODE || process.env.BB_RETURN_PASSWORD_RESET_CODE, false);
 const PASSWORD_RESET_TTL_MINUTES = Math.max(5, Number(process.env.CB_PASSWORD_RESET_TTL_MINUTES || process.env.BB_PASSWORD_RESET_TTL_MINUTES || 30));
@@ -934,6 +936,27 @@ CREATE TABLE IF NOT EXISTS password_resets (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS access_invites (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL,
+  invite_type TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  organization_id TEXT,
+  source_submission_id TEXT,
+  sent_at TEXT,
+  resent_at TEXT,
+  expires_at TEXT,
+  first_login_at TEXT,
+  used_at TEXT,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_email_status TEXT,
+  last_email_error TEXT
+);
+
 CREATE TABLE IF NOT EXISTS attendance_records (
   id TEXT PRIMARY KEY,
   child_id TEXT NOT NULL,
@@ -1027,6 +1050,9 @@ try {
   db.exec('CREATE INDEX IF NOT EXISTS aba_supervision_bcba_idx ON aba_supervision (bcba_id)');
   db.exec('CREATE INDEX IF NOT EXISTS child_aba_assignments_aba_idx ON child_aba_assignments (aba_id)');
   db.exec('CREATE INDEX IF NOT EXISTS password_resets_user_id_idx ON password_resets (user_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS access_invites_user_id_idx ON access_invites (user_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS access_invites_email_idx ON access_invites (email)');
+  db.exec('CREATE INDEX IF NOT EXISTS access_invites_status_idx ON access_invites (used_at, revoked_at, created_at DESC)');
   db.exec('CREATE INDEX IF NOT EXISTS attendance_records_child_id_idx ON attendance_records (child_id)');
   db.exec('CREATE INDEX IF NOT EXISTS attendance_records_recorded_for_idx ON attendance_records (recorded_for)');
   db.exec('CREATE INDEX IF NOT EXISTS mood_entries_child_id_idx ON mood_entries (child_id)');
@@ -1042,6 +1068,24 @@ try {
 
 function passwordResetEmailConfigured() {
   return !!(SMTP_URL && EMAIL_FROM);
+}
+
+function inviteEmailConfigured() {
+  return !!(SMTP_URL && EMAIL_FROM);
+}
+
+function hashInviteAccessCode(code) {
+  const raw = String(code || '');
+  return crypto.createHash('sha256').update(`invite:${raw}:${JWT_SECRET}`).digest('hex');
+}
+
+function generateInviteAccessCode() {
+  // Six numeric digits keep the first-login path simple on mobile while still being one-time use.
+  return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+}
+
+function buildInviteLoginUrl(req) {
+  return buildPublicUrl(req, '/login');
 }
 
 let passwordResetTransporter = null;
@@ -1081,6 +1125,113 @@ async function sendPasswordResetEmail({ to, code }) {
     to: destination,
     subject: EMAIL_PASSWORD_RESET_SUBJECT,
     text,
+  });
+}
+
+function escapeInviteHtml(value) {
+  return safeString(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizeManagedInviteRole(role) {
+  const value = safeString(role).trim().toLowerCase();
+  if (!value) return 'faculty';
+  if (value === 'office personnel' || value === 'office_personnel' || value === 'officepersonnel') return 'faculty';
+  if (value === 'aba tech' || value === 'aba_tech' || value === 'abatech') return 'therapist';
+  if (value === 'organizationadmin' || value === 'org_admin') return 'orgAdmin';
+  if (value === 'super_admin') return 'superAdmin';
+  if (value === 'campus_admin') return 'campusAdmin';
+  return safeString(role).trim();
+}
+
+function getManagedInviteRoleLabel(role) {
+  const value = safeString(normalizeManagedInviteRole(role)).trim().toLowerCase();
+  if (value === 'bcba') return 'BCBA';
+  if (value === 'faculty' || value === 'staff') return 'Office Personnel';
+  if (value === 'therapist') return 'ABA Tech';
+  if (value === 'orgadmin') return 'Org Admin';
+  if (value === 'superadmin') return 'Super Admin';
+  if (value === 'campusadmin') return 'Campus Admin';
+  if (value === 'admin') return 'Admin';
+  return safeString(role).trim() || 'Staff';
+}
+
+function getInviteTypeLabel(inviteType) {
+  const value = safeString(inviteType).trim().toLowerCase();
+  if (value === 'onboarding_primary_contact') return 'organization approval';
+  return 'staff invite';
+}
+
+function getStrongPasswordPolicyError(password) {
+  const value = String(password || '');
+  if (value.length < 8) return 'Password must be at least 8 characters.';
+  if (!/[A-Z]/.test(value)) return 'Password must include at least 1 uppercase letter.';
+  if (!/[^A-Za-z0-9]/.test(value)) return 'Password must include at least 1 special character.';
+  return '';
+}
+
+function buildAccessInviteEmailContent({ email, role, accessCode, loginUrl, inviteType }) {
+  const roleLabel = getManagedInviteRoleLabel(role);
+  const intro = inviteType === 'onboarding_primary_contact'
+    ? 'Your organization has been approved. You are the Super Admin for this organization.'
+    : 'An administrator created your CommunityBridge staff invite.';
+  const subject = inviteType === 'onboarding_primary_contact'
+    ? EMAIL_ONBOARDING_APPROVAL_SUBJECT
+    : EMAIL_STAFF_INVITE_SUBJECT;
+  const text = [
+    intro,
+    '',
+    `Email on file: ${email}`,
+    `Assigned role: ${roleLabel}`,
+    `Access code: ${accessCode}`,
+    `Login: ${loginUrl}`,
+    '',
+    'Enter the access code once, then create a new password to finish activation.',
+  ].join('\n');
+  const html = `<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:24px;background:#f8fafc;font-family:Segoe UI,Arial,sans-serif;color:#0f172a;">
+    <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #dbeafe;border-radius:20px;padding:24px;">
+      <p style="margin:0 0 12px;color:#1d4ed8;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;">${escapeInviteHtml(getInviteTypeLabel(inviteType))}</p>
+      <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;">${escapeInviteHtml(intro)}</h1>
+      <p style="margin:0 0 12px;color:#475569;line-height:1.7;">Use the details below to complete your first login.</p>
+      <div style="border:1px solid #e2e8f0;border-radius:16px;padding:16px;background:#f8fafc;">
+        <p style="margin:0 0 8px;"><strong>Email on file:</strong> ${escapeInviteHtml(email)}</p>
+        <p style="margin:0 0 8px;"><strong>Assigned role:</strong> ${escapeInviteHtml(roleLabel)}</p>
+        <p style="margin:0 0 8px;"><strong>Access code:</strong> <span style="font-size:24px;font-weight:800;letter-spacing:0.22em;">${escapeInviteHtml(accessCode)}</span></p>
+        <p style="margin:0;"><strong>Login:</strong> <a href="${escapeInviteHtml(loginUrl)}">${escapeInviteHtml(loginUrl)}</a></p>
+      </div>
+      <p style="margin:16px 0 0;color:#475569;line-height:1.7;">Enter the access code once, then create a new password to finish activation.</p>
+    </div>
+  </body>
+</html>`;
+  return { subject, text, html };
+}
+
+async function sendAccessInviteEmail({ req, to, role, accessCode, inviteType }) {
+  const destination = normalizeEmail(to);
+  if (!destination) throw new Error('Invalid email destination');
+  const transporter = getPasswordResetEmailTransporter();
+  if (!transporter || !inviteEmailConfigured()) {
+    throw new Error('Invite email delivery is not configured (set CB_SMTP_URL/BB_SMTP_URL and CB_EMAIL_FROM/BB_EMAIL_FROM)');
+  }
+  const { subject, text, html } = buildAccessInviteEmailContent({
+    email: destination,
+    role,
+    accessCode,
+    loginUrl: buildInviteLoginUrl(req),
+    inviteType,
+  });
+  await transporter.sendMail({
+    from: EMAIL_FROM,
+    to: destination,
+    subject,
+    text,
+    html,
   });
 }
 
@@ -1466,6 +1617,257 @@ async function getFirebaseManagedProfiles(userIds) {
   return out;
 }
 
+function serializeAccessInviteRow(row) {
+  if (!row) return null;
+  const status = row.used_at
+    ? 'used'
+    : row.revoked_at
+      ? 'revoked'
+      : row.first_login_at
+        ? 'started'
+        : 'sent';
+  return {
+    id: String(row.id || ''),
+    userId: String(row.user_id || ''),
+    email: String(row.email || ''),
+    role: String(row.role || ''),
+    inviteType: String(row.invite_type || 'staff'),
+    organizationId: String(row.organization_id || ''),
+    sourceSubmissionId: String(row.source_submission_id || ''),
+    status,
+    sentAt: row.sent_at || row.created_at || null,
+    resentAt: row.resent_at || null,
+    expiresAt: row.expires_at || null,
+    firstLoginAt: row.first_login_at || null,
+    usedAt: row.used_at || null,
+    revokedAt: row.revoked_at || null,
+    lastEmailStatus: String(row.last_email_status || ''),
+    lastEmailError: String(row.last_email_error || ''),
+  };
+}
+
+function getLatestAccessInviteRowForUser(userId) {
+  const uid = safeString(userId).trim();
+  if (!uid || !db) return null;
+  return db.prepare('SELECT * FROM access_invites WHERE user_id = ? ORDER BY created_at DESC LIMIT 1').get(uid) || null;
+}
+
+function getLatestAccessInviteRows(userIds) {
+  const ids = normalizeManagedIdList(userIds);
+  const out = new Map();
+  ids.forEach((userId) => {
+    const row = getLatestAccessInviteRowForUser(userId);
+    if (row) out.set(userId, serializeAccessInviteRow(row));
+  });
+  return out;
+}
+
+async function ensureFirebaseManagedUserForInvite(userId, nextFields = {}) {
+  const admin = getFirebaseAdmin();
+  const auth = admin.auth();
+  const firestore = admin.firestore();
+  const uid = safeString(userId).trim();
+  if (!uid) throw new Error('userId required');
+
+  let userRecord = null;
+  let created = false;
+  try {
+    userRecord = await auth.getUser(uid);
+  } catch (error) {
+    const code = safeString(error?.code).toLowerCase();
+    if (!code.includes('user-not-found')) throw error;
+  }
+
+  if (!userRecord) {
+    const bootstrapPassword = `${nanoId()}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    userRecord = await auth.createUser({
+      uid,
+      email: safeString(nextFields.email).trim().toLowerCase(),
+      displayName: safeString(nextFields.name).trim() || safeString(nextFields.email).trim().toLowerCase(),
+      password: bootstrapPassword,
+    });
+    created = true;
+  }
+
+  await syncFirebaseManagedUser(uid, {
+    email: nextFields.email,
+    name: nextFields.name,
+    role: nextFields.role,
+    organizationId: nextFields.organizationId,
+    programIds: nextFields.programIds,
+    campusIds: nextFields.campusIds,
+    memberships: nextFields.memberships,
+  });
+
+  // Keep the first-login requirement on the shared profile document so the app can gate the navigator.
+  await firestore.collection('users').doc(uid).set({
+    id: uid,
+    email: safeString(nextFields.email).trim().toLowerCase(),
+    name: safeString(nextFields.name).trim(),
+    role: safeString(nextFields.role).trim(),
+    organizationId: safeString(nextFields.organizationId).trim(),
+    programIds: normalizeManagedIdList(nextFields.programIds),
+    campusIds: normalizeManagedIdList(nextFields.campusIds),
+    memberships: Array.isArray(nextFields.memberships) ? nextFields.memberships.filter((item) => item && typeof item === 'object') : [],
+    passwordSetupRequired: true,
+    inviteType: safeString(nextFields.inviteType).trim() || 'staff',
+    inviteStatus: 'sent',
+    inviteSentAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return { userRecord, created };
+}
+
+async function createOrRefreshManagedAccessInvite({
+  req,
+  email,
+  role,
+  name,
+  phone,
+  address,
+  organizationId,
+  programIds,
+  campusIds,
+  memberships,
+  inviteType,
+  sourceSubmissionId,
+  userId,
+}) {
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedRole = normalizeManagedInviteRole(role);
+  if (!normalizedEmail) throw new Error('Valid email required');
+  if (!normalizedRole) throw new Error('Role required');
+
+  let localUser = null;
+  if (userId) {
+    localUser = db.prepare('SELECT * FROM users WHERE id = ?').get(String(userId).trim()) || null;
+  }
+  if (!localUser) {
+    localUser = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(normalizedEmail) || null;
+  }
+
+  let firebaseUser = null;
+  try {
+    firebaseUser = await getFirebaseAdmin().auth().getUserByEmail(normalizedEmail);
+  } catch (error) {
+    const code = safeString(error?.code).toLowerCase();
+    if (!code.includes('user-not-found')) throw error;
+  }
+
+  const managedUserId = safeString(localUser?.id).trim() || safeString(firebaseUser?.uid).trim() || nanoId();
+  const now = nowISO();
+  const resolvedName = safeString(name).trim() || safeString(localUser?.name).trim() || safeString(firebaseUser?.displayName).trim() || normalizedEmail;
+  const resolvedPhone = safeString(phone).trim() || safeString(localUser?.phone).trim();
+  const resolvedAddress = safeString(address).trim() || safeString(localUser?.address).trim();
+  const passwordHash = localUser?.password_hash || bcrypt.hashSync(`${nanoId()}_${Date.now()}_${Math.random().toString(36).slice(2)}`, 12);
+
+  if (localUser) {
+    db.prepare('UPDATE users SET email = ?, name = ?, phone = ?, address = ?, role = ?, updated_at = ? WHERE id = ?')
+      .run(normalizedEmail, resolvedName, resolvedPhone, resolvedAddress, normalizedRole, now, managedUserId);
+  } else {
+    db.prepare('INSERT INTO users (id,email,password_hash,name,phone,address,role,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)')
+      .run(managedUserId, normalizedEmail, passwordHash, resolvedName, resolvedPhone, resolvedAddress, normalizedRole, now, now);
+  }
+
+  await ensureFirebaseManagedUserForInvite(managedUserId, {
+    email: normalizedEmail,
+    name: resolvedName,
+    role: normalizedRole,
+    organizationId: safeString(organizationId).trim(),
+    programIds: normalizeManagedIdList(programIds),
+    campusIds: normalizeManagedIdList(campusIds),
+    memberships: Array.isArray(memberships) ? memberships : [],
+    inviteType,
+  });
+
+  const accessCode = generateInviteAccessCode();
+  const inviteId = nanoId();
+  db.prepare('UPDATE access_invites SET revoked_at = ?, updated_at = ? WHERE user_id = ? AND used_at IS NULL AND revoked_at IS NULL').run(now, now, managedUserId);
+  db.prepare('INSERT INTO access_invites (id, user_id, email, role, invite_type, code_hash, organization_id, source_submission_id, sent_at, created_at, updated_at, last_email_status, last_email_error) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(
+      inviteId,
+      managedUserId,
+      normalizedEmail,
+      normalizedRole,
+      safeString(inviteType).trim() || 'staff',
+      hashInviteAccessCode(accessCode),
+      safeString(organizationId).trim(),
+      safeString(sourceSubmissionId).trim(),
+      now,
+      now,
+      now,
+      'pending',
+      ''
+    );
+
+  try {
+    await sendAccessInviteEmail({ req, to: normalizedEmail, role: normalizedRole, accessCode, inviteType });
+    db.prepare('UPDATE access_invites SET last_email_status = ?, sent_at = ?, updated_at = ? WHERE id = ?').run('sent', now, now, inviteId);
+  } catch (error) {
+    db.prepare('UPDATE access_invites SET last_email_status = ?, last_email_error = ?, updated_at = ? WHERE id = ?').run('failed', safeString(error?.message || error).slice(0, 200), now, inviteId);
+    throw error;
+  }
+
+  const row = db.prepare('SELECT id,email,name,avatar,phone,address,role,created_at,updated_at FROM users WHERE id = ?').get(managedUserId);
+  const firebaseProfiles = await getFirebaseManagedProfiles([managedUserId]).catch(() => new Map());
+  const latestInvite = getLatestAccessInviteRowForUser(managedUserId);
+  return {
+    user: {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      avatar: row.avatar || '',
+      phone: row.phone || '',
+      address: row.address || '',
+      role: row.role,
+      organizationId: firebaseProfiles.get(managedUserId)?.organizationId || '',
+      programIds: firebaseProfiles.get(managedUserId)?.programIds || [],
+      campusIds: firebaseProfiles.get(managedUserId)?.campusIds || [],
+      memberships: firebaseProfiles.get(managedUserId)?.memberships || [],
+      invite: serializeAccessInviteRow(latestInvite),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    },
+    invite: serializeAccessInviteRow(latestInvite),
+  };
+}
+
+async function markInviteLoginStarted(userId, inviteId) {
+  const admin = getFirebaseAdmin();
+  const now = nowISO();
+  const row = db.prepare('SELECT * FROM access_invites WHERE id = ? AND user_id = ? AND first_login_at IS NULL AND used_at IS NULL AND revoked_at IS NULL').get(String(inviteId || '').trim(), String(userId || '').trim());
+  if (!row) throw new Error('invalid or expired access code');
+  db.prepare('UPDATE access_invites SET first_login_at = ?, updated_at = ? WHERE id = ?').run(now, now, String(inviteId || '').trim());
+  await admin.firestore().collection('users').doc(String(userId || '').trim()).set({
+    passwordSetupRequired: true,
+    inviteStatus: 'started',
+    inviteFirstLoginAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+}
+
+async function completeManagedInvitePasswordSetup(userId, inviteId, newPassword) {
+  const policyError = getStrongPasswordPolicyError(newPassword);
+  if (policyError) throw new Error(policyError);
+  const uid = safeString(userId).trim();
+  const iid = safeString(inviteId).trim();
+  if (!uid || !iid) throw new Error('invite session is incomplete');
+  const now = nowISO();
+  const inviteRow = db.prepare('SELECT * FROM access_invites WHERE id = ? AND user_id = ? AND first_login_at IS NOT NULL AND used_at IS NULL AND revoked_at IS NULL').get(iid, uid);
+  if (!inviteRow) throw new Error('invite access code is no longer active');
+
+  await getFirebaseAdmin().auth().updateUser(uid, { password: String(newPassword || '') });
+  const hash = bcrypt.hashSync(String(newPassword || ''), 12);
+  db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(hash, now, uid);
+  db.prepare('UPDATE access_invites SET used_at = ?, updated_at = ? WHERE id = ?').run(now, now, iid);
+  await getFirebaseAdmin().firestore().collection('users').doc(uid).set({
+    passwordSetupRequired: false,
+    inviteStatus: 'accepted',
+    updatedAt: getFirebaseAdmin().firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+}
+
 function hasExpoPushToken(token) {
   const t = safeString(token).trim();
   return t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken[');
@@ -1730,7 +2132,7 @@ app.use(bodyParser.json({ limit: '2mb' }));
 
 // Firebase-backed MFA endpoints (used by the mobile/web app).
 registerFirebaseMfaRoutes(app);
-registerOrganizationIntakeRoutes(app);
+registerOrganizationIntakeRoutes(app, { createOrRefreshManagedAccessInvite });
 
 // Serve uploaded media. Files are stored under the same host-mounted .data dir.
 app.use('/uploads', uploadAccessMiddleware, express.static(UPLOAD_DIR));
@@ -3444,6 +3846,58 @@ app.post('/api/auth/login', authRateLimit, (req, res) => {
   }
 });
 
+app.post('/api/auth/invite-login', authRateLimit, async (req, res) => {
+  const email = normalizeEmail(req.body && req.body.email);
+  const accessCode = (req.body && req.body.accessCode != null) ? String(req.body.accessCode).trim() : '';
+  if (!email || !accessCode) return res.status(400).json({ ok: false, error: 'email and accessCode required' });
+  if (!/^\d{6}$/.test(accessCode)) return res.status(400).json({ ok: false, error: 'accessCode must be a 6-digit code' });
+
+  try {
+    const inviteRow = db.prepare(
+      'SELECT * FROM access_invites WHERE lower(email) = ? AND code_hash = ? AND first_login_at IS NULL AND used_at IS NULL AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1'
+    ).get(email, hashInviteAccessCode(accessCode));
+    if (!inviteRow) return res.status(401).json({ ok: false, error: 'invalid credentials' });
+
+    const userRow = db.prepare('SELECT * FROM users WHERE id = ?').get(String(inviteRow.user_id || ''));
+    if (!userRow) return res.status(404).json({ ok: false, error: 'user not found' });
+
+    await markInviteLoginStarted(userRow.id, inviteRow.id);
+    const customToken = await getFirebaseAdmin().auth().createCustomToken(String(userRow.id), { role: String(userRow.role || inviteRow.role || '') });
+    const latestInvite = serializeAccessInviteRow(getLatestAccessInviteRowForUser(userRow.id));
+    return res.json({
+      ok: true,
+      customToken,
+      user: {
+        ...userToClient(userRow),
+        passwordSetupRequired: true,
+      },
+      invite: latestInvite,
+    });
+  } catch (e) {
+    slog.error('auth', 'Invite login failed', { email: maskEmail(email), message: e?.message || String(e) });
+    return res.status(500).json({ ok: false, error: e?.message || 'invite login failed' });
+  }
+});
+
+app.post('/api/auth/complete-invite-password', authMiddleware, async (req, res) => {
+  const userId = safeString(req.user?.id).trim();
+  const newPassword = (req.body && req.body.newPassword != null) ? String(req.body.newPassword) : '';
+  if (!userId) return res.status(401).json({ ok: false, error: 'authentication required' });
+
+  try {
+    const inviteRow = db.prepare(
+      'SELECT * FROM access_invites WHERE user_id = ? AND first_login_at IS NOT NULL AND used_at IS NULL AND revoked_at IS NULL ORDER BY first_login_at DESC, created_at DESC LIMIT 1'
+    ).get(userId);
+    if (!inviteRow) return res.status(400).json({ ok: false, error: 'invite session is no longer active' });
+
+    await completeManagedInvitePasswordSetup(userId, inviteRow.id, newPassword);
+    const userRow = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    return res.json({ ok: true, user: userRow ? userToClient(userRow) : null });
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: e?.message || 'could not complete password setup' });
+  }
+});
+
 // Password reset (request a reset code)
 app.post('/api/auth/forgot-password', authRateLimit, async (req, res) => {
   const email = (req.body && req.body.email) ? String(req.body.email).trim().toLowerCase() : '';
@@ -3695,6 +4149,7 @@ app.get('/api/admin/users', authMiddleware, requireAdmin, requireCapability('use
   try {
     const rows = db.prepare('SELECT id,email,name,avatar,phone,address,role,created_at,updated_at FROM users ORDER BY lower(email) ASC').all();
     const firebaseProfiles = await getFirebaseManagedProfiles((rows || []).map((row) => row.id)).catch(() => new Map());
+    const inviteRows = getLatestAccessInviteRows((rows || []).map((row) => row.id));
     const items = (rows || []).map((row) => ({
       id: row.id,
       email: row.email,
@@ -3707,12 +4162,59 @@ app.get('/api/admin/users', authMiddleware, requireAdmin, requireCapability('use
       programIds: firebaseProfiles.get(row.id)?.programIds || [],
       campusIds: firebaseProfiles.get(row.id)?.campusIds || [],
       memberships: firebaseProfiles.get(row.id)?.memberships || [],
+      invite: inviteRows.get(row.id) || null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
     return res.json({ ok: true, items: filterManageableUsers(req.user, items) });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || 'list users failed' });
+  }
+});
+
+app.post('/api/admin/users/invite', authMiddleware, requireAdmin, requireCapability('users:manage'), async (req, res) => {
+  const email = normalizeEmail(req.body && req.body.email);
+  const role = normalizeManagedInviteRole(req.body && req.body.role);
+  const name = safeString(req.body && req.body.name).trim();
+  const phone = safeString(req.body && req.body.phone).trim();
+  const address = safeString(req.body && req.body.address).trim();
+  const organizationId = safeString(req.body && req.body.organizationId).trim();
+  const programIds = normalizeManagedIdList(req.body && req.body.programIds);
+  const campusIds = normalizeManagedIdList(req.body && req.body.campusIds);
+  const memberships = Array.isArray(req.body?.memberships) ? req.body.memberships : [];
+
+  if (!email) return res.status(400).json({ ok: false, error: 'email required' });
+  if (!role) return res.status(400).json({ ok: false, error: 'role required' });
+  if (isAdminRole(role) && !isSuperAdminRole(req.user?.role)) {
+    return res.status(403).json({ ok: false, error: 'super admin required to assign elevated roles' });
+  }
+
+  try {
+    const result = await createOrRefreshManagedAccessInvite({
+      req,
+      email,
+      role,
+      name,
+      phone,
+      address,
+      organizationId,
+      programIds,
+      campusIds,
+      memberships,
+      inviteType: 'staff',
+      sourceSubmissionId: '',
+      userId: '',
+    });
+    recordAuditLog({
+      actorId: req.user?.id,
+      action: 'admin_user.invited',
+      targetType: 'user',
+      targetId: result.user?.id,
+      details: { role, email },
+    });
+    return res.json({ ok: true, user: result.user, invite: result.invite });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || 'invite failed' });
   }
 });
 
@@ -3857,11 +4359,61 @@ app.put('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapabil
       programIds: scope.programIds || [],
       campusIds: scope.campusIds || [],
       memberships: scope.memberships || [],
+      invite: serializeAccessInviteRow(getLatestAccessInviteRowForUser(userId)),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     } });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || 'admin update failed' });
+  }
+});
+
+app.post('/api/admin/users/:userId/invite-resend', authMiddleware, requireAdmin, requireCapability('users:manage'), async (req, res) => {
+  const userId = safeString(req.params && req.params.userId).trim();
+  if (!userId) return res.status(400).json({ ok: false, error: 'userId required' });
+
+  try {
+    const existingUser = db.prepare('SELECT id,email,name,phone,address,role FROM users WHERE id = ?').get(userId);
+    if (!existingUser) return res.status(404).json({ ok: false, error: 'user not found' });
+
+    const requesterIsSuperAdmin = isSuperAdminRole(req.user?.role);
+    const targetIsSuperAdmin = isSuperAdminRole(existingUser.role);
+    const targetProfile = await getFirebaseManagedProfiles([userId]).catch(() => new Map());
+    const scope = targetProfile.get(userId) || {};
+    const targetScopedUser = normalizeScopedUser({ ...existingUser, ...scope });
+    if (targetIsSuperAdmin && !requesterIsSuperAdmin) {
+      return res.status(403).json({ ok: false, error: 'super admin required to manage this user' });
+    }
+    if (!canManageTargetUser(req.user, targetScopedUser)) {
+      return res.status(403).json({ ok: false, error: 'target user is outside your admin scope' });
+    }
+
+    const latestInvite = getLatestAccessInviteRowForUser(userId);
+    const result = await createOrRefreshManagedAccessInvite({
+      req,
+      email: existingUser.email,
+      role: existingUser.role,
+      name: existingUser.name,
+      phone: existingUser.phone,
+      address: existingUser.address,
+      organizationId: scope.organizationId || '',
+      programIds: scope.programIds || [],
+      campusIds: scope.campusIds || [],
+      memberships: scope.memberships || [],
+      inviteType: safeString(latestInvite?.invite_type).trim() || 'staff',
+      sourceSubmissionId: safeString(latestInvite?.source_submission_id).trim(),
+      userId,
+    });
+    recordAuditLog({
+      actorId: req.user?.id,
+      action: 'admin_user.invite_resent',
+      targetType: 'user',
+      targetId: userId,
+      details: { email: existingUser.email },
+    });
+    return res.json({ ok: true, user: result.user, invite: result.invite });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || 'invite resend failed' });
   }
 });
 

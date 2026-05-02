@@ -345,9 +345,27 @@ export function AuthProvider({ children }) {
     return res;
   }
 
+  async function loginWithInviteCode(email, accessCode) {
+    const res = await Api.loginWithInviteCode(email, accessCode);
+    return res;
+  }
+
   async function loginWithGoogle(idToken) {
     const res = await Api.loginWithGoogle(idToken);
     return res;
+  }
+
+  async function completeInvitePasswordSetup(newPassword) {
+    const result = await Api.completeInvitePasswordSetup(newPassword);
+    setUser((current) => {
+      const nextUser = {
+        ...(current || {}),
+        ...(result?.user || {}),
+        passwordSetupRequired: false,
+      };
+      return applyDevRoleOverride(nextUser, devRoleOverride);
+    });
+    return result;
   }
 
   async function logout() {
@@ -440,11 +458,14 @@ export function AuthProvider({ children }) {
         user,
         loading,
         login,
+        loginWithInviteCode,
         loginWithGoogle,
+        completeInvitePasswordSetup,
         logout,
         setAuth,
         setRole,
         authError,
+        passwordSetupRequired: Boolean(user?.passwordSetupRequired),
         mfaRequired: isDevBypass ? false : mfaRequired,
         mfaVerified: isDevBypass ? true : mfaVerified,
         mfaLoading,
@@ -454,7 +475,7 @@ export function AuthProvider({ children }) {
         refreshMfaState,
       });
     },
-    [token, user, loading, authError, mfaRequired, mfaVerified, mfaLoading]
+    [token, user, loading, authError, mfaRequired, mfaVerified, mfaLoading, devRoleOverride]
   );
 
   return <AuthContext.Provider value={valueWithMfa}>{children}</AuthContext.Provider>;

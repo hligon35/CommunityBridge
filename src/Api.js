@@ -8,6 +8,7 @@ import { isAdminRole } from './core/tenant/models';
 import {
   GoogleAuthProvider,
   signInWithCredential,
+  signInWithCustomToken,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -410,6 +411,35 @@ export async function login(email, password) {
     role: defaultProfileRoleForEmail(e),
   }));
   return { token, user: profile };
+}
+
+export async function loginWithInviteCode(email, accessCode) {
+  const a = requireAuth();
+  const e = normalizeEmailInput(email);
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Invite-code login requires the API server.');
+    err.code = 'BB_INVITE_LOGIN_API_REQUIRED';
+    throw err;
+  }
+
+  const resp = await fetchWithTimeout(`${apiBase}/api/auth/invite-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: e, accessCode: String(accessCode || '').trim() }),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true || !json.customToken) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not sign in with access code.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+
+  // The first login still uses Firebase for session state; the server verifies the one-time code.
+  const credential = await signInWithCustomToken(a, String(json.customToken));
+  const token = await getIdToken(credential.user, true);
+  const profile = (await getUserProfile(credential.user.uid)) || json.user || null;
+  return { token, user: profile, invite: json.invite || null };
 }
 
 export async function loginWithGoogle(idToken) {
@@ -829,6 +859,33 @@ export async function resetPassword(_) {
   throw err;
 }
 
+export async function completeInvitePasswordSetup(newPassword) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Invite password setup requires the API server.');
+    err.code = 'BB_INVITE_SETUP_API_REQUIRED';
+    throw err;
+  }
+
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/auth/complete-invite-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ newPassword: String(newPassword || '') }),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not complete password setup.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, user: json.user || null };
+}
+
 export async function me() {
   const u = requireUser();
   const profile = await getUserProfile(u.uid);
@@ -909,6 +966,58 @@ export async function updateManagedUser(userId, payload) {
     throw err;
   }
   return { ok: true, user: json.user || null };
+}
+
+export async function sendManagedUserInvite(payload) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Admin user invitations require the API server.');
+    err.code = 'BB_ADMIN_USERS_API_REQUIRED';
+    throw err;
+  }
+
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/admin/users/invite`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not send invite.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, user: json.user || null, invite: json.invite || null };
+}
+
+export async function resendManagedUserInvite(userId) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Admin user invitations require the API server.');
+    err.code = 'BB_ADMIN_USERS_API_REQUIRED';
+    throw err;
+  }
+
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/admin/users/${encodeURIComponent(String(userId || ''))}/invite-resend`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not resend invite.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, user: json.user || null, invite: json.invite || null };
 }
 
 export async function deleteManagedUser(userId) {
@@ -2888,16 +2997,20 @@ export async function ackUrgentMemoApi(id) {
 export default {
   setAuthToken,
   login,
+  loginWithInviteCode,
   loginWithGoogle,
   signup,
   verify2fa,
   resend2fa,
   requestPasswordReset,
   resetPassword,
+  completeInvitePasswordSetup,
   me,
   updateMe,
   listManagedUsers,
+  sendManagedUserInvite,
   updateManagedUser,
+  resendManagedUserInvite,
   deleteManagedUser,
   getPosts,
   createPost,

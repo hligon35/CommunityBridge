@@ -61,6 +61,7 @@ import { View, Text } from 'react-native';
 import LogoTitle from './src/components/LogoTitle';
 import LoginScreen from './screens/LoginScreen';
 import TwoFactorScreen from './screens/TwoFactorScreen';
+import CreatePasswordScreen from './screens/CreatePasswordScreen';
 import { initSentry, Sentry } from './src/sentry';
 import { CommonActions } from '@react-navigation/native';
 import { TenantProvider } from './src/core/tenant/TenantContext';
@@ -378,11 +379,19 @@ function AppNavigator() {
             CommonActions.reset({ index: 0, routes: [{ name: 'TwoFactor' }] })
           );
         }
+      } else if (auth?.passwordSetupRequired) {
+        const r = navigationRef.getCurrentRoute();
+        const name = r?.name ? String(r.name) : '';
+        if (name && name !== 'Login' && name !== 'CreatePassword') {
+          navigationRef.dispatch(
+            CommonActions.reset({ index: 0, routes: [{ name: 'CreatePassword' }] })
+          );
+        }
       }
     } catch (_) {
       // ignore
     }
-  }, [auth?.loading, auth?.token, auth?.needsMfa]);
+  }, [auth?.loading, auth?.token, auth?.needsMfa, auth?.passwordSetupRequired]);
 
   useEffect(() => {
     // Drain any writes that were queued during a network outage.
@@ -390,7 +399,7 @@ function AppNavigator() {
     // foreground (native), and when the browser regains the `online` event
     // (web). Failures inside the queue are swallowed so this never disrupts
     // the UI.
-    if (!auth?.token || auth?.needsMfa) return undefined;
+    if (!auth?.token || auth?.needsMfa || auth?.passwordSetupRequired) return undefined;
 
     let cancelled = false;
     const run = () => {
@@ -433,7 +442,7 @@ function AppNavigator() {
         }
       } catch (_) { /* ignore */ }
     };
-  }, [auth?.token, auth?.needsMfa]);
+  }, [auth?.token, auth?.needsMfa, auth?.passwordSetupRequired]);
 
   return (
     <NavigationContainer
@@ -459,6 +468,11 @@ function AppNavigator() {
         <AppStack.Screen
           name="TwoFactor"
           component={TwoFactorScreen}
+          options={{ gestureEnabled: false }}
+        />
+        <AppStack.Screen
+          name="CreatePassword"
+          component={CreatePasswordScreen}
           options={{ gestureEnabled: false }}
         />
         <AppStack.Screen name="Main">

@@ -10,6 +10,7 @@ import { listProgramsByOrganization } from '../core/tenant/ProgramRepository';
 import { listCampusesByOrganization } from '../core/tenant/CampusRepository';
 import { THERAPY_ROLE_LABELS, getDisplayRoleLabel } from '../utils/roleTerminology';
 import { formatPhoneInput } from '../utils/inputFormat';
+import { getPasswordPolicyError } from '../utils/passwordPolicy';
 import * as Api from '../Api';
 
 const DEFAULT_ROLES = ['Admin', 'Teacher', 'Therapist', 'Parent', 'Staff'];
@@ -47,6 +48,13 @@ const ROLE_OPTIONS = [
   { value: 'bcba', label: 'BCBA', adminOnly: false },
   { value: 'admin', label: 'Admin', adminOnly: true },
   { value: 'campusAdmin', label: 'Campus Admin', adminOnly: true },
+  { value: 'orgAdmin', label: 'Org Admin', adminOnly: true },
+  { value: 'superAdmin', label: 'Super Admin', adminOnly: true },
+];
+const STAFF_INVITE_ROLE_OPTIONS = [
+  { value: 'bcba', label: 'BCBA', adminOnly: false },
+  { value: 'faculty', label: 'Office Personnel', adminOnly: false },
+  { value: 'therapist', label: THERAPY_ROLE_LABELS.therapist, adminOnly: false },
   { value: 'orgAdmin', label: 'Org Admin', adminOnly: true },
   { value: 'superAdmin', label: 'Super Admin', adminOnly: true },
 ];
@@ -88,15 +96,6 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
 }
 
-function getPasswordPolicyError(value) {
-  const password = String(value || '');
-  if (!password) return '';
-  if (password.length < 8) return 'Password must be at least 8 characters.';
-  if (!/[A-Z]/.test(password)) return 'Password must include at least 1 capital letter.';
-  if (!/[^A-Za-z0-9]/.test(password)) return 'Password must include at least 1 special character.';
-  return '';
-}
-
 function buildDefaultMapping() {
   const init = {};
   DEFAULT_ROLES.forEach((role) => {
@@ -118,6 +117,8 @@ export default function ManagePermissionsScreen(){
   const [usersError, setUsersError] = useState('');
   const [savingUserId, setSavingUserId] = useState('');
   const [deletingUserId, setDeletingUserId] = useState('');
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteDraft, setInviteDraft] = useState({ email: '', role: 'bcba' });
   const [sectionsOpen, setSectionsOpen] = useState({ users: true, permissions: true });
   const [roleSectionsOpen, setRoleSectionsOpen] = useState({
     Admin: true,
@@ -139,6 +140,9 @@ export default function ManagePermissionsScreen(){
   }, [canManagePermissions, mapping, user?.role]);
   const visibleRoleOptions = useMemo(() => {
     return ROLE_OPTIONS.filter((option) => canManagePermissions || !option.adminOnly);
+  }, [canManagePermissions]);
+  const visibleInviteRoleOptions = useMemo(() => {
+    return STAFF_INVITE_ROLE_OPTIONS.filter((option) => canManagePermissions || !option.adminOnly);
   }, [canManagePermissions]);
 
   const campusLookup = useMemo(() => {
@@ -251,6 +255,82 @@ export default function ManagePermissionsScreen(){
         [field]: nextValue,
       },
     }));
+  }
+
+  function upsertManagedUser(nextUser) {
+    if (!nextUser?.id) return;
+    setManagedUsers((current) => {
+      const existingIndex = current.findIndex((item) => item.id === nextUser.id);
+      if (existingIndex === -1) return [nextUser, ...current];
+      return current.map((item) => (item.id === nextUser.id ? nextUser : item));
+    });
+    setUserDrafts((current) => ({
+      ...current,
+      [nextUser.id]: createUserDraft(nextUser),
+    }));
+    setUserSectionsOpen((current) => ({ ...current, [nextUser.id]: true }));
+  }
+
+  async function sendInvite() {
+    const email = String(inviteDraft.email || '').trim().toLowerCase();
+    const role = normalizeUserRole(inviteDraft.role);
+    if (!isValidEmail(email)) {
+      Alert.alert('Valid email required', 'Enter a valid staff email before sending the invite.');
+      return;
+    }
+    if (!role) {
+      Alert.alert('Role required', 'Choose a role before sending the invite.');
+      return;
+    }
+
+    try {
+      setInviteBusy(true);
+      setUsersError('');
+      const result = await Api.sendManagedUserInvite({ email, role });
+      if (result?.user) upsertManagedUser(normalizeManagedUsers([result.user])[0] || result.user);
+      setInviteDraft((current) => ({ ...current, email: '' }));
+      Alert.alert('Invite Sent', `A one-time access code was emailed to ${email}.`);
+    } catch (error) {
+      setUsersError(String(error?.message || 'Could not send invite.'));
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
+  async function resendInvite(userItem) {
+    try {
+      setSavingUserId(userItem.id);
+      setUsersError('');
+      const result = await Api.resendManagedUserInvite(userItem.id);
+      if (result?.user) upsertManagedUser(normalizeManagedUsers([result.user])[0] || result.user);
+      Alert.alert('Invite Sent', `A new one-time access code was emailed to ${userItem.email || 'this user'}.`);
+    } catch (error) {
+      setUsersError(String(error?.message || 'Could not resend invite.'));
+    } finally {
+      setSavingUserId('');
+    }
+  }
+
+  function renderInviteStatus(userItem) {
+    const invite = userItem?.invite;
+    if (!invite) return null;
+    const statusLabel = invite.status === 'used'
+      ? 'Invite completed'
+      : invite.status === 'started'
+        ? 'Password setup in progress'
+        : invite.lastEmailStatus === 'failed'
+          ? 'Invite email failed'
+          : 'Invite Sent';
+    return (
+      <View style={styles.inviteCard}>
+        <Text style={styles.inviteTitle}>{statusLabel}</Text>
+        <Text style={styles.inviteMeta}>{invite.sentAt ? `Last sent ${new Date(invite.sentAt).toLocaleString()}` : 'No send timestamp available.'}</Text>
+        {invite.lastEmailError ? <Text style={styles.inviteError}>{invite.lastEmailError}</Text> : null}
+        <TouchableOpacity style={[styles.secondaryActionButton, savingUserId === userItem.id ? styles.disabledButton : null]} onPress={() => resendInvite(userItem)} disabled={savingUserId === userItem.id}>
+          <Text style={styles.secondaryActionButtonText}>{savingUserId === userItem.id ? 'Sending...' : 'Resend Invite'}</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
   async function ensureProgramsLoaded(organizationId) {
@@ -594,6 +674,8 @@ export default function ManagePermissionsScreen(){
             <TextInput value={draft.password} onChangeText={(value) => updateUserDraft(userItem.id, 'password', String(value || '').slice(0, 128))} style={styles.input} placeholder="Leave blank to keep current password" secureTextEntry maxLength={128} />
             <Text style={styles.helperText}>Use this only for office-managed account recovery. End users should still use the standard reset-password flow from login.</Text>
 
+            {renderInviteStatus(userItem)}
+
             <View style={styles.userActionRow}>
               <TouchableOpacity style={[styles.actionButton, styles.saveButton]} onPress={() => saveUser(userItem)} disabled={busy}>
                 <Text style={styles.actionButtonText}>{savingUserId === userItem.id ? 'Saving...' : 'Save changes'}</Text>
@@ -655,6 +737,31 @@ export default function ManagePermissionsScreen(){
                 <View style={styles.infoCard}>
                   <Text style={styles.infoTitle}>Role assignment rules</Text>
                   <Text style={styles.infoBody}>Only super admins can assign elevated roles. Org admins should be scoped to one organization. Campus admins should be scoped to one organization and one or more campuses.</Text>
+                </View>
+                <View style={styles.inviteComposer}>
+                  <Text style={styles.inviteComposerTitle}>Staff invite</Text>
+                  <Text style={styles.helperText}>Enter a staff email, choose the role, and send a one-time access code. Invited users will be forced to create a password after the first login.</Text>
+                  <Text style={styles.fieldLabel}>Staff email</Text>
+                  <TextInput value={inviteDraft.email} onChangeText={(value) => setInviteDraft((current) => ({ ...current, email: String(value || '').slice(0, 254) }))} style={styles.input} placeholder="staff@example.com" autoCapitalize="none" keyboardType="email-address" maxLength={254} />
+                  <Text style={styles.fieldLabel}>Role</Text>
+                  <View style={styles.roleChipWrap}>
+                    {visibleInviteRoleOptions.map((option) => {
+                      const selected = normalizeUserRole(inviteDraft.role) === option.value;
+                      return (
+                        <TouchableOpacity
+                          key={`invite-${option.value}`}
+                          onPress={() => setInviteDraft((current) => ({ ...current, role: option.value }))}
+                          style={[styles.roleChip, selected ? styles.roleChipSelected : null]}
+                          disabled={inviteBusy}
+                        >
+                          <Text style={[styles.roleChipLabel, selected ? styles.roleChipLabelSelected : null]}>{option.label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <TouchableOpacity style={[styles.primaryInviteButton, inviteBusy ? styles.disabledButton : null]} onPress={sendInvite} disabled={inviteBusy}>
+                    <Text style={styles.primaryInviteButtonText}>{inviteBusy ? 'Sending...' : 'Send Invite'}</Text>
+                  </TouchableOpacity>
                 </View>
                 {managedUsers.length ? managedUsers.map((item) => renderUserCard(item)) : (
                   <Text style={styles.emptyState}>No users available to manage.</Text>
@@ -730,6 +837,8 @@ const styles = StyleSheet.create({
   statusRow: { marginHorizontal: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center' },
   statusText: { marginLeft: 8, color: '#1d4ed8', fontWeight: '600' },
   infoCard: { marginBottom: 12, padding: 12, borderRadius: 10, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe' },
+  inviteComposer: { marginBottom: 12, padding: 12, borderRadius: 10, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0' },
+  inviteComposerTitle: { color: '#0f172a', fontWeight: '800', marginBottom: 4 },
   infoTitle: { color: '#1d4ed8', fontWeight: '800', marginBottom: 4 },
   infoBody: { color: '#1e3a8a', lineHeight: 20 },
   roleCard: { padding: 12, borderRadius: 8, backgroundColor: '#fff', marginBottom: 12, borderWidth: 1, borderColor: '#f3f4f6' },
@@ -756,6 +865,14 @@ const styles = StyleSheet.create({
   groupChipLabelSelected: { color: '#fff' },
   groupDescription: { color: '#475569', lineHeight: 20, marginBottom: 12 },
   helperText: { color: '#64748b', lineHeight: 20, marginBottom: 8 },
+  inviteCard: { marginTop: 12, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#dbeafe', backgroundColor: '#eff6ff' },
+  inviteTitle: { color: '#1d4ed8', fontWeight: '800' },
+  inviteMeta: { marginTop: 4, color: '#1e3a8a', lineHeight: 18 },
+  inviteError: { marginTop: 6, color: '#b91c1c', lineHeight: 18 },
+  primaryInviteButton: { marginTop: 6, borderRadius: 10, paddingVertical: 12, alignItems: 'center', backgroundColor: '#2563eb' },
+  primaryInviteButtonText: { color: '#fff', fontWeight: '800' },
+  secondaryActionButton: { marginTop: 10, alignSelf: 'flex-start', borderRadius: 10, borderWidth: 1, borderColor: '#93c5fd', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff' },
+  secondaryActionButtonText: { color: '#1d4ed8', fontWeight: '700' },
   userActionRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14 },
   actionButton: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   saveButton: { backgroundColor: '#2563eb', marginRight: 8 },

@@ -13,6 +13,7 @@ import { useAuth } from '../src/AuthContext';
 import { logger } from '../src/utils/logger';
 import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportError';
 import { getAuthInitError, getFirebaseAppInitError } from '../src/firebase';
+import { isInviteAccessCode } from '../src/utils/passwordPolicy';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -351,10 +352,11 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     }, next.durationMs || 4200);
   }
 
-  async function finishLoginNavigation() {
+  async function finishLoginNavigation(options = {}) {
     try {
       const gate = await auth.refreshMfaState();
-      navigation.replace(gate?.needsMfa ? 'TwoFactor' : 'Main');
+      const requiresPasswordSetup = Boolean(options?.passwordSetupRequired || auth?.passwordSetupRequired);
+      navigation.replace(gate?.needsMfa ? 'TwoFactor' : (requiresPasswordSetup ? 'CreatePassword' : 'Main'));
     } catch (e) {
       logger.warn('auth', 'Post-login navigation failed', { code: e?.code, message: e?.message || String(e) });
       reportErrorToSentry(e, { area: 'auth', action: 'post_login_navigation', platform: Platform.OS });
@@ -389,13 +391,24 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     setBusy(true);
     try{
       logger.debug('auth', 'Login submit', { hasEmail: !!cleanedEmail });
-      const res = await auth.login(cleanedEmail, cleanedPassword);
+      let res;
+      try {
+        res = await auth.login(cleanedEmail, cleanedPassword);
+      } catch (loginError) {
+        const code = String(loginError?.code || '');
+        const message = String(loginError?.message || '');
+        const canTryInviteCode = isInviteAccessCode(cleanedPassword)
+          && (code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials' || /invalid email or password|invalid credential/i.test(message));
+        if (!canTryInviteCode) throw loginError;
+        res = await auth.loginWithInviteCode(cleanedEmail, cleanedPassword);
+      }
+      const requiresPasswordSetup = Boolean(res?.user?.passwordSetupRequired);
       try {
         await SecureStore.setItemAsync('bb_bio_enabled', '1');
         await SecureStore.setItemAsync('bb_bio_user', JSON.stringify(res?.user || auth?.user || {}));
         setHasBiometricAuthStored(true);
       } catch (_) {}
-      await finishLoginNavigation();
+      await finishLoginNavigation({ passwordSetupRequired: requiresPasswordSetup });
     } catch (e) {
       const code = e?.code ? String(e.code) : '';
       const msg = e?.message || String(e) || 'Please check your credentials and try again.';
@@ -477,8 +490,8 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     if (suppressAutoRedirect) return;
     if (auth.loading) return;
     if (!auth.token) return;
-    navigation.replace(auth.needsMfa ? 'TwoFactor' : 'Main');
-  }, [auth.loading, auth.token, auth.needsMfa, suppressAutoRedirect]);
+    navigation.replace(auth.needsMfa ? 'TwoFactor' : (auth.passwordSetupRequired ? 'CreatePassword' : 'Main'));
+  }, [auth.loading, auth.token, auth.needsMfa, auth.passwordSetupRequired, suppressAutoRedirect]);
 
   useEffect(() => {
     let mounted = true;

@@ -246,6 +246,7 @@ function normalizeIntakeSubmission(payload) {
       title: safeString(payload?.contactTitle).trim(),
       email: normalizeEmail(payload?.contactEmail),
       phone: normalizePhone(payload?.contactPhone),
+      role: 'superAdmin',
     },
     programs,
     locations: locationsWithProgramIds,
@@ -687,10 +688,13 @@ async function activateApprovedSubmission(submissionRef, submissionData) {
   await batch.commit();
 }
 
-function registerOrganizationIntakeRoutes(app) {
+function registerOrganizationIntakeRoutes(app, options = {}) {
   if (!app || typeof app.post !== 'function' || typeof app.get !== 'function') {
     throw new Error('registerOrganizationIntakeRoutes requires an Express app');
   }
+  const createOrRefreshManagedAccessInvite = typeof options.createOrRefreshManagedAccessInvite === 'function'
+    ? options.createOrRefreshManagedAccessInvite
+    : null;
 
   app.post('/organizations-intake-submit', async (req, res) => {
     try {
@@ -881,6 +885,53 @@ function registerOrganizationIntakeRoutes(app) {
       }
 
       await activateApprovedSubmission(submissionRef, data);
+
+      if (createOrRefreshManagedAccessInvite && data?.contact?.email) {
+        try {
+          const inviteResult = await createOrRefreshManagedAccessInvite({
+            req,
+            email: data.contact.email,
+            role: data.contact.role || 'superAdmin',
+            name: data.contact.name,
+            phone: data.contact.phone,
+            address: '',
+            organizationId: data.organization?.id || '',
+            programIds: [],
+            campusIds: [],
+            memberships: [{
+              organizationId: data.organization?.id || '',
+              programId: '',
+              campusId: '',
+              role: data.contact.role || 'superAdmin',
+            }],
+            inviteType: 'onboarding_primary_contact',
+            sourceSubmissionId: submissionId,
+            userId: '',
+          });
+          await submissionRef.set({
+            primaryContactInvite: {
+              status: inviteResult?.invite?.lastEmailStatus || 'sent',
+              email: data.contact.email,
+              role: data.contact.role || 'superAdmin',
+              sentAt: admin.firestore.FieldValue.serverTimestamp(),
+              userId: inviteResult?.user?.id || '',
+            },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        } catch (inviteError) {
+          console.error('organizationIntakeAction primary contact invite failed', inviteError);
+          await submissionRef.set({
+            primaryContactInvite: {
+              status: 'failed',
+              email: data.contact.email,
+              role: data.contact.role || 'superAdmin',
+              failedAt: admin.firestore.FieldValue.serverTimestamp(),
+              error: safeString(inviteError?.code || inviteError?.message || 'unknown_error').slice(0, 200),
+            },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+      }
 
       const applicantRecipients = getApplicantNotificationRecipients(data);
       try {
