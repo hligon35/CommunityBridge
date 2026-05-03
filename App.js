@@ -449,7 +449,7 @@ function AppNavigator() {
     try {
       if (Platform.OS !== 'web') return;
       if (!navigationRef.isReady()) return;
-      if (auth?.loading || !auth?.token || auth?.needsMfa || auth?.passwordSetupRequired) return;
+        if (auth?.loading || !auth?.token || auth?.passwordSetupRequired || auth?.needsMfa) return;
       const approvalIntent = consumeApprovalAccessIntent();
       const approvalParams = getApprovalAccessNavigationParams(approvalIntent);
       if (!approvalParams) return;

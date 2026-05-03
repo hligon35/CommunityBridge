@@ -29,9 +29,13 @@ service cloud.firestore {
         userDoc().data.email == 'dev@communitybridge.app';
     }
 
+    function passwordSetupComplete() {
+      return signedIn() && userDoc().exists() && userDoc().data.passwordSetupRequired != true;
+    }
+
     function mfaVerified() {
       return !mfaRequired() || isDevBypassUser() || (
-        signedIn() &&
+        passwordSetupComplete() &&
         userDoc().exists() &&
         (userDoc().data.mfaVerifiedAt is timestamp) &&
         mfaWindowFresh(userDoc().data)
@@ -43,12 +47,12 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return signedIn() && userDoc().exists() &&
+      return passwordSetupComplete() &&
         (userDoc().data.role == 'admin' || userDoc().data.role == 'administrator');
     }
 
     function isScopedAdmin() {
-      return signedIn() && userDoc().exists() &&
+      return passwordSetupComplete() &&
         (userDoc().data.role == 'admin' ||
          userDoc().data.role == 'administrator' ||
          userDoc().data.role == 'superAdmin' ||

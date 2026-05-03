@@ -3,6 +3,17 @@ import { Platform } from 'react-native';
 export const APPROVAL_ACCESS_INTENT_KEY = 'bb_post_login_redirect_v1';
 export const APPROVAL_ACCESS_INTENT_VALUE = 'approval-staff-management';
 
+export function storeApprovalAccessIntent(intent) {
+  if (Platform.OS !== 'web') return;
+  const value = String(intent || '').trim();
+  if (!value) return;
+  try {
+    globalThis?.localStorage?.setItem?.(APPROVAL_ACCESS_INTENT_KEY, value);
+  } catch (_) {
+    // ignore storage failures; login can still continue into password setup
+  }
+}
+
 export function consumeApprovalAccessIntent() {
   if (Platform.OS !== 'web') return null;
   try {

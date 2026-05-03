@@ -12,6 +12,12 @@ const { Pool } = require('pg');
 const multer = require('multer');
 const { registerFirebaseMfaRoutes } = require('./firebase-mfa-routes');
 const { registerOrganizationIntakeRoutes } = require('./organization-intake-routes');
+const {
+  signApprovalAccessToken: signManagedAccessApprovalToken,
+  verifyApprovalAccessToken: verifyManagedAccessApprovalToken,
+  assertApprovalLinkInviteIsActive,
+  buildInvitePasswordCompletionProfileUpdate,
+} = require('./managed-access-auth');
 const { normalizeScopedUser, canManageTargetUser, filterManageableUsers } = require('./admin-scope');
 const {
   DEFAULT_SUMMARY_FILENAME,
@@ -1133,36 +1139,30 @@ function generateInviteAccessCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-function base64UrlEncodeJson(value) {
-  return Buffer.from(JSON.stringify(value || {}), 'utf8').toString('base64url');
-}
-
 function base64UrlDecodeJson(value) {
   return JSON.parse(Buffer.from(String(value || ''), 'base64url').toString('utf8'));
 }
 
 function signApprovalAccessToken(payload) {
-  const encoded = base64UrlEncodeJson(payload);
-  const signature = crypto.createHmac('sha256', `${JWT_SECRET}:approval-link`).update(encoded).digest('base64url');
-  return `${encoded}.${signature}`;
+  return signManagedAccessApprovalToken({ jwtSecret: JWT_SECRET, payload });
 }
 
 function verifyApprovalAccessToken(token) {
-  const raw = String(token || '').trim();
-  if (!raw || !raw.includes('.')) throw new Error('invalid approval access token');
-  const [encoded, providedSignature] = raw.split('.');
-  const expectedSignature = crypto.createHmac('sha256', `${JWT_SECRET}:approval-link`).update(encoded).digest('base64url');
-  const providedBuffer = Buffer.from(providedSignature || '', 'utf8');
-  const expectedBuffer = Buffer.from(expectedSignature || '', 'utf8');
-  if (providedBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(providedBuffer, expectedBuffer)) {
-    throw new Error('invalid approval access token');
+  return verifyManagedAccessApprovalToken({ token, jwtSecret: JWT_SECRET });
+}
+
+async function buildManagedAccessLoginAuthResponse(userRow, inviteRow) {
+  try {
+    const customToken = await getFirebaseAdmin().auth().createCustomToken(String(userRow.id), { role: String(userRow.role || inviteRow.role || '') });
+    return { authMode: 'firebase-custom-token', customToken, apiToken: '' };
+  } catch (error) {
+    if (!ALLOW_DEV_TOKEN || !JWT_SECRET) throw error;
+    return {
+      authMode: 'local-api-session',
+      customToken: '',
+      apiToken: jwt.sign({ sub: String(userRow.id) }, JWT_SECRET, { expiresIn: '10m' }),
+    };
   }
-  const payload = base64UrlDecodeJson(encoded);
-  const expiresAt = Number(payload?.exp || 0);
-  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-    throw new Error('approval access link expired');
-  }
-  return payload;
 }
 
 function buildInviteLoginUrl(req) {
@@ -1170,7 +1170,10 @@ function buildInviteLoginUrl(req) {
 }
 
 function buildApprovalAccessUrl(req, approvalAccessToken) {
-  const url = new URL(buildPublicUrl(req, '/app-login'));
+  // /login is the only supported app entrypoint in this project.
+  // Route the one-time token there so the existing LoginScreen can
+  // create the limited session and hand off to password setup.
+  const url = new URL(buildPublicUrl(req, '/login'));
   url.searchParams.set('token', String(approvalAccessToken || ''));
   return url.toString();
 }
@@ -1456,6 +1459,7 @@ async function createOrRefreshManagedAccessInvite({
     inviteId,
     userId: managedUserId,
     email: normalizedEmail,
+    organizationId: safeString(organizationId).trim(),
     exp: Date.now() + (APPROVAL_LINK_TTL_HOURS * 60 * 60 * 1000),
   });
   const delivery = {
@@ -1533,11 +1537,10 @@ async function completeManagedInvitePasswordSetup(userId, inviteId, newPassword)
   const hash = bcrypt.hashSync(String(newPassword || ''), 12);
   await pool.query('UPDATE users SET password_hash = $1, updated_at = $2 WHERE id = $3', [hash, now, uid]);
   await pool.query('UPDATE access_invites SET first_login_at = COALESCE(first_login_at, $1), used_at = $1, updated_at = $2 WHERE id = $3', [now, now, iid]);
-  await getFirebaseAdmin().firestore().collection('users').doc(uid).set({
-    passwordSetupRequired: false,
-    inviteStatus: 'accepted',
-    updatedAt: getFirebaseAdmin().firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
+  await getFirebaseAdmin().firestore().collection('users').doc(uid).set(
+    buildInvitePasswordCompletionProfileUpdate(getFirebaseAdmin().firestore.FieldValue.serverTimestamp()),
+    { merge: true }
+  );
 }
 
 function isAdminRole(role) {
@@ -3785,11 +3788,13 @@ app.post('/api/auth/invite-login', authRateLimit, async (req, res) => {
     if (!userRow) return res.status(404).json({ ok: false, error: 'user not found' });
 
     await markInviteLoginStarted(userRow.id, inviteRow.id);
-    const customToken = await getFirebaseAdmin().auth().createCustomToken(String(userRow.id), { role: String(userRow.role || inviteRow.role || '') });
+    const authSession = await buildManagedAccessLoginAuthResponse(userRow, inviteRow);
     const latestInvite = serializeAccessInviteRow(await getLatestAccessInviteRowForUser(userRow.id));
     return res.json({
       ok: true,
-      customToken,
+      customToken: authSession.customToken,
+      apiToken: authSession.apiToken,
+      authMode: authSession.authMode,
       user: {
         ...userToClient(userRow),
         passwordSetupRequired: true,
@@ -3809,23 +3814,23 @@ app.post('/api/auth/approval-link-login', authRateLimit, async (req, res) => {
   try {
     const payload = verifyApprovalAccessToken(approvalToken);
     const inviteRow = await pgQueryOne(
-      // Approval links are single-use. Once first_login_at is stamped, the handoff
-      // is complete and the user must continue inside the authenticated app shell.
-      'SELECT * FROM access_invites WHERE id = $1 AND user_id = $2 AND lower(email) = $3 AND first_login_at IS NULL AND used_at IS NULL AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW()) ORDER BY created_at DESC LIMIT 1',
+      'SELECT * FROM access_invites WHERE id = $1 AND user_id = $2 AND lower(email) = $3 ORDER BY created_at DESC LIMIT 1',
       [safeString(payload?.inviteId).trim(), safeString(payload?.userId).trim(), normalizeEmail(payload?.email)]
     );
-    if (!inviteRow) return res.status(401).json({ ok: false, error: 'approval access link is no longer active' });
+    assertApprovalLinkInviteIsActive({ payload, inviteRow });
 
     const userRow = await pgQueryOne('SELECT * FROM users WHERE id = $1', [safeString(inviteRow.user_id)]);
     if (!userRow) return res.status(404).json({ ok: false, error: 'user not found' });
 
     await markInviteLoginStarted(userRow.id, inviteRow.id);
 
-    const customToken = await getFirebaseAdmin().auth().createCustomToken(String(userRow.id), { role: String(userRow.role || inviteRow.role || '') });
+    const authSession = await buildManagedAccessLoginAuthResponse(userRow, inviteRow);
     const latestInvite = serializeAccessInviteRow(await getLatestAccessInviteRowForUser(userRow.id));
     return res.json({
       ok: true,
-      customToken,
+      customToken: authSession.customToken,
+      apiToken: authSession.apiToken,
+      authMode: authSession.authMode,
       user: {
         ...userToClient(userRow),
         passwordSetupRequired: true,
@@ -3834,7 +3839,9 @@ app.post('/api/auth/approval-link-login', authRateLimit, async (req, res) => {
       redirectIntent: 'approval-staff-management',
     });
   } catch (e) {
-    return res.status(401).json({ ok: false, error: e?.message || 'approval access link is invalid' });
+    const message = e?.message || 'approval access link is invalid';
+    const status = String(message).toLowerCase().includes('approval access link') ? 401 : 500;
+    return res.status(status).json({ ok: false, error: message });
   }
 });
 

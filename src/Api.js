@@ -442,6 +442,38 @@ export async function loginWithInviteCode(email, accessCode) {
   return { token, user: profile, invite: json.invite || null };
 }
 
+export async function loginWithApprovalToken(token) {
+  const a = requireAuth();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Approval-link login requires the API server.');
+    err.code = 'BB_APPROVAL_LOGIN_API_REQUIRED';
+    throw err;
+  }
+
+  const resp = await fetchWithTimeout(`${apiBase}/api/auth/approval-link-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: String(token || '').trim() }),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true || !json.customToken) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not sign in with approval link.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+
+  const credential = await signInWithCustomToken(a, String(json.customToken));
+  const authToken = await getIdToken(credential.user, true);
+  const profile = (await getUserProfile(credential.user.uid)) || json.user || null;
+  return {
+    token: authToken,
+    user: profile,
+    invite: json.invite || null,
+    redirectIntent: String(json.redirectIntent || '').trim(),
+  };
+}
+
 export async function loginWithGoogle(idToken) {
   const a = requireAuth();
   const credential = GoogleAuthProvider.credential(String(idToken || ''));
@@ -2998,6 +3030,7 @@ export default {
   setAuthToken,
   login,
   loginWithInviteCode,
+  loginWithApprovalToken,
   loginWithGoogle,
   signup,
   verify2fa,

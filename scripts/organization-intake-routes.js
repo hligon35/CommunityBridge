@@ -192,6 +192,118 @@ function verifySubmissionToken({ submissionId, token, tokenHash }) {
   return sha256Hex(`${submissionId}:${token}:${getOrgIntakeSecret()}`) === tokenHash;
 }
 
+function randomBootstrapPassword() {
+  return `${crypto.randomBytes(16).toString('hex')}A!9`;
+}
+
+function buildPrimaryContactMembership(organizationId, role) {
+  const orgId = safeString(organizationId).trim();
+  const normalizedRole = safeString(role).trim() || 'superAdmin';
+  if (!orgId) return [];
+  return [{ organizationId: orgId, programId: '', campusId: '', role: normalizedRole }];
+}
+
+async function upsertPendingOrganizationRecord(submissionRef, submission) {
+  const admin = getAdmin();
+  const organization = submission?.organization || {};
+  if (!organization?.id) return;
+  await admin.firestore().collection('organizations').doc(organization.id).set({
+    id: organization.id,
+    name: organization.name || '',
+    directoryName: organization.directoryName || organization.name || '',
+    slug: organization.slug || organization.id,
+    shortCode: organization.shortCode || '',
+    phone: organization.phone || '',
+    email: organization.email || '',
+    address1: organization.address1 || '',
+    address2: organization.address2 || '',
+    city: organization.city || '',
+    state: organization.state || '',
+    zipCode: organization.zipCode || '',
+    website: organization.website || '',
+    active: false,
+    status: 'pendingApproval',
+    pendingApproval: true,
+    sourceSubmissionId: submissionRef.id,
+    primaryContactEmail: submission?.contact?.email || '',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    submittedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+}
+
+async function upsertPendingPrimaryContact(submissionRef, submission) {
+  const admin = getAdmin();
+  const auth = admin.auth();
+  const firestore = admin.firestore();
+  const email = normalizeEmail(submission?.contact?.email);
+  if (!email) return '';
+
+  const role = safeString(submission?.contact?.role).trim() || 'superAdmin';
+  const organizationId = safeString(submission?.organization?.id).trim();
+  const displayName = safeString(submission?.contact?.name).trim() || email;
+
+  let userRecord = null;
+  try {
+    userRecord = await auth.getUserByEmail(email);
+  } catch (error) {
+    const code = safeString(error?.code).toLowerCase();
+    if (!code.includes('user-not-found')) throw error;
+  }
+
+  if (!userRecord) {
+    userRecord = await auth.createUser({ email, displayName, password: randomBootstrapPassword() });
+  } else {
+    await auth.updateUser(userRecord.uid, { email, displayName });
+  }
+
+  await auth.setCustomUserClaims(userRecord.uid, {
+    ...(userRecord.customClaims || {}),
+    role,
+  });
+
+  await firestore.collection('users').doc(userRecord.uid).set({
+    id: userRecord.uid,
+    email,
+    name: displayName,
+    role,
+    organizationId,
+    memberships: buildPrimaryContactMembership(organizationId, role),
+    passwordSetupRequired: true,
+    inviteType: 'onboarding_primary_contact',
+    inviteStatus: 'pendingApproval',
+    accountStatus: 'pendingApproval',
+    onboardingStatus: 'pendingApproval',
+    primaryContact: true,
+    sourceSubmissionId: submissionRef.id,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return userRecord.uid;
+}
+
+async function activateApprovedPrimaryContact({ submissionRef, submission, userId }) {
+  const uid = safeString(userId).trim();
+  if (!uid) return;
+  const admin = getAdmin();
+  const role = safeString(submission?.contact?.role).trim() || 'superAdmin';
+  const organizationId = safeString(submission?.organization?.id).trim();
+
+  await admin.firestore().collection('users').doc(uid).set({
+    role,
+    organizationId,
+    memberships: buildPrimaryContactMembership(organizationId, role),
+    passwordSetupRequired: true,
+    inviteType: 'onboarding_primary_contact',
+    inviteStatus: 'sent',
+    accountStatus: 'active',
+    onboardingStatus: 'awaitingPasswordSetup',
+    primaryContact: true,
+    sourceSubmissionId: submissionRef.id,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    approvedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+}
+
 function normalizeIntakeLocation(location, index, organizationShortCode) {
   const normalizedName = safeString(location?.name).trim();
   const normalizedProgramName = safeString(location?.programName).trim();
@@ -649,6 +761,8 @@ async function activateApprovedSubmission(submissionRef, submissionData) {
     zipCode: organization.zipCode || '',
     website: organization.website || '',
     active: true,
+    status: 'active',
+    pendingApproval: false,
     sourceSubmissionId: submissionRef.id,
     updatedAt: now,
     approvedAt: now,
@@ -671,6 +785,7 @@ async function activateApprovedSubmission(submissionRef, submissionData) {
       type: program.type || 'centerBasedAba',
       description: program.description || '',
       active: true,
+      status: 'active',
       sourceSubmissionId: submissionRef.id,
       updatedAt: now,
       approvedAt: now,
@@ -684,6 +799,7 @@ async function activateApprovedSubmission(submissionRef, submissionData) {
       slug: program.slug || program.id,
       campusCount: Number(campusCountByProgram[program.id] || 0),
       active: true,
+      status: 'active',
       sourceSubmissionId: submissionRef.id,
       updatedAt: now,
       approvedAt: now,
@@ -709,6 +825,7 @@ async function activateApprovedSubmission(submissionRef, submissionData) {
       enrollmentCodes: Array.isArray(location.enrollmentCodes) ? location.enrollmentCodes : normalizedEnrollmentCodes(location),
       campusType: location.campusType || 'Center',
       active: true,
+      status: 'active',
       sourceSubmissionId: submissionRef.id,
       updatedAt: now,
       approvedAt: now,
@@ -768,6 +885,15 @@ function registerOrganizationIntakeRoutes(app, options = {}) {
         applicantEmail: submission.contact.email,
         recaptchaVerifiedAt: now,
       });
+
+      await upsertPendingOrganizationRecord(submissionRef, submission);
+      const primaryContactUserId = await upsertPendingPrimaryContact(submissionRef, submission);
+      if (primaryContactUserId) {
+        await submissionRef.set({
+          primaryContactUserId,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
 
       await sendOrganizationIntakeEmail({
         to: getOrgSignupInbox(),
@@ -959,6 +1085,11 @@ function registerOrganizationIntakeRoutes(app, options = {}) {
             },
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           }, { merge: true });
+          await activateApprovedPrimaryContact({
+            submissionRef,
+            submission: data,
+            userId: inviteResult?.user?.id || data?.primaryContactUserId || '',
+          });
         } catch (inviteError) {
           console.error('organizationIntakeAction primary contact invite failed', inviteError);
           await submissionRef.set({
@@ -1040,4 +1171,10 @@ function registerOrganizationIntakeRoutes(app, options = {}) {
 
 module.exports = {
   registerOrganizationIntakeRoutes,
+  __testables: {
+    normalizeIntakeSubmission,
+    buildApplicantDecisionEmailHtml,
+    buildApplicantDecisionEmailText,
+    buildPrimaryContactMembership,
+  },
 };

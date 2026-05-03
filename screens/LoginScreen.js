@@ -14,6 +14,7 @@ import { logger } from '../src/utils/logger';
 import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportError';
 import { getAuthInitError, getFirebaseAppInitError } from '../src/firebase';
 import { isInviteAccessCode } from '../src/utils/passwordPolicy';
+import { storeApprovalAccessIntent } from '../src/utils/approvalAccessIntent';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -261,6 +262,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   const [toast, setToast] = useState({ visible: false, title: '', message: '', tone: 'error' });
   const auth = useAuth();
   const toastTimerRef = useRef(null);
+  const approvalLinkStartedRef = useRef(false);
 
   const iosGoogleClientId = String(
     process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
@@ -356,7 +358,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     try {
       const gate = await auth.refreshMfaState();
       const requiresPasswordSetup = Boolean(options?.passwordSetupRequired || auth?.passwordSetupRequired);
-      navigation.replace(gate?.needsMfa ? 'TwoFactor' : (requiresPasswordSetup ? 'CreatePassword' : 'Main'));
+      navigation.replace(requiresPasswordSetup ? 'CreatePassword' : (gate?.needsMfa ? 'TwoFactor' : 'Main'));
     } catch (e) {
       logger.warn('auth', 'Post-login navigation failed', { code: e?.code, message: e?.message || String(e) });
       reportErrorToSentry(e, { area: 'auth', action: 'post_login_navigation', platform: Platform.OS });
@@ -375,6 +377,49 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (approvalLinkStartedRef.current) return;
+    if (auth.loading || auth.token) return;
+
+    let token = '';
+    try {
+      token = String(new URLSearchParams(globalThis?.location?.search || '').get('token') || '').trim();
+    } catch (_) {
+      token = '';
+    }
+    if (!token) return;
+
+    approvalLinkStartedRef.current = true;
+    setBusy(true);
+
+    (async () => {
+      try {
+        const res = await auth.loginWithApprovalToken(token);
+        if (res?.redirectIntent) {
+          // Persist the post-password destination so CreatePassword can route
+          // directly into Admin -> Staff Management after the limited session ends.
+          storeApprovalAccessIntent(res.redirectIntent);
+        }
+        try {
+          const url = new URL(globalThis?.location?.href || '');
+          url.searchParams.delete('token');
+          globalThis?.history?.replaceState?.({}, '', `${url.pathname}${url.search}${url.hash}`);
+        } catch (_) {
+          // ignore URL cleanup failures
+        }
+        await finishLoginNavigation({ passwordSetupRequired: Boolean(res?.user?.passwordSetupRequired) });
+      } catch (error) {
+        showToast({
+          title: 'Approval link failed',
+          message: String(error?.message || error || 'Please use the newest email or sign in with your one-time access code.'),
+        });
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [auth, navigation]);
 
   async function doLogin(){
     const cleanedEmail = String(email || '').trim();
@@ -490,7 +535,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     if (suppressAutoRedirect) return;
     if (auth.loading) return;
     if (!auth.token) return;
-    navigation.replace(auth.needsMfa ? 'TwoFactor' : (auth.passwordSetupRequired ? 'CreatePassword' : 'Main'));
+    navigation.replace(auth.passwordSetupRequired ? 'CreatePassword' : (auth.needsMfa ? 'TwoFactor' : 'Main'));
   }, [auth.loading, auth.token, auth.needsMfa, auth.passwordSetupRequired, suppressAutoRedirect]);
 
   useEffect(() => {
