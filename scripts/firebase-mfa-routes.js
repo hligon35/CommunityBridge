@@ -3,6 +3,30 @@
 const crypto = require('crypto');
 
 let firebaseAdmin = null;
+
+function getFirebaseAdminServiceAccountEnvValue() {
+  return safeString(
+    process.env.CB_FIREBASE_SERVICE_ACCOUNT_JSON
+      || process.env.BB_FIREBASE_SERVICE_ACCOUNT_JSON
+      || process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+  ).trim();
+}
+
+function getFirebaseAdminCredential() {
+  const raw = getFirebaseAdminServiceAccountEnvValue();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.private_key === 'string') {
+      parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+    }
+    if (!parsed || !parsed.client_email || !parsed.private_key) return null;
+    return require('firebase-admin').credential.cert(parsed);
+  } catch (_) {
+    return null;
+  }
+}
+
 function getAdmin() {
   if (firebaseAdmin) return firebaseAdmin;
   // eslint-disable-next-line global-require
@@ -17,7 +41,11 @@ function getAdmin() {
         process.env.GCLOUD_PROJECT ||
         process.env.GCP_PROJECT
       ).trim();
-      firebaseAdmin.initializeApp(projectId ? { projectId } : undefined);
+      const credential = getFirebaseAdminCredential();
+      firebaseAdmin.initializeApp({
+        ...(projectId ? { projectId } : {}),
+        ...(credential ? { credential } : {}),
+      });
     }
   } catch (_) {
     // initializeApp can throw if called twice; ignore.

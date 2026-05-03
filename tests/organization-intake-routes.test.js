@@ -8,6 +8,7 @@ const {
   buildApplicantDecisionEmailHtml,
   buildApplicantDecisionEmailText,
   buildPrimaryContactMembership,
+  hasDeliverablePrimaryContactInvite,
 } = __testables;
 
 function buildPayload() {
@@ -88,4 +89,11 @@ test('approved applicant decision email includes the single-use login details an
   assert.match(html, /Open CommunityBridge/);
   assert.match(html, /One-time access code:<\/strong> 482901/);
   assert.match(html, /Backup login:<\/strong> <a href="https:\/\/communitybridge\.app\/login">/);
+});
+
+test('hasDeliverablePrimaryContactInvite requires both access code and approval link', () => {
+  assert.equal(hasDeliverablePrimaryContactInvite({ accessCode: '482901', approvalLink: 'https://communitybridge.app/login?token=abc123' }), true);
+  assert.equal(hasDeliverablePrimaryContactInvite({ accessCode: '482901', approvalLink: '' }), false);
+  assert.equal(hasDeliverablePrimaryContactInvite({ accessCode: '', approvalLink: 'https://communitybridge.app/login?token=abc123' }), false);
+  assert.equal(hasDeliverablePrimaryContactInvite(null), false);
 });

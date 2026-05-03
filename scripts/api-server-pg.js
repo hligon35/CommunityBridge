@@ -26,6 +26,30 @@ const {
 } = require('./session-summary');
 
 let firebaseAdminLib = null;
+
+function getFirebaseAdminServiceAccountEnvValue() {
+  return safeString(
+    process.env.CB_FIREBASE_SERVICE_ACCOUNT_JSON
+      || process.env.BB_FIREBASE_SERVICE_ACCOUNT_JSON
+      || process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+  ).trim();
+}
+
+function getFirebaseAdminCredential() {
+  const raw = getFirebaseAdminServiceAccountEnvValue();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.private_key === 'string') {
+      parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+    }
+    if (!parsed || !parsed.client_email || !parsed.private_key) return null;
+    return require('firebase-admin').credential.cert(parsed);
+  } catch (_) {
+    return null;
+  }
+}
+
 function getFirebaseAdmin() {
   if (firebaseAdminLib) return firebaseAdminLib;
   // eslint-disable-next-line global-require
@@ -41,7 +65,11 @@ function getFirebaseAdmin() {
         process.env.GCP_PROJECT ||
         'communitybridge-26apr'
       ).trim();
-      firebaseAdminLib.initializeApp(projectId ? { projectId } : undefined);
+      const credential = getFirebaseAdminCredential();
+      firebaseAdminLib.initializeApp({
+        ...(projectId ? { projectId } : {}),
+        ...(credential ? { credential } : {}),
+      });
     }
   } catch (_) {
     // ignore duplicate initializeApp calls
@@ -395,6 +423,10 @@ function validatePasswordPolicy(password) {
     return 'password must include uppercase, lowercase, and a number';
   }
   return '';
+}
+
+function generateBootstrapPassword() {
+  return `Bb!${Date.now()}Z${Math.random().toString(36).slice(2, 12)}9`;
 }
 
 function jsonb(value) {
@@ -1350,7 +1382,7 @@ async function ensureFirebaseManagedUserForInvite(userId, nextFields = {}) {
       uid,
       email: safeString(nextFields.email).trim().toLowerCase(),
       displayName: safeString(nextFields.name).trim() || safeString(nextFields.email).trim().toLowerCase(),
-      password: `${nanoId()}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      password: generateBootstrapPassword(),
     });
     created = true;
   } else {
@@ -1434,7 +1466,7 @@ async function createOrRefreshManagedAccessInvite({
   const resolvedName = safeString(name).trim() || safeString(localUser?.name).trim() || safeString(firebaseUser?.displayName).trim() || normalizedEmail;
   const resolvedPhone = safeString(phone).trim() || safeString(localUser?.phone).trim();
   const resolvedAddress = safeString(address).trim() || safeString(localUser?.address).trim();
-  const passwordHash = localUser?.password_hash || bcrypt.hashSync(`${nanoId()}_${Date.now()}_${Math.random().toString(36).slice(2)}`, 12);
+  const passwordHash = localUser?.password_hash || bcrypt.hashSync(generateBootstrapPassword(), 12);
 
   if (localUser) {
     await pool.query('UPDATE users SET email = $1, name = $2, phone = $3, address = $4, role = $5, updated_at = $6 WHERE id = $7', [normalizedEmail, resolvedName, resolvedPhone, resolvedAddress, normalizedRole, now, managedUserId]);

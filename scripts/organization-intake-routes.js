@@ -3,6 +3,30 @@
 const crypto = require('crypto');
 
 let firebaseAdmin = null;
+
+function getFirebaseAdminServiceAccountEnvValue() {
+  return safeString(
+    process.env.CB_FIREBASE_SERVICE_ACCOUNT_JSON
+      || process.env.BB_FIREBASE_SERVICE_ACCOUNT_JSON
+      || process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+  ).trim();
+}
+
+function getFirebaseAdminCredential() {
+  const raw = getFirebaseAdminServiceAccountEnvValue();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.private_key === 'string') {
+      parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+    }
+    if (!parsed || !parsed.client_email || !parsed.private_key) return null;
+    return require('firebase-admin').credential.cert(parsed);
+  } catch (_) {
+    return null;
+  }
+}
+
 function getAdmin() {
   if (firebaseAdmin) return firebaseAdmin;
   // eslint-disable-next-line global-require
@@ -17,7 +41,11 @@ function getAdmin() {
         process.env.GCLOUD_PROJECT ||
         process.env.GCP_PROJECT
       ).trim();
-      firebaseAdmin.initializeApp(projectId ? { projectId } : undefined);
+      const credential = getFirebaseAdminCredential();
+      firebaseAdmin.initializeApp({
+        ...(projectId ? { projectId } : {}),
+        ...(credential ? { credential } : {}),
+      });
     }
   } catch (_) {
     // ignore duplicate initializeApp calls
@@ -638,6 +666,13 @@ function buildApplicantDecisionEmailText({ submission, decision, publicBaseUrl, 
   return lines.join('\n');
 }
 
+function hasDeliverablePrimaryContactInvite(primaryContactInvite) {
+  return Boolean(
+    safeString(primaryContactInvite?.accessCode).trim()
+      && safeString(primaryContactInvite?.approvalLink).trim()
+  );
+}
+
 function buildApplicantConfirmationEmailText({ submission }) {
   return [
     `Your CommunityBridge organization intake was received for ${submission.organization.directoryName || submission.organization.name}.`,
@@ -1050,6 +1085,7 @@ function registerOrganizationIntakeRoutes(app, options = {}) {
       await activateApprovedSubmission(submissionRef, data);
 
       let primaryContactInviteDelivery = null;
+      let primaryContactInviteError = '';
       if (createOrRefreshManagedAccessInvite && data?.contact?.email) {
         try {
           const inviteResult = await createOrRefreshManagedAccessInvite({
@@ -1091,6 +1127,7 @@ function registerOrganizationIntakeRoutes(app, options = {}) {
             userId: inviteResult?.user?.id || data?.primaryContactUserId || '',
           });
         } catch (inviteError) {
+          primaryContactInviteError = safeString(inviteError?.code || inviteError?.message || 'unknown_error').slice(0, 200);
           console.error('organizationIntakeAction primary contact invite failed', inviteError);
           await submissionRef.set({
             primaryContactInvite: {
@@ -1098,7 +1135,7 @@ function registerOrganizationIntakeRoutes(app, options = {}) {
               email: data.contact.email,
               role: data.contact.role || 'superAdmin',
               failedAt: admin.firestore.FieldValue.serverTimestamp(),
-              error: safeString(inviteError?.code || inviteError?.message || 'unknown_error').slice(0, 200),
+              error: primaryContactInviteError,
             },
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           }, { merge: true });
@@ -1108,8 +1145,12 @@ function registerOrganizationIntakeRoutes(app, options = {}) {
       const applicantRecipients = getApplicantNotificationRecipients(data);
       const primaryContactRecipients = uniqueBy([normalizeEmail(data?.contact?.email)].filter(Boolean), (value) => value);
       const secondaryRecipients = applicantRecipients.filter((email) => !primaryContactRecipients.includes(email));
+      const primaryContactInviteReady = hasDeliverablePrimaryContactInvite(primaryContactInviteDelivery);
+      const primaryContactEmailStatus = primaryContactRecipients.length
+        ? (primaryContactInviteReady ? 'sent' : 'skipped_missing_invite')
+        : 'skipped';
       try {
-        if (primaryContactRecipients.length) {
+        if (primaryContactRecipients.length && primaryContactInviteReady) {
           await sendOrganizationDecisionEmail({
             to: primaryContactRecipients,
             submission: data,
@@ -1128,11 +1169,15 @@ function registerOrganizationIntakeRoutes(app, options = {}) {
         }
         await submissionRef.set({
           applicantDecisionEmail: {
-            status: applicantRecipients.length ? 'sent' : 'skipped',
+            status: applicantRecipients.length
+              ? ((primaryContactRecipients.length && !primaryContactInviteReady) ? 'partial' : 'sent')
+              : 'skipped',
             decision: 'approved',
             email: applicantRecipients.join(', '),
             emails: applicantRecipients,
-            primaryContactIncludedInvite: Boolean(primaryContactInviteDelivery?.accessCode),
+            primaryContactEmailStatus,
+            primaryContactIncludedInvite: primaryContactInviteReady,
+            primaryContactInviteError,
             sentAt: applicantRecipients.length ? admin.firestore.FieldValue.serverTimestamp() : null,
             error: '',
           },
@@ -1176,5 +1221,6 @@ module.exports = {
     buildApplicantDecisionEmailHtml,
     buildApplicantDecisionEmailText,
     buildPrimaryContactMembership,
+    hasDeliverablePrimaryContactInvite,
   },
 };
