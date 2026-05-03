@@ -1733,6 +1733,8 @@ async function createOrRefreshManagedAccessInvite({
   inviteType,
   sourceSubmissionId,
   userId,
+  sendEmail = true,
+  returnAccessCode = false,
 }) {
   const normalizedEmail = normalizeEmail(email);
   const normalizedRole = normalizeManagedInviteRole(role);
@@ -1783,6 +1785,14 @@ async function createOrRefreshManagedAccessInvite({
 
   const accessCode = generateInviteAccessCode();
   const inviteId = nanoId();
+  const resolvedInviteType = safeString(inviteType).trim() || 'staff';
+  const delivery = {
+    accessCode,
+    inviteType: resolvedInviteType,
+    loginUrl: buildInviteLoginUrl(req),
+    role: normalizedRole,
+    email: normalizedEmail,
+  };
   db.prepare('UPDATE access_invites SET revoked_at = ?, updated_at = ? WHERE user_id = ? AND used_at IS NULL AND revoked_at IS NULL').run(now, now, managedUserId);
   db.prepare('INSERT INTO access_invites (id, user_id, email, role, invite_type, code_hash, organization_id, source_submission_id, sent_at, created_at, updated_at, last_email_status, last_email_error) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(
@@ -1790,23 +1800,25 @@ async function createOrRefreshManagedAccessInvite({
       managedUserId,
       normalizedEmail,
       normalizedRole,
-      safeString(inviteType).trim() || 'staff',
+      resolvedInviteType,
       hashInviteAccessCode(accessCode),
       safeString(organizationId).trim(),
       safeString(sourceSubmissionId).trim(),
       now,
       now,
       now,
-      'pending',
+      sendEmail ? 'pending' : 'shared-via-approval',
       ''
     );
 
-  try {
-    await sendAccessInviteEmail({ req, to: normalizedEmail, role: normalizedRole, accessCode, inviteType });
-    db.prepare('UPDATE access_invites SET last_email_status = ?, sent_at = ?, updated_at = ? WHERE id = ?').run('sent', now, now, inviteId);
-  } catch (error) {
-    db.prepare('UPDATE access_invites SET last_email_status = ?, last_email_error = ?, updated_at = ? WHERE id = ?').run('failed', safeString(error?.message || error).slice(0, 200), now, inviteId);
-    throw error;
+  if (sendEmail) {
+    try {
+      await sendAccessInviteEmail({ req, to: normalizedEmail, role: normalizedRole, accessCode, inviteType: resolvedInviteType });
+      db.prepare('UPDATE access_invites SET last_email_status = ?, sent_at = ?, updated_at = ? WHERE id = ?').run('sent', now, now, inviteId);
+    } catch (error) {
+      db.prepare('UPDATE access_invites SET last_email_status = ?, last_email_error = ?, updated_at = ? WHERE id = ?').run('failed', safeString(error?.message || error).slice(0, 200), now, inviteId);
+      throw error;
+    }
   }
 
   const row = db.prepare('SELECT id,email,name,avatar,phone,address,role,created_at,updated_at FROM users WHERE id = ?').get(managedUserId);
@@ -1830,6 +1842,7 @@ async function createOrRefreshManagedAccessInvite({
       updatedAt: row.updated_at,
     },
     invite: serializeAccessInviteRow(latestInvite),
+    delivery: returnAccessCode ? delivery : null,
   };
 }
 

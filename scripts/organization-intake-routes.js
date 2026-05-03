@@ -437,11 +437,22 @@ function buildApplicantConfirmationEmailHtml({ submission }) {
   });
 }
 
-function buildApplicantDecisionEmailHtml({ submission, decision, publicBaseUrl }) {
+function buildApplicantDecisionEmailHtml({ submission, decision, publicBaseUrl, primaryContactInvite }) {
   const approved = decision === 'approved';
   const organizationName = submission.organization?.directoryName || submission.organization?.name || 'Your organization';
   const locationItems = buildIntakeLocationHtml(submission.locations || []);
   const dashboardUrl = `${safeString(publicBaseUrl || '').replace(/\/$/, '') || 'https://communitybridge.app'}/organizations`;
+  const inviteSection = approved && primaryContactInvite?.accessCode
+    ? buildEmailSection({
+        title: 'Primary contact login access',
+        body: [
+          '<p style="margin:0 0 10px;">Use this one-time access code in place of your password the first time you sign in.</p>',
+          `<p style="margin:0 0 10px;"><strong>Access code:</strong> <span style="font-size:24px;font-weight:800;letter-spacing:0.22em;">${htmlEscape(primaryContactInvite.accessCode)}</span></p>`,
+          `<p style="margin:0 0 10px;"><strong>Login:</strong> <a href="${htmlEscape(primaryContactInvite.loginUrl || dashboardUrl)}">${htmlEscape(primaryContactInvite.loginUrl || dashboardUrl)}</a></p>`,
+          '<p style="margin:0;">After the first login, CommunityBridge will require you to create a permanent password.</p>',
+        ].join(''),
+      })
+    : '';
 
   return buildEmailShell({
     eyebrow: 'CommunityBridge Organization Review',
@@ -460,6 +471,7 @@ function buildApplicantDecisionEmailHtml({ submission, decision, publicBaseUrl }
         title: approved ? 'Approved locations' : 'Reviewed locations',
         body: `<ul style="margin:0;padding-left:18px;">${locationItems}</ul>`,
       }),
+      inviteSection,
       approved ? `<div style="margin-top:24px;">${buildEmailActionButton({ href: dashboardUrl, label: 'View intake page', background: '#2563eb' })}</div>` : '',
     ].join(''),
     footerHtml: approved
@@ -468,7 +480,7 @@ function buildApplicantDecisionEmailHtml({ submission, decision, publicBaseUrl }
   });
 }
 
-function buildApplicantDecisionEmailText({ submission, decision, publicBaseUrl }) {
+function buildApplicantDecisionEmailText({ submission, decision, publicBaseUrl, primaryContactInvite }) {
   const approved = decision === 'approved';
   const organizationName = submission.organization?.directoryName || submission.organization?.name || 'Your organization';
   const lines = [
@@ -482,6 +494,13 @@ function buildApplicantDecisionEmailText({ submission, decision, publicBaseUrl }
     '',
     buildIntakeSummaryText(submission),
   ];
+  if (approved && primaryContactInvite?.accessCode) {
+    lines.push('');
+    lines.push('Primary contact login access:');
+    lines.push(`Access code: ${primaryContactInvite.accessCode}`);
+    lines.push(`Login: ${primaryContactInvite.loginUrl || `${(safeString(publicBaseUrl || '').replace(/\/$/, '') || 'https://communitybridge.app')}/organizations`}`);
+    lines.push('Use this access code in place of your password the first time you sign in. You will be prompted to create a permanent password after that first login.');
+  }
   if (approved) {
     lines.push('');
     lines.push(`Intake page: ${(safeString(publicBaseUrl || '').replace(/\/$/, '') || 'https://communitybridge.app')}/organizations`);
@@ -886,6 +905,7 @@ function registerOrganizationIntakeRoutes(app, options = {}) {
 
       await activateApprovedSubmission(submissionRef, data);
 
+      let primaryContactInviteDelivery = null;
       if (createOrRefreshManagedAccessInvite && data?.contact?.email) {
         try {
           const inviteResult = await createOrRefreshManagedAccessInvite({
@@ -907,7 +927,10 @@ function registerOrganizationIntakeRoutes(app, options = {}) {
             inviteType: 'onboarding_primary_contact',
             sourceSubmissionId: submissionId,
             userId: '',
+            sendEmail: false,
+            returnAccessCode: true,
           });
+          primaryContactInviteDelivery = inviteResult?.delivery || null;
           await submissionRef.set({
             primaryContactInvite: {
               status: inviteResult?.invite?.lastEmailStatus || 'sent',
@@ -934,19 +957,33 @@ function registerOrganizationIntakeRoutes(app, options = {}) {
       }
 
       const applicantRecipients = getApplicantNotificationRecipients(data);
+      const primaryContactRecipients = uniqueBy([normalizeEmail(data?.contact?.email)].filter(Boolean), (value) => value);
+      const secondaryRecipients = applicantRecipients.filter((email) => !primaryContactRecipients.includes(email));
       try {
-        await sendOrganizationDecisionEmail({
-          to: applicantRecipients,
-          submission: data,
-          decision: 'approved',
-          publicBaseUrl: getPublicBaseUrl(req),
-        });
+        if (primaryContactRecipients.length) {
+          await sendOrganizationDecisionEmail({
+            to: primaryContactRecipients,
+            submission: data,
+            decision: 'approved',
+            publicBaseUrl: getPublicBaseUrl(req),
+            primaryContactInvite: primaryContactInviteDelivery,
+          });
+        }
+        if (secondaryRecipients.length) {
+          await sendOrganizationDecisionEmail({
+            to: secondaryRecipients,
+            submission: data,
+            decision: 'approved',
+            publicBaseUrl: getPublicBaseUrl(req),
+          });
+        }
         await submissionRef.set({
           applicantDecisionEmail: {
             status: applicantRecipients.length ? 'sent' : 'skipped',
             decision: 'approved',
             email: applicantRecipients.join(', '),
             emails: applicantRecipients,
+            primaryContactIncludedInvite: Boolean(primaryContactInviteDelivery?.accessCode),
             sentAt: applicantRecipients.length ? admin.firestore.FieldValue.serverTimestamp() : null,
             error: '',
           },
