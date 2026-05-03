@@ -461,8 +461,9 @@ function buildApplicantDecisionEmailHtml({ submission, decision, publicBaseUrl, 
             ? `<p style="margin:0 0 10px;"><a href="${htmlEscape(primaryContactInvite.approvalLink)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#2563eb;color:#ffffff;font-weight:800;text-decoration:none;">Open CommunityBridge</a></p>`
             : '',
           `<p style="margin:0 0 10px;"><strong>Login email / username:</strong> ${htmlEscape(primaryContactInvite.email || submission.contact?.email || '')}</p>`,
+          `<p style="margin:0 0 10px;"><strong>One-time access code:</strong> ${htmlEscape(primaryContactInvite.accessCode || '')}</p>`,
           `<p style="margin:0 0 10px;"><strong>Backup login:</strong> <a href="${htmlEscape(primaryContactInvite.loginUrl || dashboardUrl)}">${htmlEscape(primaryContactInvite.loginUrl || dashboardUrl)}</a></p>`,
-          '<p style="margin:0;">The access link will sign the user into CommunityBridge, require a password update, and then open profile settings.</p>',
+          '<p style="margin:0;">The access link is single-use, requires a password update, and then opens the existing Admin Staff Management screen.</p>',
         ].filter(Boolean).join(''),
       })
     : '';
@@ -514,8 +515,9 @@ function buildApplicantDecisionEmailText({ submission, decision, publicBaseUrl, 
       lines.push(`Open CommunityBridge: ${primaryContactInvite.approvalLink}`);
     }
     lines.push(`Login email / username: ${primaryContactInvite.email || submission.contact?.email || ''}`);
+    lines.push(`One-time access code: ${primaryContactInvite.accessCode}`);
     lines.push(`Backup login: ${primaryContactInvite.loginUrl || `${(safeString(publicBaseUrl || '').replace(/\/$/, '') || 'https://communitybridge.app')}/organizations`}`);
-    lines.push('The approval link grants temporary access, signs the primary contact into CommunityBridge, and takes them through password setup before opening profile settings.');
+    lines.push('The approval link grants single-use temporary access, signs the primary contact into CommunityBridge, and takes them through password setup before opening Admin Staff Management.');
   }
   if (approved) {
     lines.push('');

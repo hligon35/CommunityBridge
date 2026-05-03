@@ -54,7 +54,7 @@ const ROLE_OPTIONS = [
 const STAFF_INVITE_ROLE_OPTIONS = [
   { value: 'bcba', label: 'BCBA', adminOnly: false },
   { value: 'faculty', label: 'Office Personnel', adminOnly: false },
-  { value: 'therapist', label: THERAPY_ROLE_LABELS.therapist, adminOnly: false },
+  { value: 'therapist', label: 'ABA Tech', adminOnly: false },
   { value: 'orgAdmin', label: 'Org Admin', adminOnly: true },
   { value: 'superAdmin', label: 'Super Admin', adminOnly: true },
 ];
@@ -119,6 +119,7 @@ export default function ManagePermissionsScreen(){
   const [deletingUserId, setDeletingUserId] = useState('');
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteDraft, setInviteDraft] = useState({ email: '', role: 'bcba' });
+  const [inviteRoleMenuOpen, setInviteRoleMenuOpen] = useState(false);
   const [sectionsOpen, setSectionsOpen] = useState({ users: true, permissions: true });
   const [roleSectionsOpen, setRoleSectionsOpen] = useState({
     Admin: true,
@@ -144,6 +145,9 @@ export default function ManagePermissionsScreen(){
   const visibleInviteRoleOptions = useMemo(() => {
     return STAFF_INVITE_ROLE_OPTIONS.filter((option) => canManagePermissions || !option.adminOnly);
   }, [canManagePermissions]);
+  const selectedInviteRole = useMemo(() => {
+    return visibleInviteRoleOptions.find((option) => option.value === normalizeUserRole(inviteDraft.role)) || visibleInviteRoleOptions[0] || null;
+  }, [inviteDraft.role, visibleInviteRoleOptions]);
 
   const campusLookup = useMemo(() => {
     const map = new Map();
@@ -289,6 +293,7 @@ export default function ManagePermissionsScreen(){
       const result = await Api.sendManagedUserInvite({ email, role });
       if (result?.user) upsertManagedUser(normalizeManagedUsers([result.user])[0] || result.user);
       setInviteDraft((current) => ({ ...current, email: '' }));
+      setInviteRoleMenuOpen(false);
       Alert.alert('Invite Sent', `A one-time access code was emailed to ${email}.`);
     } catch (error) {
       setUsersError(String(error?.message || 'Could not send invite.'));
@@ -325,6 +330,7 @@ export default function ManagePermissionsScreen(){
       <View style={styles.inviteCard}>
         <Text style={styles.inviteTitle}>{statusLabel}</Text>
         <Text style={styles.inviteMeta}>{invite.sentAt ? `Last sent ${new Date(invite.sentAt).toLocaleString()}` : 'No send timestamp available.'}</Text>
+        {invite.expiresAt ? <Text style={styles.inviteMeta}>{`Access code expires ${new Date(invite.expiresAt).toLocaleString()}`}</Text> : null}
         {invite.lastEmailError ? <Text style={styles.inviteError}>{invite.lastEmailError}</Text> : null}
         <TouchableOpacity style={[styles.secondaryActionButton, savingUserId === userItem.id ? styles.disabledButton : null]} onPress={() => resendInvite(userItem)} disabled={savingUserId === userItem.id}>
           <Text style={styles.secondaryActionButtonText}>{savingUserId === userItem.id ? 'Sending...' : 'Resend Invite'}</Text>
@@ -744,20 +750,37 @@ export default function ManagePermissionsScreen(){
                   <Text style={styles.fieldLabel}>Staff email</Text>
                   <TextInput value={inviteDraft.email} onChangeText={(value) => setInviteDraft((current) => ({ ...current, email: String(value || '').slice(0, 254) }))} style={styles.input} placeholder="staff@example.com" autoCapitalize="none" keyboardType="email-address" maxLength={254} />
                   <Text style={styles.fieldLabel}>Role</Text>
-                  <View style={styles.roleChipWrap}>
-                    {visibleInviteRoleOptions.map((option) => {
-                      const selected = normalizeUserRole(inviteDraft.role) === option.value;
-                      return (
-                        <TouchableOpacity
-                          key={`invite-${option.value}`}
-                          onPress={() => setInviteDraft((current) => ({ ...current, role: option.value }))}
-                          style={[styles.roleChip, selected ? styles.roleChipSelected : null]}
-                          disabled={inviteBusy}
-                        >
-                          <Text style={[styles.roleChipLabel, selected ? styles.roleChipLabelSelected : null]}>{option.label}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
+                  <View style={styles.dropdownWrap}>
+                    <TouchableOpacity
+                      style={[styles.dropdownButton, inviteBusy ? styles.disabledButton : null]}
+                      onPress={() => setInviteRoleMenuOpen((current) => !current)}
+                      disabled={inviteBusy}
+                    >
+                      <Text style={styles.dropdownButtonText}>{selectedInviteRole?.label || 'Choose a role'}</Text>
+                      <MaterialIcons name={inviteRoleMenuOpen ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={20} color="#475569" />
+                    </TouchableOpacity>
+                    {inviteRoleMenuOpen ? (
+                      <View style={styles.dropdownMenu}>
+                        {visibleInviteRoleOptions.map((option) => {
+                          const selected = normalizeUserRole(inviteDraft.role) === option.value;
+                          return (
+                            <TouchableOpacity
+                              key={`invite-${option.value}`}
+                              style={[styles.dropdownOption, selected ? styles.dropdownOptionSelected : null]}
+                              onPress={() => {
+                                // Keep the role selector lightweight and local to this existing screen
+                                // instead of adding a new picker dependency just for invite creation.
+                                setInviteDraft((current) => ({ ...current, role: option.value }));
+                                setInviteRoleMenuOpen(false);
+                              }}
+                              disabled={inviteBusy}
+                            >
+                              <Text style={[styles.dropdownOptionText, selected ? styles.dropdownOptionTextSelected : null]}>{option.label}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    ) : null}
                   </View>
                   <TouchableOpacity style={[styles.primaryInviteButton, inviteBusy ? styles.disabledButton : null]} onPress={sendInvite} disabled={inviteBusy}>
                     <Text style={styles.primaryInviteButtonText}>{inviteBusy ? 'Sending...' : 'Send Invite'}</Text>
@@ -853,6 +876,14 @@ const styles = StyleSheet.create({
   fieldLabel: { marginTop: 10, marginBottom: 6, fontWeight: '700', color: '#374151' },
   input: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, backgroundColor: '#fff', color: '#111827' },
   multilineInput: { minHeight: 72, textAlignVertical: 'top' },
+  dropdownWrap: { position: 'relative', zIndex: 2 },
+  dropdownButton: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 12, backgroundColor: '#fff', color: '#111827', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dropdownButtonText: { color: '#111827', fontWeight: '600' },
+  dropdownMenu: { marginTop: 6, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, backgroundColor: '#fff', overflow: 'hidden' },
+  dropdownOption: { paddingHorizontal: 10, paddingVertical: 11, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  dropdownOptionSelected: { backgroundColor: '#eff6ff' },
+  dropdownOptionText: { color: '#334155', fontWeight: '600' },
+  dropdownOptionTextSelected: { color: '#1d4ed8' },
   roleChipWrap: { flexDirection: 'row', flexWrap: 'wrap' },
   roleChip: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#fff', marginRight: 8, marginBottom: 8 },
   roleChipSelected: { backgroundColor: '#dbeafe', borderColor: '#2563eb' },

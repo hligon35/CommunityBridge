@@ -105,7 +105,7 @@
         appId: '1:752508556236:web:dc183f4851108dd8c14369',
       };
       const REDIRECT_KEY = 'bb_post_login_redirect_v1';
-      const REDIRECT_VALUE = 'approval-edit-profile';
+      const DEFAULT_REDIRECT_VALUE = 'approval-staff-management';
 
       function setStatus(message, isError) {
         statusEl.textContent = message;
@@ -136,7 +136,9 @@
           await signInWithCustomToken(auth, String(payload.customToken));
 
           try {
-            window.localStorage.setItem(REDIRECT_KEY, REDIRECT_VALUE);
+            // Persist the intended admin landing screen so the app can finish the
+            // existing Create Password gate before opening Staff Management.
+            window.localStorage.setItem(REDIRECT_KEY, String(payload.redirectIntent || DEFAULT_REDIRECT_VALUE));
           } catch (_) {
             // ignore storage failures; the app will still open the account-setup flow
           }

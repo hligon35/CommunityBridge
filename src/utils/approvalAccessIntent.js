@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 export const APPROVAL_ACCESS_INTENT_KEY = 'bb_post_login_redirect_v1';
-export const APPROVAL_ACCESS_INTENT_VALUE = 'approval-edit-profile';
+export const APPROVAL_ACCESS_INTENT_VALUE = 'approval-staff-management';
 
 export function consumeApprovalAccessIntent() {
   if (Platform.OS !== 'web') return null;
@@ -17,5 +17,7 @@ export function consumeApprovalAccessIntent() {
 
 export function getApprovalAccessNavigationParams(intent) {
   if (String(intent || '').trim() !== APPROVAL_ACCESS_INTENT_VALUE) return null;
-  return { screen: 'Settings', params: { screen: 'EditProfile' } };
+  // The onboarding approval link should drop the newly approved Super Admin
+  // into the existing Admin -> Staff Management path after password setup.
+  return { screen: 'Controls', params: { screen: 'ManagePermissions' } };
 }
