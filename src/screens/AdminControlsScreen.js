@@ -85,11 +85,14 @@ export default function AdminControlsScreen() {
     if (isBcba) {
       return [
         { id: 'program', label: 'Add program', icon: 'assignment', onPress: () => navigation.navigate('ProgramDirectory', { focusMode: 'editor' }) },
+        { id: 'documentation', label: 'Documentation', icon: 'assignment-turned-in', onPress: () => navigation.navigate('TherapistDocumentationDashboard') },
+        { id: 'organization-insights', label: 'Org insights', icon: 'insights', onPress: () => navigation.navigate('OrganizationInsightsDashboard') },
       ];
     }
     return [
       { id: 'student', label: 'Add student', icon: 'person-add', onPress: () => navigation.navigate('StudentDirectory') },
       { id: 'announcement', label: 'Send announcement', icon: 'campaign', onPress: () => navigation.navigate('AdminChatMonitor') },
+      { id: 'organization-insights', label: 'Org insights', icon: 'insights', onPress: () => navigation.navigate('OrganizationInsightsDashboard') },
     ];
   }, [isBcba, navigation]);
 

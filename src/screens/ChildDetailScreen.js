@@ -111,6 +111,18 @@ export default function ChildDetailScreen() {
               <Text style={styles.launchTitle}>Reports</Text>
               <Text style={styles.launchHint}>Review behavior, mood, attendance, and mastery trends.</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.launchCard} onPress={() => openTherapyRoute('ChildProgressInsights')}>
+              <MaterialIcons name="insights" size={20} color="#2563eb" />
+              <Text style={styles.launchTitle}>Progress Insights</Text>
+              <Text style={styles.launchHint}>Open the approved-summary trend view for this learner.</Text>
+            </TouchableOpacity>
+            {!isSessionPreview ? (
+              <TouchableOpacity style={styles.launchCard} onPress={() => navigation.navigate('TherapistDocumentationDashboard')}>
+                <MaterialIcons name="assignment-turned-in" size={20} color="#2563eb" />
+                <Text style={styles.launchTitle}>Documentation</Text>
+                <Text style={styles.launchHint}>Review outstanding summary approvals and recent documentation status.</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
       ) : null}

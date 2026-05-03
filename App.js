@@ -56,6 +56,9 @@ import ProgramDirectoryScreen from './src/screens/modules/ProgramDirectoryScreen
 import CampusDirectoryScreen from './src/screens/modules/CampusDirectoryScreen';
 import ProgramDocumentsScreen from './src/screens/modules/ProgramDocumentsScreen';
 import CampusDocumentsScreen from './src/screens/modules/CampusDocumentsScreen';
+import ChildProgressInsightsScreen from './src/features/sessionInsights/screens/ChildProgressInsightsScreen';
+import TherapistDocumentationDashboardScreen from './src/features/sessionInsights/screens/TherapistDocumentationDashboardScreen';
+import OrganizationInsightsDashboardScreen from './src/features/sessionInsights/screens/OrganizationInsightsDashboardScreen';
 import { HelpButton, BackButton } from './src/components/TopButtons';
 import { View, Text } from 'react-native';
 import LogoTitle from './src/components/LogoTitle';
@@ -135,6 +138,9 @@ function ControlsStack() {
       <ControlsStackNav.Screen name="TapLogs" component={TapLogsScreen} options={{ title: 'Tap Logs' }} />
       <ControlsStackNav.Screen name="SummaryReview" component={SummaryReviewScreen} options={{ title: 'Session Report' }} />
       <ControlsStackNav.Screen name="Reports" component={ReportsScreen} options={{ title: 'Data & Reports' }} />
+      <ControlsStackNav.Screen name="ChildProgressInsights" component={ChildProgressInsightsScreen} options={{ title: 'Progress Insights' }} />
+      <ControlsStackNav.Screen name="TherapistDocumentationDashboard" component={TherapistDocumentationDashboardScreen} options={{ title: 'Documentation Dashboard' }} />
+      <ControlsStackNav.Screen name="OrganizationInsightsDashboard" component={OrganizationInsightsDashboardScreen} options={{ title: 'Organization Insights' }} />
       <ControlsStackNav.Screen name="FacultyDetail" component={FacultyDetailScreen} options={{ title: 'Faculty' }} />
       <ControlsStackNav.Screen name="AdminMemos" component={AdminMemosScreen} options={{ title: 'Compose Memo' }} />
       <ControlsStackNav.Screen name="AdminChatMonitor" component={AdminChatMonitorScreen} options={{ title: 'Communication' }} />
@@ -182,6 +188,8 @@ function CommunityStack() {
       <CommunityStackNav.Screen name="TapLogs" component={TapLogsScreen} options={{ title: 'Tap Logs' }} />
       <CommunityStackNav.Screen name="SummaryReview" component={SummaryReviewScreen} options={{ title: 'Session Report' }} />
       <CommunityStackNav.Screen name="Reports" component={ReportsScreen} options={{ title: 'Reports' }} />
+      <CommunityStackNav.Screen name="ChildProgressInsights" component={ChildProgressInsightsScreen} options={{ title: 'Progress Insights' }} />
+      <CommunityStackNav.Screen name="TherapistDocumentationDashboard" component={TherapistDocumentationDashboardScreen} options={{ title: 'Documentation Dashboard' }} />
       <CommunityStackNav.Screen name="ParentDetail" component={ParentDetailScreen} options={{ title: 'Parent' }} />
       <CommunityStackNav.Screen name="FacultyDetail" component={FacultyDetailScreen} options={{ title: 'Faculty' }} />
     </CommunityStackNav.Navigator>
@@ -203,6 +211,7 @@ function MyChildStack() {
       })}
     >
       <MyChildStackNav.Screen name="MyChildMain" component={MyChildScreen} options={{ title: 'My Child' }} />
+      <MyChildStackNav.Screen name="ChildProgressInsights" component={ChildProgressInsightsScreen} options={{ title: 'Progress Insights' }} />
     </MyChildStackNav.Navigator>
   );
 }

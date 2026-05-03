@@ -495,6 +495,110 @@ app.get('/api/children/:childId/session-summaries/latest', (req, res) => {
   return res.json({ ok: true, childId, item: buildTherapySessionSummaryResponse(item) });
 });
 
+app.get('/api/children/:childId/progress-insights', (req, res) => {
+  const childId = String(req.params?.childId || '').trim();
+  if (!childId) return res.status(400).json({ ok: false, error: 'Missing childId' });
+  const items = therapySessionSummaries.filter((entry) => entry.childId === childId && entry.status === 'approved').map((entry) => buildTherapySessionSummaryResponse(entry));
+  const moodValues = items.map((item) => Number(item?.summary?.moodScore?.selectedValue)).filter((value) => Number.isFinite(value));
+  return res.json({
+    ok: true,
+    childId,
+    range: {
+      from: items.length ? String(items[items.length - 1]?.sessionDate || '') : '',
+      to: items.length ? String(items[0]?.sessionDate || '') : '',
+    },
+    stats: {
+      sessions: items.length,
+      approvedSummaries: items.length,
+      averageMood: moodValues.length ? Math.round((moodValues.reduce((sum, value) => sum + value, 0) / moodValues.length) * 10) / 10 : null,
+      successCriteriaCount: items.reduce((sum, item) => sum + ((item?.summary?.successCriteriaMet || []).length), 0),
+      programsWorkedOnCount: items.reduce((sum, item) => sum + ((item?.summary?.programsWorkedOn || []).length), 0),
+      behaviorEventsCount: items.reduce((sum, item) => sum + ((item?.summary?.interferingBehaviors || []).reduce((inner, behavior) => inner + (Number(behavior?.frequency) || 0), 0)), 0),
+    },
+    trends: {
+      mood: items.map((item) => ({ label: item?.sessionDate ? new Date(item.sessionDate).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '—', value: Number(item?.summary?.moodScore?.selectedValue || 0) })),
+      behaviorFrequency: items.map((item) => ({ label: item?.sessionDate ? new Date(item.sessionDate).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '—', value: (item?.summary?.interferingBehaviors || []).reduce((inner, behavior) => inner + (Number(behavior?.frequency) || 0), 0) })),
+      independence: items.map((item) => ({ label: item?.sessionDate ? new Date(item.sessionDate).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '—', value: String(item?.summary?.dailyRecap?.independenceLevel || '').toLowerCase().includes('significant') ? 4 : String(item?.summary?.dailyRecap?.independenceLevel || '').toLowerCase().includes('moderate') ? 3 : String(item?.summary?.dailyRecap?.independenceLevel || '').toLowerCase().includes('slight') ? 2 : 1 })),
+      progressLevel: items.map((item) => ({ label: item?.sessionDate ? new Date(item.sessionDate).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '—', value: String(item?.summary?.dailyRecap?.progressLevel || '').toLowerCase().includes('significant') ? 4 : String(item?.summary?.dailyRecap?.progressLevel || '').toLowerCase().includes('moderate') ? 3 : String(item?.summary?.dailyRecap?.progressLevel || '').toLowerCase().includes('minimal') ? 2 : 1 })),
+    },
+    latestSummary: items[0] || null,
+  });
+});
+
+app.get('/api/insights/therapist-documentation', (req, res) => {
+  const items = therapySessions.slice(0, Math.max(1, Math.min(Number(req.query?.limit) || 10, 50))).map((session) => {
+    const summary = therapySessionSummaries.find((entry) => entry.sessionId === session.id) || null;
+    const status = summary?.status || (session.status === 'submitted' ? 'approved' : 'needs_review');
+    return {
+      sessionId: session.id,
+      childId: session.childId,
+      childName: session.childName,
+      sessionDate: session.sessionDate,
+      sessionDateLabel: session.sessionDate ? new Date(session.sessionDate).toLocaleDateString([], { month: 'short', day: 'numeric' }) : 'No date',
+      status,
+      statusLabel: status === 'approved' ? 'Approved' : 'Needs review',
+    };
+  });
+  return res.json({
+    ok: true,
+    stats: {
+      sessionsEnded: therapySessions.filter((item) => item.endedAt).length,
+      summariesGenerated: therapySessions.filter((item) => item.summaryGeneratedAt).length,
+      summariesApproved: therapySessionSummaries.filter((item) => item.status === 'approved').length,
+      overdueSummaries: therapySessions.filter((item) => item.endedAt && item.status !== 'submitted').length,
+    },
+    items,
+  });
+});
+
+app.get('/api/insights/organization', (req, res) => {
+  const campusMap = new Map();
+  const programMap = new Map();
+  therapySessions.forEach((session) => {
+    const campusId = String(session.campusId || 'unassigned-campus').trim();
+    const programId = String(session.programId || 'unassigned-program').trim();
+    if (!campusMap.has(campusId)) campusMap.set(campusId, { id: campusId, name: campusId === 'unassigned-campus' ? 'Unassigned campus' : campusId, sessions: 0, approvedSummaries: 0, averageMood: null, behaviorEvents: 0 });
+    if (!programMap.has(programId)) programMap.set(programId, { id: programId, title: programId === 'unassigned-program' ? 'Unassigned program' : programId, status: '', childName: '', sessionDateLabel: '', sessions: 0, approvedSummaries: 0 });
+    campusMap.get(campusId).sessions += 1;
+    programMap.get(programId).sessions += 1;
+  });
+  therapySessionSummaries.filter((entry) => entry.status === 'approved').forEach((entry) => {
+    const relatedSession = therapySessions.find((session) => session.id === entry.sessionId) || null;
+    const campusId = String(relatedSession?.campusId || 'unassigned-campus').trim();
+    const programId = String(relatedSession?.programId || 'unassigned-program').trim();
+    const campus = campusMap.get(campusId);
+    const program = programMap.get(programId);
+    const moodValue = Number(entry?.summary?.moodScore?.selectedValue);
+    campus.approvedSummaries += 1;
+    campus.behaviorEvents += (entry?.summary?.interferingBehaviors || []).reduce((sum, behavior) => sum + (Number(behavior?.frequency) || 0), 0);
+    campus._moodTotal = (campus._moodTotal || 0) + (Number.isFinite(moodValue) ? moodValue : 0);
+    campus._moodCount = (campus._moodCount || 0) + (Number.isFinite(moodValue) ? 1 : 0);
+    program.approvedSummaries += 1;
+  });
+  const campuses = Array.from(campusMap.values()).map((campus) => ({
+    ...campus,
+    averageMood: campus._moodCount ? Math.round((campus._moodTotal / campus._moodCount) * 10) / 10 : null,
+    approvalRateLabel: campus.sessions ? `${Math.round((campus.approvedSummaries / campus.sessions) * 100)}%` : '0%',
+  }));
+  const programs = Array.from(programMap.values()).map((program) => ({
+    ...program,
+    childName: `${program.sessions} sessions`,
+    sessionDateLabel: `${program.approvedSummaries} approved`,
+    status: `${program.approvedSummaries} approved summaries`,
+  }));
+  return res.json({
+    ok: true,
+    stats: {
+      activeChildren: new Set(therapySessions.map((item) => item.childId)).size,
+      sessions: therapySessions.length,
+      approvedSummaries: therapySessionSummaries.filter((item) => item.status === 'approved').length,
+      activeCampuses: campuses.filter((campus) => campus.sessions > 0 || campus.approvedSummaries > 0).length,
+    },
+    campuses,
+    programs,
+  });
+});
+
 app.get('/api/therapy-sessions/:sessionId/artifacts/session-summary.txt', (req, res) => {
   const item = therapySessionSummaries.find((entry) => entry.sessionId === String(req.params?.sessionId || '').trim()) || null;
   if (!item) return res.status(404).json({ ok: false, error: 'Summary not found' });

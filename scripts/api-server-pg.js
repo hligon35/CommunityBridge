@@ -3659,6 +3659,232 @@ app.get('/api/children/:childId/session-summaries/latest', authMiddleware, async
   }
 });
 
+function buildEmptyChildProgressInsights(childId) {
+  return {
+    ok: true,
+    childId,
+    range: { from: '', to: '' },
+    stats: {
+      sessions: 0,
+      approvedSummaries: 0,
+      averageMood: null,
+      successCriteriaCount: 0,
+      programsWorkedOnCount: 0,
+      behaviorEventsCount: 0,
+    },
+    trends: {
+      mood: [],
+      behaviorFrequency: [],
+      independence: [],
+      progressLevel: [],
+    },
+    latestSummary: null,
+  };
+}
+
+function buildEmptyTherapistDocumentationInsights() {
+  return {
+    ok: true,
+    stats: {
+      sessionsEnded: 0,
+      summariesGenerated: 0,
+      summariesApproved: 0,
+      overdueSummaries: 0,
+    },
+    items: [],
+  };
+}
+
+function buildEmptyOrganizationInsights() {
+  return {
+    ok: true,
+    stats: {
+      activeChildren: 0,
+      sessions: 0,
+      approvedSummaries: 0,
+      activeCampuses: 0,
+    },
+    campuses: [],
+    programs: [],
+  };
+}
+
+function summarizeApprovedSessionRows(rows) {
+  const items = (Array.isArray(rows) ? rows : []).map((row) => buildTherapySessionSummaryResponse(row)).filter(Boolean);
+  const moodValues = [];
+  let successCriteriaCount = 0;
+  let programsWorkedOnCount = 0;
+  let behaviorEventsCount = 0;
+  function progressOrdinal(value) {
+    const normalized = safeString(value).trim().toLowerCase();
+    if (normalized.includes('significant')) return 4;
+    if (normalized.includes('moderate')) return 3;
+    if (normalized.includes('minimal') || normalized.includes('slight')) return 2;
+    if (normalized.includes('no')) return 1;
+    return 0;
+  }
+  const trends = { mood: [], behaviorFrequency: [], independence: [], progressLevel: [] };
+  items.forEach((item) => {
+    const sessionDate = safeString(item?.sessionDate).trim();
+    let label = '—';
+    try {
+      label = sessionDate ? new Date(sessionDate).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '—';
+    } catch (_) {
+      label = '—';
+    }
+    const summary = item?.summary || {};
+    const moodValue = Number(summary?.moodScore?.selectedValue);
+    const successCount = Array.isArray(summary?.successCriteriaMet) ? summary.successCriteriaMet.length : 0;
+    const programCount = Array.isArray(summary?.programsWorkedOn) ? summary.programsWorkedOn.length : 0;
+    const behaviorCount = (Array.isArray(summary?.interferingBehaviors) ? summary.interferingBehaviors : []).reduce((sum, behavior) => sum + (Number(behavior?.frequency) || 0), 0);
+    successCriteriaCount += successCount;
+    programsWorkedOnCount += programCount;
+    behaviorEventsCount += behaviorCount;
+    if (Number.isFinite(moodValue)) moodValues.push(moodValue);
+    trends.mood.push({ label, value: Number.isFinite(moodValue) ? moodValue : 0 });
+    trends.behaviorFrequency.push({ label, value: behaviorCount });
+    trends.independence.push({ label, value: progressOrdinal(summary?.dailyRecap?.independenceLevel) });
+    trends.progressLevel.push({ label, value: progressOrdinal(summary?.dailyRecap?.progressLevel) });
+  });
+  return {
+    items,
+    stats: {
+      sessions: items.length,
+      approvedSummaries: items.length,
+      averageMood: moodValues.length ? Math.round((moodValues.reduce((sum, value) => sum + value, 0) / moodValues.length) * 10) / 10 : null,
+      successCriteriaCount,
+      programsWorkedOnCount,
+      behaviorEventsCount,
+    },
+    trends,
+    latestSummary: items[0] || null,
+  };
+}
+
+app.get('/api/children/:childId/progress-insights', authMiddleware, async (req, res) => {
+  try {
+    const childId = safeString(req.params && req.params.childId).trim();
+    if (!childId) return res.status(400).json({ ok: false, error: 'Missing childId' });
+    const visibleChildIds = new Set(await getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(childId)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+    const limit = Math.max(1, Math.min(Number(req.query && req.query.limit) || 20, 100));
+    const rows = await pgQueryAll('SELECT * FROM therapy_session_summaries WHERE child_id = $1 AND status = $2 ORDER BY COALESCE(approved_at, updated_at) DESC LIMIT $3', [childId, 'approved', limit]).catch(() => []);
+    const emptyPayload = buildEmptyChildProgressInsights(childId);
+    const aggregated = summarizeApprovedSessionRows(rows);
+    return res.json({
+      ...emptyPayload,
+      range: {
+        from: aggregated.items.length ? safeString(aggregated.items[aggregated.items.length - 1]?.sessionDate).trim() : '',
+        to: aggregated.items.length ? safeString(aggregated.items[0]?.sessionDate).trim() : '',
+      },
+      stats: aggregated.stats,
+      trends: aggregated.trends,
+      latestSummary: aggregated.latestSummary,
+    });
+  } catch (_) {
+    return res.json(buildEmptyChildProgressInsights(safeString(req.params && req.params.childId).trim()));
+  }
+});
+
+app.get('/api/insights/therapist-documentation', authMiddleware, async (req, res) => {
+  try {
+    const userId = safeString(req.user?.id).trim();
+    const visibleChildIds = await getVisibleChildIdsForUser(req.user);
+    if (!visibleChildIds.length) return res.json(buildEmptyTherapistDocumentationInsights());
+    const limit = Math.max(1, Math.min(Number(req.query?.limit) || 10, 50));
+    const sessionRows = await pgQueryAll('SELECT * FROM therapy_sessions WHERE child_id = ANY($1::text[]) AND therapist_id = $2 ORDER BY COALESCE(ended_at, updated_at, created_at) DESC', [visibleChildIds, userId]).catch(() => []);
+    const summaryRows = await pgQueryAll('SELECT * FROM therapy_session_summaries WHERE child_id = ANY($1::text[]) ORDER BY COALESCE(approved_at, updated_at) DESC', [visibleChildIds]).catch(() => []);
+    const summariesBySessionId = new Map((summaryRows || []).map((row) => [safeString(row.session_id).trim(), buildTherapySessionSummaryResponse(row)]));
+    const items = (sessionRows || []).slice(0, limit).map((session) => {
+      const summary = summariesBySessionId.get(safeString(session.id).trim()) || null;
+      const status = summary?.status || (safeString(session.status).trim() === 'submitted' ? 'approved' : 'needs_review');
+      return {
+        sessionId: session.id,
+        childId: session.child_id,
+        childName: safeString(session.child_name).trim() || session.child_id,
+        sessionDate: toIso(session.session_date),
+        sessionDateLabel: session.session_date ? new Date(session.session_date).toLocaleDateString([], { month: 'short', day: 'numeric' }) : 'No date',
+        status,
+        statusLabel: status === 'approved' ? 'Approved' : 'Needs review',
+      };
+    });
+    return res.json({
+      ok: true,
+      stats: {
+        sessionsEnded: (sessionRows || []).filter((row) => row.ended_at).length,
+        summariesGenerated: (sessionRows || []).filter((row) => row.summary_generated_at).length,
+        summariesApproved: (summaryRows || []).filter((row) => safeString(row.status).trim() === 'approved').length,
+        overdueSummaries: (sessionRows || []).filter((row) => row.ended_at && safeString(row.status).trim() !== 'submitted').length,
+      },
+      items,
+    });
+  } catch (_) {
+    return res.json(buildEmptyTherapistDocumentationInsights());
+  }
+});
+
+app.get('/api/insights/organization', authMiddleware, async (req, res) => {
+  try {
+    const visibleChildIds = await getVisibleChildIdsForUser(req.user);
+    if (!visibleChildIds.length) return res.json(buildEmptyOrganizationInsights());
+    const sessionRows = await pgQueryAll('SELECT * FROM therapy_sessions WHERE child_id = ANY($1::text[])', [visibleChildIds]).catch(() => []);
+    const summaryRows = await pgQueryAll('SELECT * FROM therapy_session_summaries WHERE child_id = ANY($1::text[]) AND status = $2 ORDER BY COALESCE(approved_at, updated_at) DESC', [visibleChildIds, 'approved']).catch(() => []);
+    const campusMap = new Map();
+    const programMap = new Map();
+    (sessionRows || []).forEach((session) => {
+      const campusId = safeString(session.campus_id).trim() || 'unassigned-campus';
+      const programId = safeString(session.program_id).trim() || 'unassigned-program';
+      if (!campusMap.has(campusId)) campusMap.set(campusId, { id: campusId, name: campusId === 'unassigned-campus' ? 'Unassigned campus' : campusId, sessions: 0, approvedSummaries: 0, averageMood: null, behaviorEvents: 0 });
+      if (!programMap.has(programId)) programMap.set(programId, { id: programId, title: programId === 'unassigned-program' ? 'Unassigned program' : programId, status: '', childName: '', sessionDateLabel: '', sessions: 0, approvedSummaries: 0 });
+      campusMap.get(campusId).sessions += 1;
+      programMap.get(programId).sessions += 1;
+    });
+    (summaryRows || []).forEach((row) => {
+      const summary = buildTherapySessionSummaryResponse(row);
+      const relatedSession = (sessionRows || []).find((session) => safeString(session.id).trim() === safeString(row.session_id).trim()) || null;
+      const campusId = safeString(relatedSession?.campus_id).trim() || 'unassigned-campus';
+      const programId = safeString(relatedSession?.program_id).trim() || 'unassigned-program';
+      const campus = campusMap.get(campusId) || { id: campusId, name: campusId, sessions: 0, approvedSummaries: 0, averageMood: null, behaviorEvents: 0 };
+      const program = programMap.get(programId) || { id: programId, title: programId, status: '', childName: '', sessionDateLabel: '', sessions: 0, approvedSummaries: 0 };
+      const moodValue = Number(summary?.summary?.moodScore?.selectedValue);
+      const behaviorEvents = (Array.isArray(summary?.summary?.interferingBehaviors) ? summary.summary.interferingBehaviors : []).reduce((sum, item) => sum + (Number(item?.frequency) || 0), 0);
+      campus.approvedSummaries += 1;
+      campus.behaviorEvents += behaviorEvents;
+      campus._moodTotal = (campus._moodTotal || 0) + (Number.isFinite(moodValue) ? moodValue : 0);
+      campus._moodCount = (campus._moodCount || 0) + (Number.isFinite(moodValue) ? 1 : 0);
+      program.approvedSummaries += 1;
+      program.status = `${program.approvedSummaries} approved summaries`;
+      campusMap.set(campusId, campus);
+      programMap.set(programId, program);
+    });
+    const campuses = Array.from(campusMap.values()).map((campus) => ({
+      ...campus,
+      averageMood: campus._moodCount ? Math.round((campus._moodTotal / campus._moodCount) * 10) / 10 : null,
+      approvalRateLabel: campus.sessions ? `${Math.round((campus.approvedSummaries / campus.sessions) * 100)}%` : '0%',
+    }));
+    const programs = Array.from(programMap.values()).map((program) => ({
+      ...program,
+      title: program.title || program.id || 'Program',
+      childName: `${program.sessions} sessions`,
+      sessionDateLabel: `${program.approvedSummaries} approved`,
+      status: program.status || `${program.approvedSummaries} approved summaries`,
+    }));
+    return res.json({
+      ok: true,
+      stats: {
+        activeChildren: visibleChildIds.length,
+        sessions: sessionRows.length,
+        approvedSummaries: summaryRows.length,
+        activeCampuses: campuses.filter((campus) => campus.sessions > 0 || campus.approvedSummaries > 0).length,
+      },
+      campuses,
+      programs,
+    });
+  } catch (_) {
+    return res.json(buildEmptyOrganizationInsights());
+  }
+});
+
 app.get('/api/therapy-sessions/:sessionId/artifacts/session-summary.txt', authMiddleware, async (req, res) => {
   try {
     const sessionId = safeString(req.params && req.params.sessionId).trim();

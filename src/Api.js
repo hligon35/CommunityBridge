@@ -2779,6 +2779,84 @@ export async function getTherapySessionSummaryText(sessionId) {
   return { ok: true, text: await resp.text() };
 }
 
+export async function getChildProgressInsights(childId, options = {}) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const resolvedChildId = String(childId || '').trim();
+  const limit = Math.max(1, Math.min(Number(options?.limit || 20) || 20, 100));
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/children/${encodeURIComponent(resolvedChildId)}/progress-insights?limit=${encodeURIComponent(String(limit))}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load child progress insights.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return json;
+}
+
+export async function getTherapistDocumentationInsights(options = {}) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const query = new URLSearchParams();
+  if (options?.limit != null) query.set('limit', String(options.limit));
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/insights/therapist-documentation${query.toString() ? `?${query.toString()}` : ''}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load therapist documentation insights.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return json;
+}
+
+export async function getOrganizationInsights(options = {}) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Therapy sessions require the API server.');
+    err.code = 'BB_THERAPY_SESSION_API_REQUIRED';
+    throw err;
+  }
+  const query = new URLSearchParams();
+  if (options?.limit != null) query.set('limit', String(options.limit));
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/insights/organization${query.toString() ? `?${query.toString()}` : ''}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load organization insights.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return json;
+}
+
 export async function getPermissionsConfig() {
   const u = requireUser();
   const apiBase = String(BASE_URL || '').replace(/\/$/, '');
@@ -3096,6 +3174,9 @@ export default {
   getChildSessionSummaries,
   getLatestChildSessionSummary,
   getTherapySessionSummaryText,
+  getChildProgressInsights,
+  getTherapistDocumentationInsights,
+  getOrganizationInsights,
   getPermissionsConfig,
   updatePermissionsConfig,
   getAuditLogs,

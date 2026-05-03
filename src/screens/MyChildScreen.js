@@ -352,11 +352,18 @@ export default function MyChildScreen() {
       <View style={styles.scheduleWrap}>
         <View style={styles.scheduleHeaderRow}>
           <Text style={styles.scheduleGroupTitle}>Daily Review</Text>
-          {child?.id && !isParent ? (
-            <TouchableOpacity style={styles.reportsLinkButton} onPress={() => navigation.navigate('Reports', { childId: child.id })}>
-              <Text style={styles.reportsLinkButtonText}>Open Reports</Text>
-            </TouchableOpacity>
-          ) : null}
+          <View style={styles.headerActionsRow}>
+            {child?.id ? (
+              <TouchableOpacity style={styles.reportsLinkButton} onPress={() => navigation.navigate('ChildProgressInsights', { childId: child.id })}>
+                <Text style={styles.reportsLinkButtonText}>Progress Insights</Text>
+              </TouchableOpacity>
+            ) : null}
+            {child?.id && !isParent ? (
+              <TouchableOpacity style={[styles.reportsLinkButton, styles.secondaryLinkButton]} onPress={() => navigation.navigate('Reports', { childId: child.id })}>
+                <Text style={styles.reportsLinkButtonText}>Open Reports</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
 
         {summaryLoading ? (
@@ -666,8 +673,10 @@ const styles = StyleSheet.create({
   careTeamTitle: { textAlign: 'center', fontWeight: '800', fontSize: 16, color: '#111827' },
   scheduleWrap: { marginTop: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12 },
   scheduleHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerActionsRow: { flexDirection: 'row', alignItems: 'center' },
   scheduleGroupTitle: { textAlign: 'center', fontWeight: '800', fontSize: 16, color: '#111827' },
   reportsLinkButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#dbeafe' },
+  secondaryLinkButton: { marginLeft: 8 },
   reportsLinkButtonText: { color: '#1d4ed8', fontWeight: '800', fontSize: 12 },
   summaryLoadingWrap: { paddingVertical: 24, alignItems: 'center', justifyContent: 'center' },
   summaryErrorText: { color: '#b91c1c', paddingVertical: 12 },
