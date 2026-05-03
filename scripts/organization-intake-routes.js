@@ -456,11 +456,14 @@ function buildApplicantDecisionEmailHtml({ submission, decision, publicBaseUrl, 
     ? buildEmailSection({
         title: 'Primary contact login access',
         body: [
-          '<p style="margin:0 0 10px;">Use this one-time access code in place of your password the first time you sign in.</p>',
-          `<p style="margin:0 0 10px;"><strong>Access code:</strong> <span style="font-size:24px;font-weight:800;letter-spacing:0.22em;">${htmlEscape(primaryContactInvite.accessCode)}</span></p>`,
-          `<p style="margin:0 0 10px;"><strong>Login:</strong> <a href="${htmlEscape(primaryContactInvite.loginUrl || dashboardUrl)}">${htmlEscape(primaryContactInvite.loginUrl || dashboardUrl)}</a></p>`,
-          '<p style="margin:0;">After the first login, CommunityBridge will require you to create a permanent password.</p>',
-        ].join(''),
+          '<p style="margin:0 0 10px;">Use the branded CommunityBridge access link below to open temporary Super Admin access for the primary contact email from your onboarding form.</p>',
+          primaryContactInvite.approvalLink
+            ? `<p style="margin:0 0 10px;"><a href="${htmlEscape(primaryContactInvite.approvalLink)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#2563eb;color:#ffffff;font-weight:800;text-decoration:none;">Open CommunityBridge</a></p>`
+            : '',
+          `<p style="margin:0 0 10px;"><strong>Login email / username:</strong> ${htmlEscape(primaryContactInvite.email || submission.contact?.email || '')}</p>`,
+          `<p style="margin:0 0 10px;"><strong>Backup login:</strong> <a href="${htmlEscape(primaryContactInvite.loginUrl || dashboardUrl)}">${htmlEscape(primaryContactInvite.loginUrl || dashboardUrl)}</a></p>`,
+          '<p style="margin:0;">The access link will sign the user into CommunityBridge, require a password update, and then open profile settings.</p>',
+        ].filter(Boolean).join(''),
       })
     : '';
 
@@ -507,9 +510,12 @@ function buildApplicantDecisionEmailText({ submission, decision, publicBaseUrl, 
   if (approved && primaryContactInvite?.accessCode) {
     lines.push('');
     lines.push('Primary contact login access:');
-    lines.push(`Access code: ${primaryContactInvite.accessCode}`);
-    lines.push(`Login: ${primaryContactInvite.loginUrl || `${(safeString(publicBaseUrl || '').replace(/\/$/, '') || 'https://communitybridge.app')}/organizations`}`);
-    lines.push('Use this access code in place of your password the first time you sign in. You will be prompted to create a permanent password after that first login.');
+    if (primaryContactInvite.approvalLink) {
+      lines.push(`Open CommunityBridge: ${primaryContactInvite.approvalLink}`);
+    }
+    lines.push(`Login email / username: ${primaryContactInvite.email || submission.contact?.email || ''}`);
+    lines.push(`Backup login: ${primaryContactInvite.loginUrl || `${(safeString(publicBaseUrl || '').replace(/\/$/, '') || 'https://communitybridge.app')}/organizations`}`);
+    lines.push('The approval link grants temporary access, signs the primary contact into CommunityBridge, and takes them through password setup before opening profile settings.');
   }
   if (approved) {
     lines.push('');

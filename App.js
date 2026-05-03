@@ -69,6 +69,7 @@ import { canAccessAdminWorkspace, isAdminRole, isBcbaRole, isStaffRole, normaliz
 import { humanizeScreenLabel } from './src/utils/screenLabels';
 import TabletNavigationShell from './src/components/TabletNavigationShell';
 import useIsTabletLayout from './src/hooks/useIsTabletLayout';
+import { consumeApprovalAccessIntent, getApprovalAccessNavigationParams } from './src/utils/approvalAccessIntent';
 
 initSentry();
 
@@ -443,6 +444,20 @@ function AppNavigator() {
       } catch (_) { /* ignore */ }
     };
   }, [auth?.token, auth?.needsMfa, auth?.passwordSetupRequired]);
+
+  useEffect(() => {
+    try {
+      if (Platform.OS !== 'web') return;
+      if (!navigationRef.isReady()) return;
+      if (auth?.loading || !auth?.token || auth?.needsMfa || auth?.passwordSetupRequired) return;
+      const approvalIntent = consumeApprovalAccessIntent();
+      const approvalParams = getApprovalAccessNavigationParams(approvalIntent);
+      if (!approvalParams) return;
+      navigationRef.navigate('Main', approvalParams);
+    } catch (_) {
+      // ignore
+    }
+  }, [auth?.loading, auth?.token, auth?.needsMfa, auth?.passwordSetupRequired]);
 
   return (
     <NavigationContainer

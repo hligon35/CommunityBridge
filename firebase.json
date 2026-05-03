@@ -96,11 +96,11 @@
         },
         {
           "source": "/app-login",
-          "destination": "/dashboard/index.html"
+          "destination": "/app-login/index.html"
         },
         {
           "source": "/app-login/**",
-          "destination": "/dashboard/index.html"
+          "destination": "/app-login/index.html"
         },
         {
           "source": "/delete-account",

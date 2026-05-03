@@ -420,6 +420,7 @@ const EMAIL_2FA_SUBJECT = (process.env.CB_EMAIL_2FA_SUBJECT || process.env.BB_EM
 const EMAIL_PASSWORD_RESET_SUBJECT = (process.env.CB_EMAIL_PASSWORD_RESET_SUBJECT || process.env.BB_EMAIL_PASSWORD_RESET_SUBJECT || 'CommunityBridge password reset').trim();
 const EMAIL_STAFF_INVITE_SUBJECT = (process.env.CB_EMAIL_STAFF_INVITE_SUBJECT || process.env.BB_EMAIL_STAFF_INVITE_SUBJECT || 'CommunityBridge staff invite').trim();
 const EMAIL_ONBOARDING_APPROVAL_SUBJECT = (process.env.CB_EMAIL_ONBOARDING_APPROVAL_SUBJECT || process.env.BB_EMAIL_ONBOARDING_APPROVAL_SUBJECT || 'CommunityBridge organization approval').trim();
+const APPROVAL_LINK_TTL_HOURS = Math.max(1, Number(process.env.CB_APPROVAL_LINK_TTL_HOURS || process.env.BB_APPROVAL_LINK_TTL_HOURS || 72));
 
 const RETURN_PASSWORD_RESET_CODE = envFlag(process.env.CB_RETURN_PASSWORD_RESET_CODE || process.env.BB_RETURN_PASSWORD_RESET_CODE, false);
 const PASSWORD_RESET_TTL_MINUTES = Math.max(5, Number(process.env.CB_PASSWORD_RESET_TTL_MINUTES || process.env.BB_PASSWORD_RESET_TTL_MINUTES || 30));
@@ -1084,8 +1085,46 @@ function generateInviteAccessCode() {
   return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
 }
 
+function base64UrlEncodeJson(value) {
+  return Buffer.from(JSON.stringify(value || {}), 'utf8').toString('base64url');
+}
+
+function base64UrlDecodeJson(value) {
+  return JSON.parse(Buffer.from(String(value || ''), 'base64url').toString('utf8'));
+}
+
+function signApprovalAccessToken(payload) {
+  const encoded = base64UrlEncodeJson(payload);
+  const signature = crypto.createHmac('sha256', `${JWT_SECRET}:approval-link`).update(encoded).digest('base64url');
+  return `${encoded}.${signature}`;
+}
+
+function verifyApprovalAccessToken(token) {
+  const raw = String(token || '').trim();
+  if (!raw || !raw.includes('.')) throw new Error('invalid approval access token');
+  const [encoded, providedSignature] = raw.split('.');
+  const expectedSignature = crypto.createHmac('sha256', `${JWT_SECRET}:approval-link`).update(encoded).digest('base64url');
+  const providedBuffer = Buffer.from(providedSignature || '', 'utf8');
+  const expectedBuffer = Buffer.from(expectedSignature || '', 'utf8');
+  if (providedBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(providedBuffer, expectedBuffer)) {
+    throw new Error('invalid approval access token');
+  }
+  const payload = base64UrlDecodeJson(encoded);
+  const expiresAt = Number(payload?.exp || 0);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    throw new Error('approval access link expired');
+  }
+  return payload;
+}
+
 function buildInviteLoginUrl(req) {
   return buildPublicUrl(req, '/login');
+}
+
+function buildApprovalAccessUrl(req, approvalAccessToken) {
+  const url = new URL(buildPublicUrl(req, '/app-login'));
+  url.searchParams.set('token', String(approvalAccessToken || ''));
+  return url.toString();
 }
 
 let passwordResetTransporter = null;
@@ -1668,6 +1707,7 @@ async function ensureFirebaseManagedUserForInvite(userId, nextFields = {}) {
   const firestore = admin.firestore();
   const uid = safeString(userId).trim();
   if (!uid) throw new Error('userId required');
+  const temporaryPassword = String(nextFields.temporaryPassword || '').trim();
 
   let userRecord = null;
   let created = false;
@@ -1679,14 +1719,19 @@ async function ensureFirebaseManagedUserForInvite(userId, nextFields = {}) {
   }
 
   if (!userRecord) {
-    const bootstrapPassword = `${nanoId()}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     userRecord = await auth.createUser({
       uid,
       email: safeString(nextFields.email).trim().toLowerCase(),
       displayName: safeString(nextFields.name).trim() || safeString(nextFields.email).trim().toLowerCase(),
-      password: bootstrapPassword,
+      password: temporaryPassword || `${nanoId()}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     });
     created = true;
+  } else if (temporaryPassword) {
+    await auth.updateUser(uid, {
+      email: safeString(nextFields.email).trim().toLowerCase(),
+      displayName: safeString(nextFields.name).trim() || safeString(nextFields.email).trim().toLowerCase(),
+      password: temporaryPassword,
+    });
   }
 
   await syncFirebaseManagedUser(uid, {
@@ -1759,14 +1804,15 @@ async function createOrRefreshManagedAccessInvite({
 
   const managedUserId = safeString(localUser?.id).trim() || safeString(firebaseUser?.uid).trim() || nanoId();
   const now = nowISO();
+  const accessCode = generateInviteAccessCode();
   const resolvedName = safeString(name).trim() || safeString(localUser?.name).trim() || safeString(firebaseUser?.displayName).trim() || normalizedEmail;
   const resolvedPhone = safeString(phone).trim() || safeString(localUser?.phone).trim();
   const resolvedAddress = safeString(address).trim() || safeString(localUser?.address).trim();
-  const passwordHash = localUser?.password_hash || bcrypt.hashSync(`${nanoId()}_${Date.now()}_${Math.random().toString(36).slice(2)}`, 12);
+  const passwordHash = bcrypt.hashSync(accessCode, 12);
 
   if (localUser) {
-    db.prepare('UPDATE users SET email = ?, name = ?, phone = ?, address = ?, role = ?, updated_at = ? WHERE id = ?')
-      .run(normalizedEmail, resolvedName, resolvedPhone, resolvedAddress, normalizedRole, now, managedUserId);
+    db.prepare('UPDATE users SET email = ?, password_hash = ?, name = ?, phone = ?, address = ?, role = ?, updated_at = ? WHERE id = ?')
+      .run(normalizedEmail, passwordHash, resolvedName, resolvedPhone, resolvedAddress, normalizedRole, now, managedUserId);
   } else {
     db.prepare('INSERT INTO users (id,email,password_hash,name,phone,address,role,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)')
       .run(managedUserId, normalizedEmail, passwordHash, resolvedName, resolvedPhone, resolvedAddress, normalizedRole, now, now);
@@ -1781,15 +1827,23 @@ async function createOrRefreshManagedAccessInvite({
     campusIds: normalizeManagedIdList(campusIds),
     memberships: Array.isArray(memberships) ? memberships : [],
     inviteType,
+    temporaryPassword: accessCode,
   });
 
-  const accessCode = generateInviteAccessCode();
   const inviteId = nanoId();
   const resolvedInviteType = safeString(inviteType).trim() || 'staff';
+  const approvalAccessToken = signApprovalAccessToken({
+    inviteId,
+    userId: managedUserId,
+    email: normalizedEmail,
+    exp: Date.now() + (APPROVAL_LINK_TTL_HOURS * 60 * 60 * 1000),
+  });
   const delivery = {
     accessCode,
+    temporaryPassword: accessCode,
     inviteType: resolvedInviteType,
     loginUrl: buildInviteLoginUrl(req),
+    approvalLink: buildApprovalAccessUrl(req, approvalAccessToken),
     role: normalizedRole,
     email: normalizedEmail,
   };
@@ -1867,13 +1921,13 @@ async function completeManagedInvitePasswordSetup(userId, inviteId, newPassword)
   const iid = safeString(inviteId).trim();
   if (!uid || !iid) throw new Error('invite session is incomplete');
   const now = nowISO();
-  const inviteRow = db.prepare('SELECT * FROM access_invites WHERE id = ? AND user_id = ? AND first_login_at IS NOT NULL AND used_at IS NULL AND revoked_at IS NULL').get(iid, uid);
+  const inviteRow = db.prepare('SELECT * FROM access_invites WHERE id = ? AND user_id = ? AND used_at IS NULL AND revoked_at IS NULL').get(iid, uid);
   if (!inviteRow) throw new Error('invite access code is no longer active');
 
   await getFirebaseAdmin().auth().updateUser(uid, { password: String(newPassword || '') });
   const hash = bcrypt.hashSync(String(newPassword || ''), 12);
   db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(hash, now, uid);
-  db.prepare('UPDATE access_invites SET used_at = ?, updated_at = ? WHERE id = ?').run(now, now, iid);
+  db.prepare('UPDATE access_invites SET first_login_at = COALESCE(first_login_at, ?), used_at = ?, updated_at = ? WHERE id = ?').run(now, now, now, iid);
   await getFirebaseAdmin().firestore().collection('users').doc(uid).set({
     passwordSetupRequired: false,
     inviteStatus: 'accepted',
@@ -3892,6 +3946,41 @@ app.post('/api/auth/invite-login', authRateLimit, async (req, res) => {
   }
 });
 
+app.post('/api/auth/approval-link-login', authRateLimit, async (req, res) => {
+  const approvalToken = (req.body && req.body.token != null) ? String(req.body.token).trim() : '';
+  if (!approvalToken) return res.status(400).json({ ok: false, error: 'token required' });
+
+  try {
+    const payload = verifyApprovalAccessToken(approvalToken);
+    const inviteRow = db.prepare(
+      'SELECT * FROM access_invites WHERE id = ? AND user_id = ? AND lower(email) = ? AND used_at IS NULL AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1'
+    ).get(safeString(payload?.inviteId).trim(), safeString(payload?.userId).trim(), normalizeEmail(payload?.email));
+    if (!inviteRow) return res.status(401).json({ ok: false, error: 'approval access link is no longer active' });
+
+    const userRow = db.prepare('SELECT * FROM users WHERE id = ?').get(String(inviteRow.user_id || ''));
+    if (!userRow) return res.status(404).json({ ok: false, error: 'user not found' });
+
+    if (!inviteRow.first_login_at) {
+      await markInviteLoginStarted(userRow.id, inviteRow.id);
+    }
+
+    const customToken = await getFirebaseAdmin().auth().createCustomToken(String(userRow.id), { role: String(userRow.role || inviteRow.role || '') });
+    const latestInvite = serializeAccessInviteRow(getLatestAccessInviteRowForUser(userRow.id));
+    return res.json({
+      ok: true,
+      customToken,
+      user: {
+        ...userToClient(userRow),
+        passwordSetupRequired: true,
+      },
+      invite: latestInvite,
+      redirectIntent: 'approval-edit-profile',
+    });
+  } catch (e) {
+    return res.status(401).json({ ok: false, error: e?.message || 'approval access link is invalid' });
+  }
+});
+
 app.post('/api/auth/complete-invite-password', authMiddleware, async (req, res) => {
   const userId = safeString(req.user?.id).trim();
   const newPassword = (req.body && req.body.newPassword != null) ? String(req.body.newPassword) : '';
@@ -5378,8 +5467,10 @@ app.get(/.*/, (req, res, next) => {
       req.path === '/login.html' ||
       req.path.startsWith('/login/')
     ) {
-      const pDashboard = resolvePublicFileForRequestPath('/dashboard');
-      if (pDashboard) return res.sendFile(pDashboard);
+      const pAuth = req.path === '/app-login' || req.path === '/app-login.html' || req.path.startsWith('/app-login/')
+        ? resolvePublicFileForRequestPath('/app-login')
+        : resolvePublicFileForRequestPath('/dashboard');
+      if (pAuth) return res.sendFile(pAuth);
     }
 
     if (
@@ -5409,8 +5500,10 @@ app.get(/.*/, (req, res, next) => {
     req.path === '/login.html' ||
     req.path.startsWith('/login/')
   ) {
-    const pDashboard = resolvePublicFileForRequestPath('/dashboard') || resolveWebDistFileForRequestPath('/');
-    if (pDashboard) return res.sendFile(pDashboard);
+    const pAuth = (req.path === '/app-login' || req.path === '/app-login.html' || req.path.startsWith('/app-login/'))
+      ? (resolvePublicFileForRequestPath('/app-login') || resolveWebDistFileForRequestPath('/'))
+      : (resolvePublicFileForRequestPath('/dashboard') || resolveWebDistFileForRequestPath('/'));
+    if (pAuth) return res.sendFile(pAuth);
   }
 
   const p = resolvePublicFileForRequestPath(req.path);

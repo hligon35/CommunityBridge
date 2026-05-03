@@ -5,6 +5,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import LogoTitle from '../src/components/LogoTitle';
 import { useAuth } from '../src/AuthContext';
 import { getPasswordPolicyError } from '../src/utils/passwordPolicy';
+import { consumeApprovalAccessIntent, getApprovalAccessNavigationParams } from '../src/utils/approvalAccessIntent';
 
 export default function CreatePasswordScreen({ navigation }) {
   const auth = useAuth();
@@ -33,7 +34,13 @@ export default function CreatePasswordScreen({ navigation }) {
       // This completes the one-time invite session and switches the account to normal password sign-in.
       await auth.completeInvitePasswordSetup(password);
       const gate = await auth.refreshMfaState();
-      navigation.replace(gate?.needsMfa ? 'TwoFactor' : 'Main');
+      if (gate?.needsMfa) {
+        navigation.replace('TwoFactor');
+        return;
+      }
+      const approvalIntent = consumeApprovalAccessIntent();
+      const approvalParams = getApprovalAccessNavigationParams(approvalIntent);
+      navigation.replace('Main', approvalParams || undefined);
     } catch (error) {
       Alert.alert('Could not save password', String(error?.message || error || 'Please try again.'));
     } finally {
