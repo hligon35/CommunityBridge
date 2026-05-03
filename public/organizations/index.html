@@ -548,7 +548,7 @@
           </label>
           <label>
             Enrollment code
-            <input type="text" data-field="enrollmentCode" maxlength="24" pattern="[A-Za-z0-9-]{4,24}" placeholder="Defaults to ZIP if omitted" />
+            <input type="text" data-field="enrollmentCode" maxlength="24" pattern="[A-Za-z0-9-]{4,24}" placeholder="Defaults to ZIP + short code, like 46219CENTRIA" />
           </label>
         </div>
       </article>
@@ -563,6 +563,7 @@
         var locationsStack = document.getElementById('locationsStack');
         var template = document.getElementById('locationTemplate');
         var submitBtn = document.getElementById('submitBtn');
+        var organizationShortCodeInput = form.querySelector('input[name="organizationShortCode"]');
         var captchaPlaceholder = document.getElementById('captchaPlaceholder');
         var recaptchaWidgetId = null;
         var recaptchaToken = '';
@@ -793,6 +794,36 @@
           }
         }
 
+        function normalizeEnrollmentFragment(value) {
+          return (value || '').toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        }
+
+        function buildDefaultEnrollmentCode(zipCode, organizationShortCode) {
+          var zip = normalizeEnrollmentFragment(zipCode);
+          var shortCode = normalizeEnrollmentFragment(organizationShortCode);
+          return (zip + shortCode) || zip || shortCode;
+        }
+
+        function syncLocationEnrollmentCode(index, enrollmentField) {
+          var location = locations[index];
+          if (!location) return;
+          var derived = buildDefaultEnrollmentCode(location.zipCode, organizationShortCodeInput ? organizationShortCodeInput.value : '');
+          var current = (location.enrollmentCode || '').toString().trim();
+          var shouldReplace = !location.enrollmentCodeManual || !current || current === location.lastAutoEnrollmentCode;
+          location.lastAutoEnrollmentCode = derived;
+          if (!shouldReplace) return;
+          location.enrollmentCodeManual = false;
+          location.enrollmentCode = derived;
+          if (enrollmentField) enrollmentField.value = derived;
+        }
+
+        function syncAllLocationEnrollmentCodes() {
+          var cards = Array.prototype.slice.call(locationsStack.querySelectorAll('[data-location-card]'));
+          cards.forEach(function (card, index) {
+            syncLocationEnrollmentCode(index, card.querySelector('[data-field="enrollmentCode"]'));
+          });
+        }
+
         function blankLocation() {
           return {
             programName: '',
@@ -807,6 +838,8 @@
             state: '',
             zipCode: '',
             enrollmentCode: '',
+            enrollmentCodeManual: false,
+            lastAutoEnrollmentCode: '',
             expanded: true
           };
         }
@@ -831,6 +864,13 @@
           }
         }, true);
 
+        if (organizationShortCodeInput) {
+          organizationShortCodeInput.addEventListener('input', function (event) {
+            event.target.value = (event.target.value || '').toString().toUpperCase();
+            syncAllLocationEnrollmentCodes();
+          });
+        }
+
         function renderLocations() {
           clearAutocompleteInstances();
           locationsStack.innerHTML = '';
@@ -839,6 +879,7 @@
             var card = fragment.querySelector('[data-location-card]');
             var locationBody = fragment.querySelector('[data-location-body]');
             var toggleBtn = fragment.querySelector('[data-toggle-location]');
+            var enrollmentField = fragment.querySelector('[data-field="enrollmentCode"]');
             card.setAttribute('data-address-scope', 'location-' + index);
             fragment.querySelector('[data-location-index]').textContent = String(index + 1);
             if (location.expanded === false) {
@@ -854,12 +895,34 @@
               var key = field.getAttribute('data-field');
               field.value = location[key] || '';
               field.addEventListener('input', function (event) {
+                if (key === 'enrollmentCode') {
+                  var manualValue = normalizeEnrollmentFragment(event.target.value);
+                  var autoValue = buildDefaultEnrollmentCode(locations[index].zipCode, organizationShortCodeInput ? organizationShortCodeInput.value : '');
+                  if (!manualValue) {
+                    locations[index].enrollmentCode = '';
+                    locations[index].enrollmentCodeManual = false;
+                    syncLocationEnrollmentCode(index, event.target);
+                    return;
+                  }
+                  locations[index].enrollmentCode = manualValue;
+                  locations[index].lastAutoEnrollmentCode = autoValue;
+                  locations[index].enrollmentCodeManual = manualValue !== autoValue;
+                  event.target.value = manualValue;
+                  return;
+                }
                 locations[index][key] = event.target.value;
+                if (key === 'zipCode') {
+                  syncLocationEnrollmentCode(index, enrollmentField);
+                }
               });
               field.addEventListener('change', function (event) {
                 locations[index][key] = event.target.value;
+                if (key === 'zipCode') {
+                  syncLocationEnrollmentCode(index, enrollmentField);
+                }
               });
             });
+            syncLocationEnrollmentCode(index, enrollmentField);
             toggleBtn.addEventListener('click', function () {
               locations[index].expanded = locations[index].expanded === false;
               renderLocations();

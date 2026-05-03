@@ -51,6 +51,16 @@ function normalizePhone(value) {
   return safeString(value).trim();
 }
 
+function normalizeEnrollmentFragment(value) {
+  return safeString(value).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function buildDefaultEnrollmentCode(zipCode, organizationShortCode) {
+  const zip = normalizeEnrollmentFragment(zipCode);
+  const shortCode = normalizeEnrollmentFragment(organizationShortCode);
+  return `${zip}${shortCode}` || zip || shortCode;
+}
+
 function normalizeProgramTypeValue(value) {
   const normalized = safeString(value).trim();
   if (normalized === 'earlyInterventionAcademy') return 'earlyInterventionAcademy';
@@ -182,11 +192,11 @@ function verifySubmissionToken({ submissionId, token, tokenHash }) {
   return sha256Hex(`${submissionId}:${token}:${getOrgIntakeSecret()}`) === tokenHash;
 }
 
-function normalizeIntakeLocation(location, index) {
+function normalizeIntakeLocation(location, index, organizationShortCode) {
   const normalizedName = safeString(location?.name).trim();
   const normalizedProgramName = safeString(location?.programName).trim();
   const zipCode = safeString(location?.zipCode).trim();
-  const enrollmentCode = safeString(location?.enrollmentCode).trim() || zipCode;
+  const enrollmentCode = normalizeEnrollmentFragment(location?.enrollmentCode) || buildDefaultEnrollmentCode(zipCode, organizationShortCode) || normalizeEnrollmentFragment(zipCode);
   return {
     id: slugify(`${normalizedName || `location-${index + 1}`}-${enrollmentCode || index + 1}`) || `location-${index + 1}`,
     programName: normalizedProgramName,
@@ -211,7 +221,7 @@ function normalizeIntakeSubmission(payload) {
   const organizationName = safeString(payload?.organizationName).trim();
   const organizationShortCode = safeString(payload?.organizationShortCode).trim().toUpperCase();
   const organizationId = slugify(organizationShortCode || organizationName) || 'organization';
-  const locations = (Array.isArray(payload?.locations) ? payload.locations : []).map(normalizeIntakeLocation);
+  const locations = (Array.isArray(payload?.locations) ? payload.locations : []).map((location, index) => normalizeIntakeLocation(location, index, organizationShortCode));
   const programs = uniqueBy(locations.map((location) => ({
     id: location.programSlug,
     name: location.programName,
@@ -585,7 +595,7 @@ async function sendOrganizationIntakeConfirmationEmail({ to, submission }) {
   });
 }
 
-async function sendOrganizationDecisionEmail({ to, submission, decision, publicBaseUrl }) {
+async function sendOrganizationDecisionEmail({ to, submission, decision, publicBaseUrl, primaryContactInvite = null }) {
   if (!to) return;
   const { from, transporter } = getOrganizationIntakeMailer();
   const organizationName = submission.organization?.directoryName || submission.organization?.name || 'your organization';
@@ -597,8 +607,8 @@ async function sendOrganizationDecisionEmail({ to, submission, decision, publicB
     from,
     to,
     subject,
-    text: buildApplicantDecisionEmailText({ submission, decision, publicBaseUrl }),
-    html: buildApplicantDecisionEmailHtml({ submission, decision, publicBaseUrl }),
+    text: buildApplicantDecisionEmailText({ submission, decision, publicBaseUrl, primaryContactInvite }),
+    html: buildApplicantDecisionEmailHtml({ submission, decision, publicBaseUrl, primaryContactInvite }),
   });
 }
 
