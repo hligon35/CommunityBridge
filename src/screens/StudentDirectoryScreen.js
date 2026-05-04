@@ -21,7 +21,6 @@ export default function StudentDirectoryScreen() {
   const { user } = useAuth();
   const { children = [], parents = [], therapists = [] } = useData();
   const isBcba = isBcbaRole(user?.role);
-  const isTherapist = role === 'therapist';
   const isOffice = isOfficeAdminRole(user?.role);
   const [query, setQuery] = useState('');
   const [roomFilter, setRoomFilter] = useState('all');

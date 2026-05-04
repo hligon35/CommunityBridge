@@ -42,19 +42,19 @@ function buildPayload() {
   };
 }
 
-test('normalizeIntakeSubmission assigns the primary contact as super admin', () => {
+test('normalizeIntakeSubmission assigns the primary contact as org admin', () => {
   const submission = normalizeIntakeSubmission(buildPayload());
-  assert.equal(submission.contact.role, 'superAdmin');
+  assert.equal(submission.contact.role, 'orgAdmin');
   assert.equal(submission.organization.id, 'slc');
 });
 
-test('buildPrimaryContactMembership scopes the primary contact to the organization as super admin', () => {
-  assert.deepEqual(buildPrimaryContactMembership('org-123', 'superAdmin'), [
+test('buildPrimaryContactMembership scopes the primary contact to the organization as org admin', () => {
+  assert.deepEqual(buildPrimaryContactMembership('org-123', 'orgAdmin'), [
     {
       organizationId: 'org-123',
       programId: '',
       campusId: '',
-      role: 'superAdmin',
+      role: 'orgAdmin',
     },
   ]);
 });

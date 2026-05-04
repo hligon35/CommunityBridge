@@ -610,6 +610,8 @@ function normalizeE164Phone(input) {
   const raw = String(input || '').trim();
   if (!raw) return '';
   const cleaned = raw.replace(/[\s\-().]/g, '');
+  if (/^\d{10}$/.test(cleaned)) return `+1${cleaned}`;
+  if (/^1\d{10}$/.test(cleaned)) return `+${cleaned}`;
   if (!cleaned.startsWith('+')) return '';
   if (!/^\+[1-9]\d{7,14}$/.test(cleaned)) return '';
   return cleaned;
@@ -1795,18 +1797,25 @@ async function seedAdminUser() {
     if (!(ADMIN_EMAIL && ADMIN_PASSWORD)) return;
     const normalizedAdminEmail = String(ADMIN_EMAIL).trim().toLowerCase();
     const existing = await pgQueryOne('SELECT id FROM users WHERE lower(email) = $1', [normalizedAdminEmail]);
-    if (existing) return;
-
-    const id = nanoId();
     const hash = bcrypt.hashSync(ADMIN_PASSWORD, 12);
     const t = new Date();
+    if (!existing) {
+      const id = nanoId();
+      await pool.query(
+        'INSERT INTO users (id,email,password_hash,name,role,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [id, normalizedAdminEmail, hash, ADMIN_NAME, 'superAdmin', t, t]
+      );
+      // eslint-disable-next-line no-console
+      console.log('[api] Seeded admin user:', normalizedAdminEmail);
+      return;
+    }
 
     await pool.query(
-      'INSERT INTO users (id,email,password_hash,name,role,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-      [id, normalizedAdminEmail, hash, ADMIN_NAME, 'ADMIN', t, t]
+      'UPDATE users SET password_hash = $1, name = $2, role = $3, updated_at = $4 WHERE id = $5',
+      [hash, ADMIN_NAME, 'superAdmin', t, existing.id]
     );
     // eslint-disable-next-line no-console
-    console.log('[api] Seeded admin user:', normalizedAdminEmail);
+    console.log('[api] Refreshed seeded admin user:', normalizedAdminEmail);
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[api] Admin seed failed:', e && e.message ? e.message : String(e));
@@ -4376,6 +4385,7 @@ app.get('/api/admin/users', authMiddleware, requireAdmin, requireCapability('use
       []
     );
     const firebaseProfiles = await getFirebaseManagedProfiles((rows || []).map((row) => row.id)).catch(() => new Map());
+    const inviteRows = new Map(await Promise.all((rows || []).map(async (row) => [row.id, serializeAccessInviteRow(await getLatestAccessInviteRowForUser(row.id))])));
     const items = (rows || []).map((row) => ({
       id: row.id,
       email: row.email,
@@ -4388,12 +4398,59 @@ app.get('/api/admin/users', authMiddleware, requireAdmin, requireCapability('use
       programIds: firebaseProfiles.get(row.id)?.programIds || [],
       campusIds: firebaseProfiles.get(row.id)?.campusIds || [],
       memberships: firebaseProfiles.get(row.id)?.memberships || [],
+      invite: inviteRows.get(row.id) || null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
     return res.json({ ok: true, items: filterManageableUsers(req.user, items) });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || 'list users failed' });
+  }
+});
+
+app.post('/api/admin/users/invite', authMiddleware, requireAdmin, requireCapability('users:manage'), async (req, res) => {
+  const email = normalizeEmail(req.body && req.body.email);
+  const role = normalizeManagedInviteRole(req.body && req.body.role);
+  const name = safeString(req.body && req.body.name).trim();
+  const phone = safeString(req.body && req.body.phone).trim();
+  const address = safeString(req.body && req.body.address).trim();
+  const organizationId = safeString(req.body && req.body.organizationId).trim();
+  const programIds = normalizeManagedIdList(req.body && req.body.programIds);
+  const campusIds = normalizeManagedIdList(req.body && req.body.campusIds);
+  const memberships = Array.isArray(req.body?.memberships) ? req.body.memberships : [];
+
+  if (!email) return res.status(400).json({ ok: false, error: 'email required' });
+  if (!role) return res.status(400).json({ ok: false, error: 'role required' });
+  if (isAdminRole(role) && !isSuperAdminRole(req.user?.role)) {
+    return res.status(403).json({ ok: false, error: 'super admin required to assign elevated roles' });
+  }
+
+  try {
+    const result = await createOrRefreshManagedAccessInvite({
+      req,
+      email,
+      role,
+      name,
+      phone,
+      address,
+      organizationId,
+      programIds,
+      campusIds,
+      memberships,
+      inviteType: 'staff',
+      sourceSubmissionId: '',
+      userId: '',
+    });
+    await recordAuditLog({
+      actorId: req.user?.id,
+      action: 'admin_user.invited',
+      targetType: 'user',
+      targetId: result.user?.id,
+      details: { role, email },
+    });
+    return res.json({ ok: true, user: result.user, invite: result.invite });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || 'invite failed' });
   }
 });
 
@@ -4514,6 +4571,7 @@ app.put('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapabil
     const row = await pgQueryOne('SELECT id,email,name,avatar,phone,address,role,created_at,updated_at FROM users WHERE id = $1', [userId]);
     const firebaseProfile = await getFirebaseManagedProfiles([userId]).catch(() => new Map());
     const scope = firebaseProfile.get(userId) || {};
+    const latestInvite = serializeAccessInviteRow(await getLatestAccessInviteRowForUser(userId));
     slog.info('admin', 'Managed user updated', {
       actorId: req.user?.id,
       targetUserId: userId,
@@ -4543,11 +4601,61 @@ app.put('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapabil
       programIds: scope.programIds || [],
       campusIds: scope.campusIds || [],
       memberships: scope.memberships || [],
+      invite: latestInvite,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     } });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || 'admin update failed' });
+  }
+});
+
+app.post('/api/admin/users/:userId/invite-resend', authMiddleware, requireAdmin, requireCapability('users:manage'), async (req, res) => {
+  const userId = safeString(req.params && req.params.userId).trim();
+  if (!userId) return res.status(400).json({ ok: false, error: 'userId required' });
+
+  try {
+    const existingUser = await pgQueryOne('SELECT id,email,name,phone,address,role FROM users WHERE id = $1', [userId]);
+    if (!existingUser) return res.status(404).json({ ok: false, error: 'user not found' });
+
+    const requesterIsSuperAdmin = isSuperAdminRole(req.user?.role);
+    const targetIsSuperAdmin = isSuperAdminRole(existingUser.role);
+    const targetProfile = await getFirebaseManagedProfiles([userId]).catch(() => new Map());
+    const scope = targetProfile.get(userId) || {};
+    const targetScopedUser = normalizeScopedUser({ ...existingUser, ...scope });
+    if (targetIsSuperAdmin && !requesterIsSuperAdmin) {
+      return res.status(403).json({ ok: false, error: 'super admin required to manage this user' });
+    }
+    if (!canManageTargetUser(req.user, targetScopedUser)) {
+      return res.status(403).json({ ok: false, error: 'target user is outside your admin scope' });
+    }
+
+    const latestInvite = await getLatestAccessInviteRowForUser(userId);
+    const result = await createOrRefreshManagedAccessInvite({
+      req,
+      email: existingUser.email,
+      role: existingUser.role,
+      name: existingUser.name,
+      phone: existingUser.phone,
+      address: existingUser.address,
+      organizationId: scope.organizationId || '',
+      programIds: scope.programIds || [],
+      campusIds: scope.campusIds || [],
+      memberships: scope.memberships || [],
+      inviteType: safeString(latestInvite?.invite_type).trim() || 'staff',
+      sourceSubmissionId: safeString(latestInvite?.source_submission_id).trim(),
+      userId,
+    });
+    await recordAuditLog({
+      actorId: req.user?.id,
+      action: 'admin_user.invite_resent',
+      targetType: 'user',
+      targetId: userId,
+      details: { email: existingUser.email },
+    });
+    return res.json({ ok: true, user: result.user, invite: result.invite });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || 'invite resend failed' });
   }
 });
 

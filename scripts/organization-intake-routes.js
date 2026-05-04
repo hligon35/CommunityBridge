@@ -226,7 +226,7 @@ function randomBootstrapPassword() {
 
 function buildPrimaryContactMembership(organizationId, role) {
   const orgId = safeString(organizationId).trim();
-  const normalizedRole = safeString(role).trim() || 'superAdmin';
+  const normalizedRole = safeString(role).trim() || 'orgAdmin';
   if (!orgId) return [];
   return [{ organizationId: orgId, programId: '', campusId: '', role: normalizedRole }];
 }
@@ -266,7 +266,7 @@ async function upsertPendingPrimaryContact(submissionRef, submission) {
   const email = normalizeEmail(submission?.contact?.email);
   if (!email) return '';
 
-  const role = safeString(submission?.contact?.role).trim() || 'superAdmin';
+  const role = safeString(submission?.contact?.role).trim() || 'orgAdmin';
   const organizationId = safeString(submission?.organization?.id).trim();
   const displayName = safeString(submission?.contact?.name).trim() || email;
 
@@ -313,7 +313,7 @@ async function activateApprovedPrimaryContact({ submissionRef, submission, userI
   const uid = safeString(userId).trim();
   if (!uid) return;
   const admin = getAdmin();
-  const role = safeString(submission?.contact?.role).trim() || 'superAdmin';
+  const role = safeString(submission?.contact?.role).trim() || 'orgAdmin';
   const organizationId = safeString(submission?.organization?.id).trim();
 
   await admin.firestore().collection('users').doc(uid).set({
@@ -396,7 +396,7 @@ function normalizeIntakeSubmission(payload) {
       title: safeString(payload?.contactTitle).trim(),
       email: normalizeEmail(payload?.contactEmail),
       phone: normalizePhone(payload?.contactPhone),
-      role: 'superAdmin',
+      role: 'orgAdmin',
     },
     programs,
     locations: locationsWithProgramIds,
@@ -596,7 +596,7 @@ function buildApplicantDecisionEmailHtml({ submission, decision, publicBaseUrl, 
     ? buildEmailSection({
         title: 'Primary contact login access',
         body: [
-          '<p style="margin:0 0 10px;">Use the branded CommunityBridge access link below to open temporary Super Admin access for the primary contact email from your onboarding form.</p>',
+          '<p style="margin:0 0 10px;">Use the branded CommunityBridge access link below to open temporary organization admin access for the primary contact email from your onboarding form.</p>',
           primaryContactInvite.approvalLink
             ? `<p style="margin:0 0 10px;"><a href="${htmlEscape(primaryContactInvite.approvalLink)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#2563eb;color:#ffffff;font-weight:800;text-decoration:none;">Open CommunityBridge</a></p>`
             : '',

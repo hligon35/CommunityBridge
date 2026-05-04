@@ -489,8 +489,9 @@ function getTwilioClient() {
 function normalizeE164Phone(input) {
   const raw = String(input || '').trim();
   if (!raw) return '';
-  // allow spaces/dashes/parentheses; require leading + for international safety
   const cleaned = raw.replace(/[\s\-().]/g, '');
+  if (/^\d{10}$/.test(cleaned)) return `+1${cleaned}`;
+  if (/^1\d{10}$/.test(cleaned)) return `+${cleaned}`;
   if (!cleaned.startsWith('+')) return '';
   const digits = cleaned.slice(1).replace(/\D/g, '');
   const out = `+${digits}`;
@@ -2204,13 +2205,17 @@ try {
   if (db && ADMIN_EMAIL && ADMIN_PASSWORD) {
     const normalizedAdminEmail = String(ADMIN_EMAIL).trim().toLowerCase();
     const existing = db.prepare('SELECT id FROM users WHERE lower(email) = ?').get(normalizedAdminEmail);
+    const hash = bcrypt.hashSync(ADMIN_PASSWORD, 12);
+    const t = nowISO();
     if (!existing) {
       const id = nanoId();
-      const hash = bcrypt.hashSync(ADMIN_PASSWORD, 12);
-      const t = nowISO();
       db.prepare('INSERT INTO users (id,email,password_hash,name,role,created_at,updated_at) VALUES (?,?,?,?,?,?,?)')
-        .run(id, normalizedAdminEmail, hash, ADMIN_NAME, 'ADMIN', t, t);
+        .run(id, normalizedAdminEmail, hash, ADMIN_NAME, 'superAdmin', t, t);
       console.log('[api] Seeded admin user:', normalizedAdminEmail);
+    } else {
+      db.prepare('UPDATE users SET password_hash = ?, name = ?, role = ?, updated_at = ? WHERE id = ?')
+        .run(hash, ADMIN_NAME, 'superAdmin', t, existing.id);
+      console.log('[api] Refreshed seeded admin user:', normalizedAdminEmail);
     }
   }
 } catch (e) {

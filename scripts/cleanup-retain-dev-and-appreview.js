@@ -11,6 +11,7 @@ const DRY = process.argv.includes('--dry') || process.argv.includes('-n');
 const PRESERVE_EMAILS = Array.from(new Set([
   'dev@communitybridge.app',
   'appreview@communitybridge.app',
+  'alphazonelabsllc@gmail.com',
   ...String(process.env.CB_PRESERVE_EMAILS || process.env.BB_PRESERVE_EMAILS || '')
     .split(',')
     .map((value) => String(value || '').trim().toLowerCase())
