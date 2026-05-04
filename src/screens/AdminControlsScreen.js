@@ -5,13 +5,14 @@ import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { isBcbaRole } from '../core/tenant/models';
+import useIsTabletLayout from '../hooks/useIsTabletLayout';
 
-function Tile({ label, value, hint, accent = '#2563eb' }) {
+function Tile({ label, value, hint, accent = '#2563eb', compact = false }) {
   return (
-    <View style={styles.tile}>
-      <Text style={[styles.tileValue, { color: accent }]}>{value}</Text>
+    <View style={[styles.tile, compact ? styles.tileCompact : null]}>
+      <Text style={[styles.tileValue, compact ? styles.tileValueCompact : null, { color: accent }]}>{value}</Text>
       <Text style={styles.tileLabel}>{label}</Text>
-      <Text style={styles.tileHint}>{hint}</Text>
+      <Text style={[styles.tileHint, compact ? styles.tileHintCompact : null]}>{hint}</Text>
     </View>
   );
 }
@@ -96,7 +97,12 @@ export default function AdminControlsScreen() {
   const { user } = useAuth();
   const { children = [], therapists = [], urgentMemos = [] } = useData();
   const isBcba = isBcbaRole(user?.role);
-  const showFourUpTiles = width >= 900;
+  const isTabletLayout = useIsTabletLayout();
+  const estimatedContentWidth = Math.max(320, width - (isTabletLayout ? 320 : 48));
+  const showFourUpTiles = estimatedContentWidth >= 1120;
+  const showTwoUpTiles = estimatedContentWidth >= 640;
+  const useCompactTiles = estimatedContentWidth < 860;
+  const showChartGrid = estimatedContentWidth >= 900;
 
   const summary = useMemo(() => {
     const sessionsToday = (children || []).filter((child) => child?.dropoffTimeISO || child?.pickupTimeISO).length;
@@ -139,35 +145,56 @@ export default function AdminControlsScreen() {
         </View>
 
         <View style={[styles.tileRow, showFourUpTiles ? styles.tileRowWide : null]}>
-          <View style={[styles.tileWrap, showFourUpTiles ? styles.tileWrapWide : null]}>
-            <Tile label="Sessions today" value={summary.sessionsToday} hint="Scheduled and tracked learner sessions." />
+          <View style={[
+            styles.tileWrap,
+            showTwoUpTiles ? styles.tileWrapHalf : styles.tileWrapStacked,
+            showFourUpTiles ? styles.tileWrapWide : null,
+          ]}>
+            <Tile label="Sessions today" value={summary.sessionsToday} hint="Scheduled and tracked learner sessions." compact={useCompactTiles} />
           </View>
-          <View style={[styles.tileWrap, showFourUpTiles ? styles.tileWrapWide : null]}>
-            <Tile label="Cancellations" value={summary.cancellations} hint="Canceled or interrupted sessions needing review." accent="#dc2626" />
+          <View style={[
+            styles.tileWrap,
+            showTwoUpTiles ? styles.tileWrapHalf : styles.tileWrapStacked,
+            showFourUpTiles ? styles.tileWrapWide : null,
+          ]}>
+            <Tile label="Cancellations" value={summary.cancellations} hint="Canceled or interrupted sessions needing review." accent="#dc2626" compact={useCompactTiles} />
           </View>
-          <View style={[styles.tileWrap, showFourUpTiles ? styles.tileWrapWide : null]}>
-            <Tile label="Incidents" value={summary.incidents} hint="Behavior and operational incident volume." accent="#f59e0b" />
+          <View style={[
+            styles.tileWrap,
+            showTwoUpTiles ? styles.tileWrapHalf : styles.tileWrapStacked,
+            showFourUpTiles ? styles.tileWrapWide : null,
+          ]}>
+            <Tile label="Incidents" value={summary.incidents} hint="Behavior and operational incident volume." accent="#f59e0b" compact={useCompactTiles} />
           </View>
-          <View style={[styles.tileWrap, showFourUpTiles ? styles.tileWrapWide : null]}>
-            <Tile label="Overdue notes" value={summary.overdueNotes} hint="Learners missing updated notes or plan details." accent="#7c3aed" />
+          <View style={[
+            styles.tileWrap,
+            showTwoUpTiles ? styles.tileWrapHalf : styles.tileWrapStacked,
+            showFourUpTiles ? styles.tileWrapWide : null,
+          ]}>
+            <Tile label="Overdue notes" value={summary.overdueNotes} hint="Learners missing updated notes or plan details." accent="#7c3aed" compact={useCompactTiles} />
           </View>
         </View>
 
-        <TrendCard title="Attendance trends" items={summary.attendanceTrend} accent="#0ea5e9" />
-        {isBcba ? <TrendCard title="Behavior incidents" items={summary.behaviorTrend} accent="#dc2626" horizontalInset={36} /> : null}
-        <TrendCard title="Staff utilization" items={summary.staffUtilization} accent="#16a34a" />
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Alerts</Text>
-          {alerts.map((item) => (
-            <View key={item.id} style={styles.alertRow}>
-              <MaterialIcons name="notification-important" size={18} color="#2563eb" />
-              <View style={styles.alertTextWrap}>
-                <Text style={styles.alertTitle}>{item.title}</Text>
-                <Text style={styles.alertBody}>{item.body}</Text>
-              </View>
+        <View style={[styles.dashboardGrid, showChartGrid ? styles.dashboardGridWide : null]}>
+          <View style={[styles.dashboardColumn, showChartGrid ? styles.dashboardColumnWide : null]}>
+            <TrendCard title="Attendance trends" items={summary.attendanceTrend} accent="#0ea5e9" />
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Alerts</Text>
+              {alerts.map((item) => (
+                <View key={item.id} style={styles.alertRow}>
+                  <MaterialIcons name="notification-important" size={18} color="#2563eb" />
+                  <View style={styles.alertTextWrap}>
+                    <Text style={styles.alertTitle}>{item.title}</Text>
+                    <Text style={styles.alertBody}>{item.body}</Text>
+                  </View>
+                </View>
+              ))}
             </View>
-          ))}
+          </View>
+          <View style={[styles.dashboardColumn, showChartGrid ? styles.dashboardColumnWide : null]}>
+            {isBcba ? <TrendCard title="Behavior incidents" items={summary.behaviorTrend} accent="#dc2626" horizontalInset={36} /> : null}
+            <TrendCard title="Staff utilization" items={summary.staffUtilization} accent="#16a34a" />
+          </View>
         </View>
       </ScrollView>
     </ScreenWrapper>
@@ -183,14 +210,23 @@ const styles = StyleSheet.create({
   subtitle: { marginTop: 8, color: '#475569', lineHeight: 20 },
   tileRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 14, alignItems: 'stretch' },
   tileRowWide: { marginHorizontal: -6 },
-  tileWrap: { width: '48%', marginBottom: 12 },
+  tileWrap: { marginBottom: 12 },
+  tileWrapStacked: { width: '100%' },
+  tileWrapHalf: { width: '48.5%' },
   tileWrapWide: { width: '25%', paddingHorizontal: 6 },
-  tile: { width: '100%', minHeight: 170, height: '100%', borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },
+  tile: { width: '100%', minHeight: 128, height: '100%', borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },
+  tileCompact: { minHeight: 112, paddingVertical: 14, paddingHorizontal: 14 },
   tileValue: { fontSize: 26, fontWeight: '800' },
+  tileValueCompact: { fontSize: 24 },
   tileLabel: { marginTop: 6, fontWeight: '800', color: '#0f172a' },
   tileHint: { marginTop: 6, color: '#64748b', lineHeight: 18 },
+  tileHintCompact: { lineHeight: 16 },
   card: { marginTop: 12, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },
   cardTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 12 },
+  dashboardGrid: { marginTop: 0 },
+  dashboardGridWide: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  dashboardColumn: { width: '100%' },
+  dashboardColumnWide: { width: '48.8%' },
   lineChartWrap: { overflow: 'hidden', width: '100%' },
   lineChartSurface: { position: 'relative', width: '100%' },
   yAxisLabelWrap: { position: 'absolute', left: 0, width: 24, alignItems: 'flex-end' },

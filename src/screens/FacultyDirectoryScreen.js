@@ -6,7 +6,7 @@ import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { isBcbaRole, isOfficeAdminRole } from '../core/tenant/models';
 import { avatarSourceFor } from '../utils/idVisibility';
-import { THERAPY_ROLE_LABELS } from '../utils/roleTerminology';
+import { getDisplayRoleLabel } from '../utils/roleTerminology';
 import * as Api from '../Api';
 
 function Chip({ label, active, onPress }) {
@@ -67,18 +67,23 @@ export default function FacultyDirectoryScreen() {
     });
     const normalized = query.trim().toLowerCase();
     return (therapists || [])
-      .map((staff) => ({
-        ...staff,
-        caseload: caseloadById.get(staff?.id) || [],
-        workspace: workspaceMap[staff?.id] || {},
-      }))
+      .map((staff) => {
+        const rawRole = String(staff?.role || '').trim();
+        return {
+          ...staff,
+          rawRole,
+          displayRole: getDisplayRoleLabel(rawRole || 'Staff') || 'Staff',
+          caseload: caseloadById.get(staff?.id) || [],
+          workspace: workspaceMap[staff?.id] || {},
+        };
+      })
       .filter((staff) => {
-        const normalizedRole = String(staff?.role || '').toLowerCase();
+        const normalizedRole = String(staff?.rawRole || '').toLowerCase();
         if (roleFilter === 'bcba' && !normalizedRole.includes('bcba')) return false;
         if (roleFilter === 'rbt' && normalizedRole.includes('bcba')) return false;
         if (roleFilter === 'admin' && !normalizedRole.includes('admin')) return false;
         if (!normalized) return true;
-        return [staff?.name, staff?.role, staff?.email, staff?.phone].filter(Boolean).join(' ').toLowerCase().includes(normalized);
+        return [staff?.name, staff?.displayRole, staff?.email, staff?.phone].filter(Boolean).join(' ').toLowerCase().includes(normalized);
       });
   }, [children, query, roleFilter, therapists, workspaceMap]);
 
@@ -99,7 +104,7 @@ export default function FacultyDirectoryScreen() {
       return (
         <>
           <Text style={styles.sectionTitle}>Overview</Text>
-          <Text style={styles.detailText}>{selectedStaff.role || 'Staff'} • {selectedStaff.email || 'No email'} • {selectedStaff.phone || 'No phone'}</Text>
+          <Text style={styles.detailText}>{selectedStaff.displayRole || 'Staff'} • {selectedStaff.email || 'No email'} • {selectedStaff.phone || 'No phone'}</Text>
           <Text style={styles.detailText}>{selectedStaff.caseload.length} assigned learner{selectedStaff.caseload.length === 1 ? '' : 's'}.</Text>
         </>
       );
@@ -172,7 +177,7 @@ export default function FacultyDirectoryScreen() {
                 <Image source={avatarSourceFor(staff)} style={styles.avatar} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rosterName}>{staff.name || 'Staff'}</Text>
-                  <Text style={styles.rosterMeta}>{staff.role || 'Role not set'}</Text>
+                  <Text style={styles.rosterMeta}>{staff.displayRole || 'Role not set'}</Text>
                 </View>
               </TouchableOpacity>
             ))}
@@ -185,7 +190,7 @@ export default function FacultyDirectoryScreen() {
                   <Image source={avatarSourceFor(selectedStaff)} style={styles.profileAvatar} />
                   <View style={{ flex: 1, marginLeft: 12 }}>
                     <Text style={styles.profileName}>{selectedStaff.name || 'Staff'}</Text>
-                    <Text style={styles.profileMeta}>{selectedStaff.role || 'Role not set'}</Text>
+                    <Text style={styles.profileMeta}>{selectedStaff.displayRole || 'Role not set'}</Text>
                   </View>
                 </View>
                 <View style={styles.chipRow}>

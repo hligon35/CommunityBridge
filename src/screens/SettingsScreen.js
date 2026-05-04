@@ -14,6 +14,7 @@ import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
 import { SETTINGS_KEYS, readBooleanSetting, writeBooleanSetting } from '../utils/appSettings';
 import { isAdminRole } from '../core/tenant/models';
+import useIsTabletLayout from '../hooks/useIsTabletLayout';
 
 const editIconImage = require('../../assets/icons/edit.png');
 const checkUpdatesIcon = require('../../assets/icons/checkUpdates.png');
@@ -33,6 +34,7 @@ const SHOW_PHONE_KEY = SETTINGS_KEYS.showPhone;
 export default function SettingsScreen({ navigation }) {
   const { user, logout, setRole } = useAuth();
   const isWeb = Platform.OS === 'web';
+  const isTabletLayout = useIsTabletLayout();
 
   const appVersion = Constants?.expoConfig?.version || Constants?.manifest?.version || '';
   const iosBuildNumber = Constants?.expoConfig?.ios?.buildNumber || '';
@@ -538,7 +540,7 @@ export default function SettingsScreen({ navigation }) {
           </View>
 
           {/* EAS Update status (useful for verifying OTA updates) */}
-          {Platform.OS !== 'web' ? (
+          {Platform.OS !== 'web' && !isTabletLayout ? (
             <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: '#eef2f7', paddingTop: 12 }}>
               <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8 }}>App Update Status</Text>
               <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>

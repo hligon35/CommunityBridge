@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Alert, Image, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import * as Updates from 'expo-updates';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { useTenant } from '../core/tenant/TenantContext';
@@ -11,6 +12,8 @@ import { navigationRef } from '../navigationRef';
 import { THERAPY_ROLE_LABELS, getWorkspaceLabel } from '../utils/roleTerminology';
 import LogoTitle from './LogoTitle';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const checkUpdatesIcon = require('../../assets/icons/checkUpdates.png');
 
 function openTarget(target) {
   if (!navigationRef?.isReady?.()) return;
@@ -40,6 +43,7 @@ export default function TabletNavigationShell({ currentRoute, children }) {
   const [quickMenuOpen, setQuickMenuOpen] = useState(false);
   const [quickLogType, setQuickLogType] = useState('');
   const [quickLogValue, setQuickLogValue] = useState('');
+  const [updateBusy, setUpdateBusy] = useState(false);
   const isStaff = isStaffRole(user?.role);
   const showAdminWorkspace = canAccessAdminWorkspace(user?.role);
   const isParentWorkspace = !showAdminWorkspace && !isStaff;
@@ -105,6 +109,43 @@ export default function TabletNavigationShell({ currentRoute, children }) {
     Alert.alert('Logged', `${quickLogType} saved for ${activeQuickChild?.name || 'the selected learner'}.`);
     setQuickLogValue('');
     setQuickLogType('');
+  }
+
+  async function checkForOtaUpdate() {
+    if (Platform.OS === 'web') {
+      Alert.alert('Not supported', 'EAS Update is not supported on web.');
+      return;
+    }
+    if (!Updates.isEnabled) {
+      Alert.alert(
+        'Updates disabled',
+        'This build does not have expo-updates enabled, or you are running a dev session. Install an EAS-built binary to receive OTA updates.'
+      );
+      return;
+    }
+
+    try {
+      setUpdateBusy(true);
+      const result = await Updates.checkForUpdateAsync();
+      if (!result.isAvailable) {
+        Alert.alert('Up to date', 'No update is available for this channel/runtime version.');
+        return;
+      }
+
+      await Updates.fetchUpdateAsync();
+      Alert.alert(
+        'Update downloaded',
+        'Restart the app to apply it now.',
+        [
+          { text: 'Later', style: 'cancel' },
+          { text: 'Restart now', onPress: () => Updates.reloadAsync().catch(() => {}) },
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Update check failed', error?.message || String(error));
+    } finally {
+      setUpdateBusy(false);
+    }
   }
 
   const navGroups = useMemo(() => {
@@ -181,7 +222,10 @@ export default function TabletNavigationShell({ currentRoute, children }) {
               })}
             </View>
           ))}
-
+          <TouchableOpacity style={[styles.drawerUtilityButton, updateBusy ? styles.drawerUtilityButtonDisabled : null]} onPress={checkForOtaUpdate} disabled={updateBusy}>
+            <Image source={checkUpdatesIcon} style={[styles.drawerUtilityIcon, updateBusy ? styles.drawerUtilityIconDisabled : null]} resizeMode="contain" />
+            {!collapsed ? <Text style={styles.drawerUtilityText}>{updateBusy ? 'Checking…' : 'Check for updates'}</Text> : null}
+          </TouchableOpacity>
           <TouchableOpacity style={styles.logoutButton} onPress={() => logout?.()}>
             <MaterialIcons name="logout" size={20} color="#fecaca" />
             {!collapsed ? <Text style={styles.logoutText}>Logout</Text> : null}
@@ -270,7 +314,12 @@ const styles = StyleSheet.create({
   navItemActive: { backgroundColor: '#e0f2fe' },
   navLabel: { color: '#e2e8f0', fontWeight: '700', marginLeft: 10 },
   navLabelActive: { color: '#0f172a' },
-  logoutButton: { marginTop: 'auto', flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#1e293b' },
+  drawerUtilityButton: { marginTop: 'auto', flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#1e293b', marginBottom: 8 },
+  drawerUtilityButtonDisabled: { opacity: 0.72 },
+  drawerUtilityIcon: { width: 20, height: 20 },
+  drawerUtilityIconDisabled: { opacity: 0.5 },
+  drawerUtilityText: { color: '#e2e8f0', fontWeight: '700', marginLeft: 10 },
+  logoutButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#1e293b' },
   logoutText: { color: '#fecaca', fontWeight: '700', marginLeft: 10 },
   contentWrap: { flex: 1, paddingHorizontal: 12, position: 'relative' },
   quickMenuDismissLayer: { ...StyleSheet.absoluteFillObject, zIndex: 20 },
