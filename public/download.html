@@ -14,14 +14,13 @@
         }
       })();
     </script>
-    <title>Download CommunityBridge – iPhone, iPad, and Android</title>
-    <meta name="description" content="Download CommunityBridge for iPhone, iPad, and Android. Family updates, direct messages, urgent memos, and therapy schedules in one app." />
-    <meta name="theme-color" content="#0b1220" />
+    <title>Download CommunityBridge – mobile and browser access</title>
+    <meta name="description" content="Download CommunityBridge for iPhone, iPad, and Android, or open the web app in your browser. Role-based access for families, ABA teams, and office staff." />
     <link rel="canonical" href="https://communitybridge.app/download" />
 
     <meta property="og:site_name" content="CommunityBridge" />
-    <meta property="og:title" content="Download CommunityBridge – iPhone, iPad, and Android" />
-    <meta property="og:description" content="Download CommunityBridge for iPhone/iPad and Android." />
+    <meta property="og:title" content="Download CommunityBridge – mobile and browser access" />
+    <meta property="og:description" content="Install CommunityBridge on mobile or open the web app in your browser." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://communitybridge.app/download" />
     <meta property="og:image" content="https://communitybridge.app/og-image.png" />
@@ -29,7 +28,7 @@
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Download CommunityBridge" />
-    <meta name="twitter:description" content="Get CommunityBridge for iPhone, iPad, and Android." />
+    <meta name="twitter:description" content="Install CommunityBridge on mobile or open the web app in your browser." />
     <meta name="twitter:image" content="https://communitybridge.app/og-image.png" />
 
     <script type="application/ld+json">
@@ -41,7 +40,7 @@
         "applicationCategory": "CommunicationApplication",
         "url": "https://communitybridge.app/download",
         "image": "https://communitybridge.app/og-image.png",
-        "description": "Family updates, direct messages, urgent memos, and therapy schedules in one secure app."
+        "description": "Role-based coordination for families, ABA teams, office staff, and administrators across mobile and web."
       }
     </script>
     <style>
@@ -60,20 +59,25 @@
       .small{font-size: 12px; color: var(--muted)}
       .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; color: var(--muted)}
       .hr{height:1px; background: var(--line); margin: 14px 0}
+      .headerRow{display:flex; align-items:center; justify-content:space-between; gap: 10px; flex-wrap: wrap;}
+      .navRowTight{margin-top:0}
+      .stackTop{margin-top:10px}
     </style>
   </head>
   <body>
     <div class="wrap">
       <div class="card">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap: 10px; flex-wrap: wrap;">
+        <div class="headerRow">
           <h1>Download CommunityBridge</h1>
-          <div class="row" style="margin-top:0;">
+          <div class="row navRowTight">
             <a class="btn" href="/">Home</a>
+            <a class="btn" href="/for-providers">For Providers</a>
+            <a class="btn" href="/dashboard">Open app</a>
             <a class="btn" href="/support">Support</a>
           </div>
         </div>
 
-        <p>Use the links below to install CommunityBridge. If you are joining as a tester, follow the prompts for your device.</p>
+        <p>Use the links below to install CommunityBridge on mobile, or open the secure browser experience at <a href="/dashboard">/dashboard</a>. Sign-in uses your organization-issued email/password, invite flow, or approval link.</p>
 
         <div class="row">
           <a class="btn btnPrimary" href="https://testflight.apple.com/join/REPLACE_ME" target="_blank" rel="noopener" aria-label="Install on iPhone or iPad using TestFlight">
@@ -88,13 +92,19 @@
 
         <div class="hr"></div>
         <div class="small">
+          CommunityBridge supports role-based experiences for parents, ABA techs, BCBAs, office teams, reception, and administrators.
+        </div>
+        <div class="small stackTop">
+          Parents see child-specific schedule and billing contact information, while office and clinical teams get expanded scheduling, reporting, and authorization tools.
+        </div>
+        <div class="small">
           iOS installs require TestFlight. Android installs will download an APK from this site.
         </div>
-        <div class="small" style="margin-top: 10px;">
-          Having trouble? Contact your school admin, or visit <a href="/support">Support</a>.
+        <div class="small stackTop">
+          Having trouble? Contact your organization admin, or visit <a href="/support">Support</a>.
         </div>
 
-        <div class="small" style="margin-top: 10px;">
+        <div class="small stackTop">
           Current site: <span class="mono" id="host">(loading…)</span>
         </div>
       </div>

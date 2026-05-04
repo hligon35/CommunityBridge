@@ -21,29 +21,27 @@ service `communitybridge` (us-central1).
 
 ## Authentication
 
-| Method | Path                              | Notes                                                 |
-| ------ | --------------------------------- | ----------------------------------------------------- |
-| POST   | `/api/auth/signup`                | Create user. Rate-limited (5/15m/IP).                  |
-| POST   | `/api/auth/login`                 | Email + password. Rate-limited.                        |
-| POST   | `/api/auth/forgot-password`       | Issue reset code.                                      |
-| POST   | `/api/auth/reset-password`        | Apply reset code + new password.                       |
-| POST   | `/api/auth/google`                | Google OAuth ID token exchange.                        |
-| GET    | `/api/auth/me`                    | Current user from bearer token.                        |
-| POST   | `/api/auth/2fa/start`             | Begin SMS / TOTP enrollment.                           |
-| POST   | `/api/auth/2fa/verify`            | Verify enrollment / login challenge.                   |
-| POST   | `/api/auth/2fa/disable`           | Disable 2FA after verification.                        |
+- `POST /api/auth/signup` — Create user. Rate-limited (5/15m/IP).
+- `POST /api/auth/login` — Email + password. Rate-limited.
+- `POST /api/auth/invite-login` — First-login exchange for managed invites.
+- `POST /api/auth/approval-link-login` — One-time approval-link exchange for managed access.
+- `POST /api/auth/forgot-password` — Issue reset code.
+- `POST /api/auth/reset-password` — Apply reset code + new password.
+- `POST /api/auth/complete-invite-password` — Finish managed invite password setup.
+- `GET /api/auth/me` — Current user from bearer token.
+- `POST /api/auth/2fa/start` — Begin SMS / TOTP enrollment.
+- `POST /api/auth/2fa/verify` — Verify enrollment or login challenge.
+- `POST /api/auth/2fa/disable` — Disable 2FA after verification.
 
 ## Board (posts, comments, reactions)
 
-| Method | Path                                              | Notes                              |
-| ------ | ------------------------------------------------- | ---------------------------------- |
-| GET    | `/api/board`                                      | List posts.                        |
-| POST   | `/api/board`                                      | Create post.                       |
-| POST   | `/api/board/:postId/like`                         | Toggle like.                       |
-| POST   | `/api/board/:postId/share`                        | Track share.                       |
-| POST   | `/api/board/:postId/comments`                     | Add comment.                       |
-| POST   | `/api/board/:postId/comments/:commentId/replies` | Add reply.                         |
-| POST   | `/api/board/:postId/comments/:commentId/react`   | Reaction on a comment.             |
+- `GET /api/board` — List posts.
+- `POST /api/board` — Create post.
+- `POST /api/board/:postId/like` — Toggle like.
+- `POST /api/board/:postId/share` — Track share.
+- `POST /api/board/:postId/comments` — Add comment.
+- `POST /api/board/:postId/comments/:commentId/replies` — Add reply.
+- `POST /api/board/:postId/comments/:commentId/react` — Reaction on a comment.
 
 ## Messages
 
@@ -79,21 +77,21 @@ service `communitybridge` (us-central1).
 
 ## Misc
 
-| Method | Path                          | Notes                                            |
-| ------ | ----------------------------- | ------------------------------------------------ |
-| GET    | `/api/link/preview`           | Returns OG/twitter card metadata for a URL.       |
-| POST   | `/api/push/register`          | Register a push token for the caller.            |
-| DELETE | `/api/push/unregister`        | Drop a push token.                               |
-| GET    | `/api/push/tokens`            | (Admin) inspect registered tokens.               |
-| POST   | `/api/arrival/ping`           | Pickup-arrival proximity ping.                   |
-| POST   | `/api/aba/refresh`            | (ABA integration) trigger sync.                  |
-| POST   | `/api/media/upload`           | Multipart upload; served back under `/uploads/*`. |
+- `GET /api/link/preview` — Returns OG/twitter card metadata for a URL.
+- `POST /api/push/register` — Register a push token for the caller.
+- `DELETE /api/push/unregister` — Drop a push token.
+- `GET /api/push/tokens` — Admin inspection of registered tokens.
+- `POST /api/arrival/ping` — Pickup-arrival proximity ping.
+- `POST /api/aba/refresh` — ABA integration trigger sync.
+- `POST /api/media/upload` — Multipart upload; served back under `/uploads/*`.
 
 ## Authentication & rate limiting
 
 - All non-public routes require `Authorization: Bearer <token>` where the
-  token is issued by `/api/auth/login` or `/api/auth/google`. Tokens are
-  short-lived; the client refreshes via `/api/auth/me`.
+  token is issued by `/api/auth/login`, `/api/auth/invite-login`, or
+  `/api/auth/approval-link-login`. Tokens are short-lived; the client
+  refreshes via `/api/auth/me`.
+- Public Google OAuth is no longer part of the documented auth surface.
 - Rate limiting on auth routes is in-process (5 requests / 15 minutes /
   IP). Behind Cloud Run's autoscaler this is per-instance, so effective
   limits are higher than the literal number suggests. See

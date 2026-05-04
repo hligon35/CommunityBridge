@@ -79,6 +79,35 @@ This plan maps the attached CommunityBridge edits document onto the current Budd
   - `exportJobs`
   - `programEditorWorkspaces`
 
+## Completed In The Current Product State
+
+- Added canonical role handling for:
+  - Parent
+  - Faculty
+  - Therapist / ABA Tech
+  - BCBA
+  - Office
+  - Reception
+  - Admin / Campus Admin / Org Admin / Super Admin
+- Removed Google sign-in from the login flow and related client or server wiring.
+- Added managed-access auth flows for:
+  - invite login
+  - approval-link login
+  - first-login password completion
+- Updated parent billing access so parent users now see:
+  - a digital insurance card for the linked child
+  - a billing action
+  - a contact action
+- Updated scheduling workflows so authorized roles can:
+  - add sessions
+  - assign ABA techs
+  - save learner schedule changes through the API
+- Updated reporting workflows so authorized users can:
+  - filter child reports individually
+  - filter by room
+  - view collective reporting
+- Split operational access more clearly between BCBA, office, and reception permissions in the admin workspace.
+
 ## Already Implemented Before This Slice
 
 - Dedicated therapist workflow screens:
@@ -103,13 +132,12 @@ This plan maps the attached CommunityBridge edits document onto the current Budd
 
 ### Therapist and BCBA path changes
 
-- Align therapist-facing launcher language and card order with the document.
-- Add BCBA-specific program/goals editing surfaces instead of routing only through general directories.
-- Add richer scheduling views for staff, student, and room perspectives.
+- Continue refining therapist-facing launcher language and card order where product copy still lags the role terminology.
+- Expand BCBA-specific program/goals editing depth beyond the currently restored program and reporting surfaces.
+- Extend scheduling views further where additional staff, learner, and room-specific operational detail is still needed.
 
 ### Import/export engine
 
-- Replace placeholder export behavior with server-backed export jobs.
 - Extend import beyond raw directory merge to:
   - validation summary
   - duplicate detection
@@ -122,8 +150,8 @@ This plan maps the attached CommunityBridge edits document onto the current Budd
 
 ### Reporting and operational modules
 
-- Separate BCBA clinical reports from office operational reports in the report UI.
-- Add billing/authorization and compliance dashboards that reuse existing report aggregation patterns.
+- Continue deepening BCBA clinical reports versus office operational reporting detail now that the split exists in the UI.
+- Expand billing/authorization and compliance dashboards beyond the current surfaced workflows where additional operational summaries are needed.
 
 ## Guardrails
 

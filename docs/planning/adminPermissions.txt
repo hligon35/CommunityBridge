@@ -34,7 +34,7 @@ Attendance reports
 Parent communication logs
 Export center (PDF, CSV, etc.)
 7. Billing & Authorizations
-(Optional if you want to support billing later)
+Current office-facing workflow with BCBA view access and reception view-only access where permitted.
 
 Insurance authorizations
 Hours remaining
@@ -66,7 +66,9 @@ Branding
 
 "bcba": "full",
 
-"office": "full"
+"office": "full",
+
+"reception": "full"
 
 },
 
@@ -74,7 +76,9 @@ Branding
 
 "bcba": "full_clinical",
 
-"office": "roster_only"
+"office": "roster_only",
+
+"reception": "roster_only"
 
 },
 
@@ -82,7 +86,9 @@ Branding
 
 "bcba": "view_only",
 
-"office": "full"
+"office": "full",
+
+"reception": "view_only"
 
 },
 
@@ -90,7 +96,9 @@ Branding
 
 "bcba": "clinical_scheduling",
 
-"office": "full"
+"office": "full",
+
+"reception": "front_desk"
 
 },
 
@@ -98,7 +106,9 @@ Branding
 
 "bcba": "full",
 
-"office": "none"
+"office": "none",
+
+"reception": "none"
 
 },
 
@@ -106,7 +116,9 @@ Branding
 
 "bcba": "clinical_reports",
 
-"office": "operational_reports"
+"office": "operational_reports",
+
+"reception": "none"
 
 },
 
@@ -114,7 +126,9 @@ Branding
 
 "bcba": "view_only",
 
-"office": "full"
+"office": "full",
+
+"reception": "view_only"
 
 },
 
@@ -122,7 +136,9 @@ Branding
 
 "bcba": "view_only",
 
-"office": "full"
+"office": "full",
+
+"reception": "none"
 
 },
 
@@ -130,7 +146,9 @@ Branding
 
 "bcba": "full_clinical",
 
-"office": "admin_only"
+"office": "admin_only",
+
+"reception": "none"
 
 },
 
@@ -138,7 +156,9 @@ Branding
 
 "bcba": "limited",
 
-"office": "full"
+"office": "full",
+
+"reception": "none"
 
 }
 

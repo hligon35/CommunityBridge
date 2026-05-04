@@ -125,7 +125,7 @@ For each:
 # 8. Authentication and Access Control Review
 Document:
 - login methods
-- Google sign-in or social auth
+- email/password, invite, or approval-link auth
 - dev tokens
 - 2FA / MFA
 - email verification

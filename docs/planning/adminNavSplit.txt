@@ -12,6 +12,7 @@ Graphs
 Attendance trends
 Behavior incidents (BCBA only)
 Staff utilization (Office only)
+Front-desk arrivals and handoff visibility (Reception)
 Alerts
 Expiring credentials (Office)
 Programs needing review (BCBA)
@@ -38,6 +39,7 @@ Documents (Office uploads, BCBA views)
 Actions
 Edit student info (Office)
 Assign BCBA/Therapist (Office)
+View roster and family pickup contacts (Reception)
 Add program (BCBA)
 3. Staff
 Purpose
@@ -56,6 +58,7 @@ Actions
 Add staff (Office)
 Assign caseload (BCBA)
 Update credentials (Office)
+View today roster and staff contact details (Reception)
 4. Scheduling
 Purpose
 Master scheduling for students, staff, and rooms.
@@ -76,7 +79,8 @@ Actions
 Add session (BCBA + Office)
 Edit session (Office)
 Approve changes (Office)
-Assign therapist (BCBA)
+Assign ABA tech (BCBA)
+Front desk arrival / departure visibility (Reception)
 5. Programs & Goals
 Purpose
 Clinical program management (BCBA only).
@@ -116,6 +120,7 @@ Attendance
 Session verification
 Staff hours
 Utilization
+Reception has no reports workspace.
 Export Center
 PDF
 CSV
@@ -134,12 +139,14 @@ Timesheets
 Parent signatures
 Session status
 Billing Exports
-837P (if you support it later)
+837P or payer-facing export formats only if implemented for the deployed environment
 CSV exports
 Audit logs
 BCBA: view only
 
 Office: full control
+
+Reception: view only
 
 8. Compliance
 Purpose
@@ -167,11 +174,12 @@ Inbox
 Parent messages (BCBA)
 Staff messages (BCBA)
 Admin announcements (Office)
+Reception does not have the communication admin workspace.
 Broadcast Center
 Office sends announcements
 Conversation Threads
 BCBA ↔ Parent
-BCBA ↔ Therapist
+BCBA ↔ ABA Tech
 Attachments
 PDFs
 Notes
@@ -188,3 +196,4 @@ Import Center (Office)
 Integrations (Office)
 Branding (Office)
 Notification Settings (both roles)
+Reception has no settings workspace.
