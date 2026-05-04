@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import TimeField from '../components/TimeField';
 import { useAuth } from '../AuthContext';
@@ -55,6 +56,12 @@ export default function ScheduleCalendarScreen() {
   const { user } = useAuth();
   const { children = [], parents = [], therapists = [], setChildren, fetchAndSync } = useData();
   const { width } = useWindowDimensions();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchAndSync?.({ force: true }).catch(() => {});
+    }, [fetchAndSync])
+  );
   const role = normalizeUserRole(user?.role);
   const isBcba = isBcbaRole(user?.role);
   const isTherapist = role === USER_ROLES.THERAPIST;

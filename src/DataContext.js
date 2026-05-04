@@ -482,7 +482,11 @@ export function DataProvider({ children: reactChildren }) {
     let mounted = true;
     if (loading || !user || needsMfa || isDemoReviewer) return () => { mounted = false; };
 
-    const userKey = user?.id || user?.uid || user?.email || null;
+    const userKey = [
+      user?.id || user?.uid || user?.email || '',
+      user?.role || '',
+      user?.passwordSetupRequired ? 'setup' : 'active',
+    ].join(':');
     if (userKey && initialSyncDoneForUserRef.current === userKey) {
       return () => { mounted = false; };
     }

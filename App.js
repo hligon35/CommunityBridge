@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StatusBar, Platform, AppState } from 'react-native';
+import { StatusBar, Platform, AppState, StyleSheet, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 // Temporarily remove TailwindProvider if not available at runtime
 import { NavigationContainer } from '@react-navigation/native';
@@ -259,14 +259,32 @@ function SettingsStack() {
 }
 
 function MainShell({ currentRoute }) {
+  const { user } = useAuth();
   const isTabletLayout = useIsTabletLayout();
+  const { width, height } = useWindowDimensions();
+  const role = normalizeUserRole(user?.role);
+  const isParentWorkspace = !canAccessAdminWorkspace(role) && !isStaffRole(role);
+  const shouldRequireLandscape = !isParentWorkspace && !isTabletLayout && width < height && Math.max(width, height) >= 640;
+
   return (
     <TenantProvider>
       <DataProvider>
-        <TabletNavigationShell currentRoute={currentRoute}>
-          <MainRoutes />
-        </TabletNavigationShell>
-        {!isTabletLayout ? <BottomNav navigationRef={navigationRef} currentRoute={currentRoute} /> : null}
+        {shouldRequireLandscape ? (
+          <View style={landscapeStyles.rotateWrap}>
+            <View style={landscapeStyles.rotateCard}>
+              <Text style={landscapeStyles.rotateEyebrow}>Landscape required</Text>
+              <Text style={landscapeStyles.rotateTitle}>Rotate your phone to continue</Text>
+              <Text style={landscapeStyles.rotateBody}>Staff, BCBA, and admin workspaces now open in a landscape tablet-style layout on phones so the assigned role tools render correctly.</Text>
+            </View>
+          </View>
+        ) : (
+          <>
+            <TabletNavigationShell currentRoute={currentRoute}>
+              <MainRoutes />
+            </TabletNavigationShell>
+            {!isTabletLayout ? <BottomNav navigationRef={navigationRef} currentRoute={currentRoute} /> : null}
+          </>
+        )}
         <UrgentMemoOverlay />
         <ArrivalDetector />
         <DevRoleSwitcher />
@@ -311,13 +329,49 @@ function MainRoutes() {
       : 'Home';
 
   return (
-    <RootStack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialWorkspace}>
+    <RootStack.Navigator key={`workspace:${role || 'parent'}:${initialWorkspace}`} screenOptions={{ headerShown: false }} initialRouteName={initialWorkspace}>
       {screens.map(s => (
         <RootStack.Screen key={s.name} name={s.name} component={s.component} />
       ))}
     </RootStack.Navigator>
   );
 }
+
+const landscapeStyles = StyleSheet.create({
+  rotateWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: '#e2e8f0',
+  },
+  rotateCard: {
+    width: '100%',
+    maxWidth: 480,
+    borderRadius: 24,
+    padding: 24,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  rotateEyebrow: {
+    color: '#1d4ed8',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  rotateTitle: {
+    marginTop: 8,
+    color: '#0f172a',
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  rotateBody: {
+    marginTop: 10,
+    color: '#475569',
+    lineHeight: 22,
+  },
+});
 
 // IMPORTANT: AppNavigator MUST be defined at module scope.
 // Previously it was declared inside `App()` and React therefore created a

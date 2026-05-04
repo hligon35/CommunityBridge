@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Alert, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRoute } from '@react-navigation/native';
+import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
@@ -112,7 +112,14 @@ function ContactCard({ member }) {
 export default function CareTeamScreen() {
   const route = useRoute();
   const { user } = useAuth();
-  const { children = [] } = useData();
+  const { children = [], fetchAndSync } = useData();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchAndSync?.({ force: true }).catch(() => {});
+    }, [fetchAndSync])
+  );
+
   const relevantChildren = useMemo(() => {
     const linkedChildren = getRelevantChildren(user?.id, children);
     const requestedChildId = route?.params?.childId;

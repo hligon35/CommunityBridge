@@ -995,6 +995,28 @@ export async function completeInvitePasswordSetup(newPassword) {
 
 export async function me() {
   const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (apiBase) {
+    try {
+      const idToken = await u.getIdToken(true);
+      const resp = await fetchWithTimeout(`${apiBase}/api/auth/me`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+      const json = await resp.json().catch(() => null);
+      if (resp.ok && json?.ok === true && json?.user) return json.user;
+      if (!shouldFallbackFromReadApi({ resp, json }) && !isLikelyNetworkError({ message: resp.statusText })) {
+        const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not load account profile.'));
+        err.httpStatus = resp.status;
+        throw err;
+      }
+    } catch (e) {
+      if (!isLikelyNetworkError(e) && !shouldFallbackFromReadApi({ error: e })) throw e;
+    }
+  }
+
   const profile = await getUserProfile(u.uid);
   return profile;
 }

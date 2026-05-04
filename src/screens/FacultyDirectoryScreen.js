@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
@@ -20,7 +20,7 @@ function Chip({ label, active, onPress }) {
 export default function FacultyDirectoryScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
-  const { therapists = [], children = [] } = useData();
+  const { therapists = [], children = [], fetchAndSync } = useData();
   const isBcba = isBcbaRole(user?.role);
   const isOffice = isOfficeAdminRole(user?.role);
   const [workspaceMap, setWorkspaceMap] = useState({});
@@ -29,6 +29,12 @@ export default function FacultyDirectoryScreen() {
   const [selectedStaffId, setSelectedStaffId] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [loadError, setLoadError] = useState('');
+
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchAndSync?.({ force: true }).catch(() => {});
+    }, [fetchAndSync])
+  );
 
   useEffect(() => {
     let mounted = true;
