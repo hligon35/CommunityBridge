@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import LogoTitle from '../src/components/LogoTitle';
@@ -58,50 +58,52 @@ export default function CreatePasswordScreen({ navigation }) {
         </View>
       </View>
 
-      <View style={styles.container}>
-        <Text style={styles.title}>Create New Password</Text>
-        <Text style={styles.subtitle}>Your access code worked. Create a permanent password to activate normal sign-in for this account.</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <View style={styles.formCard}>
+          <Text style={styles.title}>Create New Password</Text>
+          <Text style={styles.subtitle}>Your access code worked. Create a permanent password to activate normal sign-in for this account.</Text>
 
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Password rules</Text>
-          <Text style={styles.infoBody}>Minimum 8 characters, at least 1 uppercase letter, and at least 1 special character.</Text>
-        </View>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoTitle}>Password rules</Text>
+            <Text style={styles.infoBody}>Minimum 8 characters, at least 1 uppercase letter, and at least 1 special character.</Text>
+          </View>
 
-        <Text style={styles.label}>New password</Text>
-        <View style={styles.passwordRow}>
+          <Text style={styles.label}>New password</Text>
+          <View style={styles.passwordRow}>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              style={[styles.input, styles.passwordInput]}
+              placeholder="Create password"
+              secureTextEntry={!showPassword}
+              editable={!busy}
+              autoCapitalize="none"
+              maxLength={128}
+            />
+            <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword((current) => !current)} disabled={busy}>
+              <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={22} color="#475569" />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.label}>Confirm password</Text>
           <TextInput
-            value={password}
-            onChangeText={setPassword}
-            style={[styles.input, styles.passwordInput]}
-            placeholder="Create password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            style={styles.input}
+            placeholder="Confirm password"
             secureTextEntry={!showPassword}
             editable={!busy}
             autoCapitalize="none"
             maxLength={128}
           />
-          <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword((current) => !current)} disabled={busy}>
-            <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={22} color="#475569" />
+
+          {password ? <Text style={[styles.helperText, policyError ? styles.helperTextError : null]}>{policyError || 'Password meets the required rules.'}</Text> : null}
+
+          <TouchableOpacity style={[styles.primaryButton, busy ? styles.primaryButtonDisabled : null]} onPress={submit} disabled={busy}>
+            <Text style={styles.primaryButtonText}>{busy ? 'Saving...' : 'Save password'}</Text>
           </TouchableOpacity>
         </View>
-
-        <Text style={styles.label}>Confirm password</Text>
-        <TextInput
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          style={styles.input}
-          placeholder="Confirm password"
-          secureTextEntry={!showPassword}
-          editable={!busy}
-          autoCapitalize="none"
-          maxLength={128}
-        />
-
-        {password ? <Text style={[styles.helperText, policyError ? styles.helperTextError : null]}>{policyError || 'Password meets the required rules.'}</Text> : null}
-
-        <TouchableOpacity style={[styles.primaryButton, busy ? styles.primaryButtonDisabled : null]} onPress={submit} disabled={busy}>
-          <Text style={styles.primaryButtonText}>{busy ? 'Saving...' : 'Save password'}</Text>
-        </TouchableOpacity>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -111,7 +113,8 @@ const styles = StyleSheet.create({
   headerShell: { borderBottomWidth: 1, borderBottomColor: '#e5e7eb', paddingHorizontal: 18, paddingVertical: 12 },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   greeting: { marginLeft: 18, color: '#475569', fontWeight: '700', fontSize: 16 },
-  container: { flex: 1, padding: 18, backgroundColor: '#fff' },
+  scrollContent: { flexGrow: 1, padding: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
+  formCard: { width: '100%', maxWidth: 560, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 20, padding: 22, backgroundColor: '#fff', shadowColor: '#0f172a', shadowOpacity: 0.06, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 3 },
   title: { fontSize: 20, fontWeight: '800', color: '#111827' },
   subtitle: { marginTop: 8, color: '#6b7280', lineHeight: 20 },
   infoCard: { marginTop: 14, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#dbeafe', backgroundColor: '#eff6ff' },

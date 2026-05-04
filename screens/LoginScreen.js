@@ -248,6 +248,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   const toastTopOffset = Platform.OS === 'web'
     ? 48
     : Math.max(72, Math.round(windowHeight * 0.14));
+  const passwordInputRef = useRef(null);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -628,11 +629,16 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
                   placeholder="Email"
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordInputRef.current?.focus?.()}
+                  blurOnSubmit={false}
                 />
               </View>
 
               <View style={[fieldWidthStyle, styles.passwordFieldWrap]}>
                 <TextInput
+                  ref={passwordInputRef}
                   value={password}
                   onChangeText={setPassword}
                   style={[styles.input, styles.passwordInput]}
@@ -641,6 +647,8 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
                   autoCapitalize="none"
                   autoCorrect={false}
                   textContentType="password"
+                  returnKeyType="go"
+                  onSubmitEditing={doLogin}
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword((v) => !v)}

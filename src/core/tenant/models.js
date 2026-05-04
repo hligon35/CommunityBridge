@@ -78,11 +78,16 @@ function isoTimestamp(value) {
 export function normalizeUserRole(role) {
   const value = safeString(role).toLowerCase();
   if (!value) return USER_ROLES.PARENT;
+  if (value === 'parent') return USER_ROLES.PARENT;
+  if (value === 'faculty') return USER_ROLES.FACULTY;
+  if (value === 'therapist' || value === 'abatech' || value === 'aba tech' || value === 'aba-tech' || value === 'aba_tech' || value === 'behavior technician') return USER_ROLES.THERAPIST;
+  if (value === 'bcba') return USER_ROLES.BCBA;
+  if (value === 'admin') return USER_ROLES.ADMIN;
   if (value === 'administrator') return USER_ROLES.ADMIN;
   if (value === 'campusadmin' || value === 'campus_admin') return USER_ROLES.CAMPUS_ADMIN;
   if (value === 'orgadmin' || value === 'org_admin' || value === 'organizationadmin') return USER_ROLES.ORG_ADMIN;
   if (value === 'superadmin' || value === 'super_admin') return USER_ROLES.SUPER_ADMIN;
-  if (value === 'teacher' || value === 'staff') return USER_ROLES.FACULTY;
+  if (value === 'teacher' || value === 'staff' || value === 'office personnel' || value === 'officepersonnel') return USER_ROLES.FACULTY;
   return safeString(role) || USER_ROLES.PARENT;
 }
 

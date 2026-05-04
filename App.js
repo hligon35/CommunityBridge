@@ -281,6 +281,7 @@ function MainRoutes() {
   const role = normalizeUserRole(user?.role);
   const isBcbaWorkspace = isBcbaRole(role);
   const hasAdminWorkspace = canAccessAdminWorkspace(role);
+  const hasStaffWorkspace = isStaffRole(role);
 
   const screens = [];
   if (!hasAdminWorkspace) {
@@ -303,8 +304,14 @@ function MainRoutes() {
 
   screens.push({ name: 'Settings', component: SettingsStack });
 
+  const initialWorkspace = hasAdminWorkspace
+    ? 'Controls'
+    : hasStaffWorkspace
+      ? 'MyClass'
+      : 'Home';
+
   return (
-    <RootStack.Navigator screenOptions={{ headerShown: false }} initialRouteName={hasAdminWorkspace ? 'Controls' : 'Home'}>
+    <RootStack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialWorkspace}>
       {screens.map(s => (
         <RootStack.Screen key={s.name} name={s.name} component={s.component} />
       ))}

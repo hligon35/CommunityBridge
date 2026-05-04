@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
@@ -12,6 +12,31 @@ import { THERAPY_ROLE_LABELS, getDisplayRoleLabel } from '../utils/roleTerminolo
 import { formatPhoneInput } from '../utils/inputFormat';
 import { getPasswordPolicyError } from '../utils/passwordPolicy';
 import * as Api from '../Api';
+
+function InlineToast({ toast, onClose }) {
+  if (!toast?.visible) return null;
+  const tone = toast.tone || 'success';
+  const config = tone === 'error'
+    ? { card: styles.toastError, icon: 'error-outline', iconColor: '#b91c1c' }
+    : tone === 'info'
+      ? { card: styles.toastInfo, icon: 'info-outline', iconColor: '#1d4ed8' }
+      : { card: styles.toastSuccess, icon: 'check-circle-outline', iconColor: '#166534' };
+
+  return (
+    <View pointerEvents="box-none" style={styles.toastHost}>
+      <View style={[styles.toastCard, config.card]}>
+        <MaterialIcons name={config.icon} size={20} color={config.iconColor} style={styles.toastIcon} />
+        <View style={styles.toastCopy}>
+          {toast.title ? <Text style={styles.toastTitle}>{toast.title}</Text> : null}
+          {toast.message ? <Text style={styles.toastMessage}>{toast.message}</Text> : null}
+        </View>
+        <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel="Dismiss message" style={styles.toastDismiss}>
+          <MaterialIcons name="close" size={18} color="#475569" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
 
 const DEFAULT_ROLES = ['Admin', 'Teacher', 'Therapist', 'Parent', 'Staff'];
 const DEFAULT_CAPS = [
@@ -107,6 +132,7 @@ function buildDefaultMapping() {
 
 export default function ManagePermissionsScreen(){
   const { user } = useAuth();
+  const toastTimerRef = useRef(null);
   const [mapping, setMapping] = useState(buildDefaultMapping());
   const [managedUsers, setManagedUsers] = useState([]);
   const [userDrafts, setUserDrafts] = useState({});
@@ -118,6 +144,7 @@ export default function ManagePermissionsScreen(){
   const [savingUserId, setSavingUserId] = useState('');
   const [deletingUserId, setDeletingUserId] = useState('');
   const [inviteBusy, setInviteBusy] = useState(false);
+  const [toast, setToast] = useState({ visible: false, title: '', message: '', tone: 'success' });
   const [inviteDraft, setInviteDraft] = useState({ email: '', role: 'bcba' });
   const [inviteRoleMenuOpen, setInviteRoleMenuOpen] = useState(false);
   const [sectionsOpen, setSectionsOpen] = useState({ users: true, permissions: true });
@@ -165,6 +192,41 @@ export default function ManagePermissionsScreen(){
     const roles = visiblePermissionGroup?.roles || DEFAULT_ROLES;
     return roles.filter((role) => DEFAULT_ROLES.includes(role));
   }, [visiblePermissionGroup]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  function dismissToast() {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    setToast((current) => ({ ...current, visible: false }));
+  }
+
+  function showToast(payload) {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    const next = typeof payload === 'string' ? { message: payload } : (payload || {});
+    setToast({
+      visible: true,
+      title: String(next.title || '').trim(),
+      message: String(next.message || '').trim(),
+      tone: next.tone || 'success',
+    });
+    toastTimerRef.current = setTimeout(() => {
+      setToast((current) => ({ ...current, visible: false }));
+      toastTimerRef.current = null;
+    }, next.durationMs || 3600);
+  }
 
   useEffect(() => {
     (async () => {
@@ -263,8 +325,10 @@ export default function ManagePermissionsScreen(){
 
   function upsertManagedUser(nextUser) {
     if (!nextUser?.id) return;
+    let inserted = false;
     setManagedUsers((current) => {
       const existingIndex = current.findIndex((item) => item.id === nextUser.id);
+      inserted = existingIndex === -1;
       if (existingIndex === -1) return [nextUser, ...current];
       return current.map((item) => (item.id === nextUser.id ? nextUser : item));
     });
@@ -272,7 +336,7 @@ export default function ManagePermissionsScreen(){
       ...current,
       [nextUser.id]: createUserDraft(nextUser),
     }));
-    setUserSectionsOpen((current) => ({ ...current, [nextUser.id]: true }));
+    setUserSectionsOpen((current) => ({ ...current, [nextUser.id]: inserted ? false : Boolean(current[nextUser.id]) }));
   }
 
   async function sendInvite() {
@@ -294,7 +358,7 @@ export default function ManagePermissionsScreen(){
       if (result?.user) upsertManagedUser(normalizeManagedUsers([result.user])[0] || result.user);
       setInviteDraft((current) => ({ ...current, email: '' }));
       setInviteRoleMenuOpen(false);
-      Alert.alert('Invite Sent', `A one-time access code was emailed to ${email}.`);
+      showToast({ title: 'Invite sent', message: `A one-time access code was emailed to ${email}.`, tone: 'success' });
     } catch (error) {
       setUsersError(String(error?.message || 'Could not send invite.'));
     } finally {
@@ -308,7 +372,7 @@ export default function ManagePermissionsScreen(){
       setUsersError('');
       const result = await Api.resendManagedUserInvite(userItem.id);
       if (result?.user) upsertManagedUser(normalizeManagedUsers([result.user])[0] || result.user);
-      Alert.alert('Invite Sent', `A new one-time access code was emailed to ${userItem.email || 'this user'}.`);
+      showToast({ title: 'Invite sent', message: `A new one-time access code was emailed to ${userItem.email || 'this user'}.`, tone: 'success' });
     } catch (error) {
       setUsersError(String(error?.message || 'Could not resend invite.'));
     } finally {
@@ -403,6 +467,7 @@ export default function ManagePermissionsScreen(){
         const campus = campusLookup.get(String(campusId));
         return {
           organizationId,
+            <InlineToast toast={toast} onClose={dismissToast} />
           programId: String(campus?.programId || ''),
           campusId: String(campusId),
           role,
@@ -848,6 +913,16 @@ export default function ManagePermissionsScreen(){
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
+  toastHost: { position: 'absolute', top: 12, left: 12, right: 12, zIndex: 1000, alignItems: 'center' },
+  toastCard: { width: '100%', maxWidth: 520, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
+  toastSuccess: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  toastInfo: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' },
+  toastError: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
+  toastIcon: { marginTop: 1, marginRight: 10 },
+  toastCopy: { flex: 1 },
+  toastTitle: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
+  toastMessage: { marginTop: 2, fontSize: 13, lineHeight: 18, color: '#334155' },
+  toastDismiss: { marginLeft: 10, padding: 2 },
   content: { padding: 12, paddingBottom: 28 },
   panel: { marginBottom: 12, borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
   sectionHeader: { paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
