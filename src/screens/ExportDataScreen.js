@@ -5,6 +5,8 @@ import { useData } from '../DataContext';
 // header provided by ScreenWrapper
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../AuthContext';
+import { getWorkspaceLabel } from '../utils/roleTerminology';
 import * as Api from '../Api';
 
 function toCSV(rows) {
@@ -17,6 +19,8 @@ function toCSV(rows) {
 
 export default function ExportDataScreen(){
   const navigation = useNavigation();
+  const { user } = useAuth();
+  const workspaceLabel = getWorkspaceLabel(user?.role);
   const { messages = [], children = [], therapists = [], parents = [], urgentMemos = [] } = useData();
   const [selectedCategory, setSelectedCategory] = useState('reports');
   const [selectedFormat, setSelectedFormat] = useState('csv');
@@ -244,7 +248,7 @@ export default function ExportDataScreen(){
         </View>
 
         <TouchableOpacity style={styles.secondaryBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.secondaryText}>Back to Admin Workspace</Text>
+          <Text style={styles.secondaryText}>Back to {workspaceLabel}</Text>
         </TouchableOpacity>
       </View>
     </ScreenWrapper>

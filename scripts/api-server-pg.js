@@ -754,17 +754,6 @@ const ADMIN_EMAIL = process.env.CB_ADMIN_EMAIL || process.env.BB_ADMIN_EMAIL || 
 const ADMIN_PASSWORD = process.env.CB_ADMIN_PASSWORD || process.env.BB_ADMIN_PASSWORD || '';
 const ADMIN_NAME = process.env.CB_ADMIN_NAME || process.env.BB_ADMIN_NAME || 'Admin';
 
-const GOOGLE_CLIENT_IDS = String(process.env.CB_GOOGLE_CLIENT_IDS || process.env.BB_GOOGLE_CLIENT_IDS || '').trim();
-let googleClient = null;
-try {
-  if (GOOGLE_CLIENT_IDS) {
-    const { OAuth2Client } = require('google-auth-library');
-    googleClient = new OAuth2Client();
-  }
-} catch (e) {
-  googleClient = null;
-}
-
 function userToClient(row) {
   if (!row) return null;
   return {
@@ -2963,6 +2952,11 @@ app.get('/api/directory/me', authMiddleware, async (req, res) => {
 
       // Team logic: ABA includes supervisor; BCBA includes supervised ABAs.
       if (wantBcba) {
+        // BCBA staff views need the full roster, including office users.
+        (allTherapists || []).forEach((staff) => {
+          const staffId = safeString(staff && staff.id).trim();
+          if (staffId) outTherapistIds.add(staffId);
+        });
         (allSupervision || []).forEach((s) => {
           if (safeString(s && s.bcbaId).trim() === meTherapistId) {
             const abaId = safeString(s && s.abaId).trim();
@@ -3252,6 +3246,117 @@ app.put('/api/children/attendance', authMiddleware, requireChildCareWriteAccess,
     }
 
     return res.json({ ok: true, dateKey, saved: entries.length });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+app.put('/api/children/:childId/schedule', authMiddleware, requireChildCareWriteAccess, async (req, res) => {
+  try {
+    const childId = safeString(req.params && req.params.childId).trim();
+    if (!childId) return res.status(400).json({ ok: false, error: 'Missing childId' });
+
+    const visibleChildIds = new Set(await getVisibleChildIdsForUser(req.user));
+    if (!visibleChildIds.has(childId)) return res.status(403).json({ ok: false, error: 'Forbidden' });
+
+    const existingRow = await pgQueryOne('SELECT data_json FROM directory_children WHERE id = $1', [childId]);
+    const currentChild = existingRow && existingRow.data_json && typeof existingRow.data_json === 'object'
+      ? { ...existingRow.data_json }
+      : null;
+    if (!currentChild) return res.status(404).json({ ok: false, error: 'Child not found' });
+
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const providedSession = body.session === undefined ? null : safeString(body.session).trim().toUpperCase();
+    if (providedSession && !['AM', 'PM'].includes(providedSession)) {
+      return res.status(400).json({ ok: false, error: 'Session must be AM or PM' });
+    }
+
+    const providedDropoffTimeISO = body.dropoffTimeISO === undefined ? null : safeString(body.dropoffTimeISO).trim();
+    const providedPickupTimeISO = body.pickupTimeISO === undefined ? null : safeString(body.pickupTimeISO).trim();
+    if (providedDropoffTimeISO && Number.isNaN(Date.parse(providedDropoffTimeISO))) {
+      return res.status(400).json({ ok: false, error: 'dropoffTimeISO must be a valid ISO timestamp' });
+    }
+    if (providedPickupTimeISO && Number.isNaN(Date.parse(providedPickupTimeISO))) {
+      return res.status(400).json({ ok: false, error: 'pickupTimeISO must be a valid ISO timestamp' });
+    }
+
+    let assignedIds = null;
+    if (body.assignedABA !== undefined || body.assigned_ABA !== undefined) {
+      const rawAssigned = Array.isArray(body.assignedABA)
+        ? body.assignedABA
+        : Array.isArray(body.assigned_ABA)
+          ? body.assigned_ABA
+          : [];
+      assignedIds = Array.from(new Set(rawAssigned.map((value) => safeString(value).trim()).filter(Boolean)));
+    }
+
+    const nextChild = {
+      ...currentChild,
+      id: childId,
+      updatedAt: nowISO(),
+    };
+    const changedFields = [];
+
+    if (providedSession) {
+      nextChild.session = providedSession;
+      changedFields.push('session');
+    }
+    if (body.room !== undefined) {
+      nextChild.room = safeString(body.room).trim() || 'Room TBD';
+      changedFields.push('room');
+    }
+    if (body.dropoffTimeISO !== undefined) {
+      nextChild.dropoffTimeISO = providedDropoffTimeISO || null;
+      changedFields.push('dropoffTimeISO');
+    }
+    if (body.pickupTimeISO !== undefined) {
+      nextChild.pickupTimeISO = providedPickupTimeISO || null;
+      changedFields.push('pickupTimeISO');
+    }
+    if (assignedIds) {
+      nextChild.assignedABA = assignedIds;
+      nextChild.assigned_ABA = assignedIds;
+      changedFields.push('assignedABA');
+    }
+    if (body.amTherapist !== undefined) {
+      nextChild.amTherapist = body.amTherapist || null;
+      changedFields.push('amTherapist');
+    }
+    if (body.pmTherapist !== undefined) {
+      nextChild.pmTherapist = body.pmTherapist || null;
+      changedFields.push('pmTherapist');
+    }
+
+    const now = new Date();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `UPDATE directory_children
+         SET data_json = $2::jsonb, updated_at = $3
+         WHERE id = $1`,
+        [childId, JSON.stringify(nextChild), now]
+      );
+      if (changedFields.includes('assignedABA') || changedFields.includes('amTherapist') || changedFields.includes('pmTherapist')) {
+        await rebuildAbaRelationshipsFromDirectoryPg(client);
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      throw e;
+    } finally {
+      client.release();
+    }
+
+    await recordAuditLog({
+      actorId: req.user?.id || req.user?.uid,
+      action: 'child_schedule.updated',
+      targetType: 'child',
+      targetId: childId,
+      details: { changedFields, session: nextChild.session || '', assignedABA: nextChild.assignedABA || [] },
+    });
+
+    return res.json({ ok: true, item: nextChild });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || String(e) });
   }
@@ -4214,49 +4319,6 @@ app.post('/api/auth/complete-invite-password', authMiddleware, async (req, res) 
     return res.json({ ok: true, user: userRow ? userToClient(userRow) : null });
   } catch (e) {
     return res.status(400).json({ ok: false, error: e?.message || 'could not complete password setup' });
-  }
-});
-
-app.post('/api/auth/google', authRateLimit, async (req, res) => {
-  const idToken = (req.body && req.body.idToken) ? String(req.body.idToken).trim() : '';
-  if (!idToken) return res.status(400).json({ ok: false, error: 'idToken required' });
-  if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'server missing BB_JWT_SECRET' });
-
-  if (!GOOGLE_CLIENT_IDS || !googleClient) {
-    return res.status(501).json({ ok: false, error: 'Google sign-in is not configured on this server (set BB_GOOGLE_CLIENT_IDS)' });
-  }
-
-  try {
-    const audience = GOOGLE_CLIENT_IDS.split(',').map((s) => s.trim()).filter(Boolean);
-    const ticket = await googleClient.verifyIdToken({ idToken, audience });
-    const payload = ticket && ticket.getPayload ? ticket.getPayload() : null;
-    const email = payload && payload.email ? String(payload.email).trim().toLowerCase() : '';
-    const name = payload && (payload.name || payload.given_name) ? String(payload.name || payload.given_name).trim() : '';
-
-    if (!email) return res.status(400).json({ ok: false, error: 'Google token missing email' });
-
-    let row = await pgQueryOne('SELECT * FROM users WHERE lower(email) = $1', [email]);
-    if (!row) {
-      const id = nanoId();
-      const t = new Date();
-      const randomSecret = `${nanoId()}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
-      const hash = bcrypt.hashSync(randomSecret, 12);
-      try {
-        await pool.query(
-          'INSERT INTO users (id,email,password_hash,name,phone,address,role,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-          [id, email, hash, name || 'User', '', '', 'parent', t, t]
-        );
-        row = await pgQueryOne('SELECT * FROM users WHERE id = $1', [id]);
-      } catch (e) {
-        row = await pgQueryOne('SELECT * FROM users WHERE lower(email) = $1', [email]);
-      }
-    }
-
-    const user = userToClient(row);
-    const token = signToken(user);
-    return res.json({ ok: true, token, user });
-  } catch (e) {
-    return res.status(401).json({ ok: false, error: 'invalid Google token' });
   }
 });
 

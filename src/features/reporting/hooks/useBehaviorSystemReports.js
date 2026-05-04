@@ -15,8 +15,8 @@ export function useBehaviorSystemReports({ selectedChildId, reportChildIds = [],
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sessionSummariesByChild, setSessionSummariesByChild] = useState({});
-  const [moodHistory, setMoodHistory] = useState([]);
-  const [attendanceHistory, setAttendanceHistory] = useState([]);
+  const [moodHistoryByChild, setMoodHistoryByChild] = useState({});
+  const [attendanceHistoryByChild, setAttendanceHistoryByChild] = useState({});
 
   useEffect(() => {
     let disposed = false;
@@ -24,8 +24,8 @@ export function useBehaviorSystemReports({ selectedChildId, reportChildIds = [],
       if (!selectedChildId && !reportChildIds.length) {
         if (!disposed) {
           setSessionSummariesByChild({});
-          setMoodHistory([]);
-          setAttendanceHistory([]);
+          setMoodHistoryByChild({});
+          setAttendanceHistoryByChild({});
         }
         return;
       }
@@ -38,14 +38,18 @@ export function useBehaviorSystemReports({ selectedChildId, reportChildIds = [],
           return [childId, Array.isArray(result?.items) ? result.items : []];
         }));
         const nextSummariesByChild = Object.fromEntries(summaryPairs);
-        const [moodResult, attendanceResult] = await Promise.all([
-          selectedChildId ? getMoodHistory(selectedChildId, 60).catch(() => ({ items: [] })) : Promise.resolve({ items: [] }),
-          selectedChildId ? getAttendanceHistory(selectedChildId, 365).catch(() => ({ items: [] })) : Promise.resolve({ items: [] }),
-        ]);
+        const moodPairs = await Promise.all(childIds.map(async (childId) => {
+          const result = await getMoodHistory(childId, 60).catch(() => ({ items: [] }));
+          return [childId, Array.isArray(result?.items) ? result.items : []];
+        }));
+        const attendancePairs = await Promise.all(childIds.map(async (childId) => {
+          const result = await getAttendanceHistory(childId, 365).catch(() => ({ items: [] }));
+          return [childId, Array.isArray(result?.items) ? result.items : []];
+        }));
         if (disposed) return;
         setSessionSummariesByChild(nextSummariesByChild);
-        setMoodHistory(Array.isArray(moodResult?.items) ? moodResult.items : []);
-        setAttendanceHistory(Array.isArray(attendanceResult?.items) ? attendanceResult.items : []);
+        setMoodHistoryByChild(Object.fromEntries(moodPairs));
+        setAttendanceHistoryByChild(Object.fromEntries(attendancePairs));
       } catch (e) {
         if (!disposed) setError(String(e?.message || e || 'Could not load reporting data.'));
       } finally {
@@ -58,17 +62,30 @@ export function useBehaviorSystemReports({ selectedChildId, reportChildIds = [],
     };
   }, [selectedChildId, JSON.stringify(reportChildIds)]);
 
-  const selectedSessionSummaries = sessionSummariesByChild[selectedChildId] || [];
+  const selectedSessionSummaries = useMemo(() => {
+    if (selectedChildId) return sessionSummariesByChild[selectedChildId] || [];
+    return Object.values(sessionSummariesByChild).flat();
+  }, [selectedChildId, sessionSummariesByChild]);
+
+  const selectedMoodHistory = useMemo(() => {
+    if (selectedChildId) return moodHistoryByChild[selectedChildId] || [];
+    return Object.values(moodHistoryByChild).flat();
+  }, [moodHistoryByChild, selectedChildId]);
+
+  const selectedAttendanceHistory = useMemo(() => {
+    if (selectedChildId) return attendanceHistoryByChild[selectedChildId] || [];
+    return Object.values(attendanceHistoryByChild).flat();
+  }, [attendanceHistoryByChild, selectedChildId]);
 
   const childReports = useMemo(() => ({
     behaviorTrends: buildBehaviorTrendSeries(selectedSessionSummaries),
-    moodTrends: buildMoodTrendSeries(moodHistory),
+    moodTrends: buildMoodTrendSeries(selectedMoodHistory),
     programMastery: buildProgramMasteryTable(selectedSessionSummaries),
     reinforcerEffectiveness: buildReinforcerEffectiveness(selectedSessionSummaries),
     monthlySummary: buildMonthlySummary(selectedSessionSummaries),
-    attendanceSummary: buildAttendanceSummary(attendanceHistory),
+    attendanceSummary: buildAttendanceSummary(selectedAttendanceHistory),
     behaviorHeatmap: buildBehaviorHeatmap(selectedSessionSummaries),
-  }), [selectedSessionSummaries, moodHistory, attendanceHistory]);
+  }), [selectedAttendanceHistory, selectedMoodHistory, selectedSessionSummaries]);
 
   const schoolWide = useMemo(() => buildSchoolWideAnalytics({ summariesByChild: sessionSummariesByChild, children, urgentMemos }), [sessionSummariesByChild, children, urgentMemos]);
 

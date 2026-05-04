@@ -148,15 +148,14 @@ export default function AdminSettingsHubScreen() {
     }
   }, [canManageOfficeSettings, form, settingsItem]);
 
-  const sections = [
-    { key: 'organization', title: 'Organization Settings', description: 'Office configuration for organization profile, campuses, and operating defaults.', action: () => setActivePanel('organization'), hidden: !canManageOfficeSettings },
-    { title: 'User Roles & Permissions', description: 'Office role and access management.', action: () => navigation.navigate('ManagePermissions'), hidden: !canManageOfficeSettings },
-    { title: 'Clinical Templates', description: 'BCBA clinical templates and reusable programming standards.', action: () => navigation.navigate('ProgramDirectory', { focusMode: 'library' }), hidden: !isBcba },
-    { title: 'Import Center', description: 'Office imports for users, rosters, and documents.', action: () => navigation.navigate('ImportCenter'), hidden: !canManageOfficeSettings },
-    { key: 'integrations', title: 'Integrations', description: 'Operational integrations and external service setup.', action: () => setActivePanel('integrations'), hidden: !canManageOfficeSettings },
-    { key: 'branding', title: 'Branding', description: 'Logo, visual identity, and published experience controls.', action: () => setActivePanel('branding'), hidden: !canManageOfficeSettings },
-    { title: 'Notification Settings', description: 'Cross-role notification defaults and delivery preferences.', action: () => navigation.navigate('PrivacyDefaults'), hidden: !canSeeSettingsWorkspace },
-  ].filter((item) => !item.hidden);
+  const sections = canSeeSettingsWorkspace ? [
+    { key: 'organization', title: 'Organization Settings', description: canManageOfficeSettings ? 'Office configuration for organization profile, campuses, and operating defaults.' : 'Review organization profile, campuses, and operating defaults from one workspace.', action: () => setActivePanel('organization') },
+    { title: 'User Roles & Permissions', description: canManageOfficeSettings ? 'Office role and access management.' : 'Review role access and permission routing from a dedicated settings screen.', action: () => navigation.navigate('ManagePermissions') },
+    { title: 'Clinical Templates', description: 'BCBA clinical templates and reusable programming standards.', action: () => navigation.navigate('ProgramDirectory', { focusMode: 'library' }) },
+    { title: 'Import Center', description: canManageOfficeSettings ? 'Office imports for users, rosters, and documents.' : 'Open the import center to review roster, document, and user-import workflows.', action: () => navigation.navigate('ImportCenter') },
+    { key: 'integrations', title: 'Integrations', description: canManageOfficeSettings ? 'Operational integrations and external service setup.' : 'Review integration endpoints and connected-service setup.', action: () => setActivePanel('integrations') },
+    { key: 'branding', title: 'Branding', description: canManageOfficeSettings ? 'Logo, visual identity, and published experience controls.' : 'Review organization branding, colors, and published support links.', action: () => setActivePanel('branding') },
+  ] : [];
 
   const renderEditor = () => {
     if (loading) {
@@ -262,17 +261,14 @@ export default function AdminSettingsHubScreen() {
   };
 
   return (
-    <ScreenWrapper style={styles.container}>
+    <ScreenWrapper style={styles.container} bannerShowBack={navigation.canGoBack()}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
           <View style={styles.heroRow}>
-            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} accessibilityLabel="Go back">
-              <MaterialIcons name="arrow-back" size={20} color="#0f172a" />
-            </TouchableOpacity>
             <View style={styles.heroTextWrap}>
               <Text style={styles.eyebrow}>Settings</Text>
-              <Text style={styles.title}>System configuration and operational controls</Text>
-              <Text style={styles.subtitle}>{isBcba ? 'BCBAs see clinical templates and shared notification controls here.' : 'Office admins manage organizational setup, imports, integrations, branding, and permissions here.'}</Text>
+              <Text style={styles.title}>Admin Settings</Text>
+              <Text style={styles.subtitle}>{isBcba ? 'Open clinical templates, imports, permissions, branding, and shared organization settings from this workspace.' : 'Office admins manage organizational setup, imports, integrations, branding, and permissions here.'}</Text>
             </View>
           </View>
         </View>
@@ -284,10 +280,8 @@ export default function AdminSettingsHubScreen() {
             const selected = section.key && section.key === activePanel;
             return (
               <View key={section.title} style={[styles.card, { flexBasis: cardBasis }, selected ? styles.cardSelected : null]}>
-                <Text style={styles.cardTitle}>{section.title}</Text>
-                <Text style={styles.cardText}>{section.description}</Text>
-                <TouchableOpacity style={[styles.button, selected ? styles.buttonSelected : null]} onPress={section.action}>
-                  <Text style={styles.buttonText}>{selected ? 'Editing' : 'Open'}</Text>
+                <TouchableOpacity style={styles.cardTitleButton} onPress={section.action} accessibilityRole="button" accessibilityLabel={section.title}>
+                  <Text style={[styles.cardTitle, selected ? styles.cardTitleSelected : null]}>{section.title}</Text>
                 </TouchableOpacity>
               </View>
             );
@@ -306,7 +300,6 @@ const styles = StyleSheet.create({
   hero: { borderRadius: 20, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', padding: 18 },
   heroRow: { flexDirection: 'row', alignItems: 'flex-start' },
   heroTextWrap: { flex: 1 },
-  backButton: { width: 40, height: 40, borderRadius: 12, borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginRight: 14 },
   eyebrow: { color: '#1d4ed8', fontWeight: '800', textTransform: 'uppercase', fontSize: 12 },
   title: { marginTop: 6, fontSize: 24, fontWeight: '800', color: '#0f172a' },
   subtitle: { marginTop: 8, color: '#475569', lineHeight: 20 },
@@ -314,11 +307,9 @@ const styles = StyleSheet.create({
   grid: { marginTop: 14, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   card: { marginTop: 14, borderRadius: 18, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff', padding: 16 },
   cardSelected: { borderColor: '#93c5fd', backgroundColor: '#f8fbff' },
+  cardTitleButton: { alignSelf: 'flex-start' },
   cardTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
-  cardText: { marginTop: 8, color: '#64748b', lineHeight: 20 },
-  button: { marginTop: 14, alignSelf: 'flex-start', borderRadius: 10, backgroundColor: '#2563eb', paddingVertical: 10, paddingHorizontal: 14 },
-  buttonSelected: { backgroundColor: '#0f172a' },
-  buttonText: { color: '#fff', fontWeight: '800' },
+  cardTitleSelected: { color: '#1d4ed8' },
   panelCard: { marginTop: 18, borderRadius: 22, borderWidth: 1, borderColor: '#dbeafe', backgroundColor: '#ffffff', padding: 18 },
   panelHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
   panelTitle: { fontSize: 22, fontWeight: '800', color: '#0f172a' },

@@ -71,6 +71,8 @@ const ROLE_OPTIONS = [
   { value: 'faculty', label: 'Faculty', adminOnly: false },
   { value: 'therapist', label: THERAPY_ROLE_LABELS.therapist, adminOnly: false },
   { value: 'bcba', label: 'BCBA', adminOnly: false },
+  { value: 'office', label: 'Office', adminOnly: false },
+  { value: 'reception', label: 'Reception', adminOnly: false },
   { value: 'admin', label: 'Admin', adminOnly: true },
   { value: 'campusAdmin', label: 'Campus Admin', adminOnly: true },
   { value: 'orgAdmin', label: 'Org Admin', adminOnly: true },
@@ -78,7 +80,9 @@ const ROLE_OPTIONS = [
 ];
 const STAFF_INVITE_ROLE_OPTIONS = [
   { value: 'bcba', label: 'BCBA', adminOnly: false },
-  { value: 'faculty', label: 'Office Personnel', adminOnly: false },
+  { value: 'office', label: 'Office', adminOnly: false },
+  { value: 'reception', label: 'Reception', adminOnly: false },
+  { value: 'faculty', label: 'Faculty', adminOnly: false },
   { value: 'therapist', label: 'ABA Tech', adminOnly: false },
   { value: 'orgAdmin', label: 'Org Admin', adminOnly: true },
   { value: 'superAdmin', label: 'Super Admin', adminOnly: true },
@@ -86,7 +90,7 @@ const STAFF_INVITE_ROLE_OPTIONS = [
 
 function capabilityRoleKey(role) {
   const value = normalizeUserRole(role);
-  if (value === 'superAdmin' || value === 'orgAdmin' || value === 'campusAdmin' || value === 'admin') return 'Admin';
+  if (value === 'superAdmin' || value === 'orgAdmin' || value === 'campusAdmin' || value === 'admin' || value === 'office' || value === 'reception') return 'Admin';
   if (value === 'therapist' || value === 'bcba') return 'Therapist';
   if (value === 'faculty') return 'Teacher';
   if (value === 'parent') return 'Parent';
@@ -467,7 +471,6 @@ export default function ManagePermissionsScreen(){
         const campus = campusLookup.get(String(campusId));
         return {
           organizationId,
-            <InlineToast toast={toast} onClose={dismissToast} />
           programId: String(campus?.programId || ''),
           campusId: String(campusId),
           role,

@@ -3,6 +3,8 @@ export const USER_ROLES = Object.freeze({
   FACULTY: 'faculty',
   THERAPIST: 'therapist',
   BCBA: 'bcba',
+  OFFICE: 'office',
+  RECEPTION: 'reception',
   CAMPUS_ADMIN: 'campusAdmin',
   ORG_ADMIN: 'orgAdmin',
   SUPER_ADMIN: 'superAdmin',
@@ -23,16 +25,16 @@ export const ADMIN_SECTION_KEYS = Object.freeze({
 });
 
 const ADMIN_SECTION_ACCESS = Object.freeze({
-  [ADMIN_SECTION_KEYS.DASHBOARD]: Object.freeze({ bcba: 'full', office: 'full' }),
-  [ADMIN_SECTION_KEYS.STUDENTS]: Object.freeze({ bcba: 'full_clinical', office: 'roster_only' }),
-  [ADMIN_SECTION_KEYS.STAFF]: Object.freeze({ bcba: 'view_only', office: 'full' }),
-  [ADMIN_SECTION_KEYS.SCHEDULING]: Object.freeze({ bcba: 'clinical_scheduling', office: 'full' }),
-  [ADMIN_SECTION_KEYS.PROGRAMS_GOALS]: Object.freeze({ bcba: 'full', office: 'none' }),
-  [ADMIN_SECTION_KEYS.DATA_REPORTS]: Object.freeze({ bcba: 'clinical_reports', office: 'operational_reports' }),
-  [ADMIN_SECTION_KEYS.BILLING_AUTHORIZATIONS]: Object.freeze({ bcba: 'view_only', office: 'full' }),
-  [ADMIN_SECTION_KEYS.COMPLIANCE]: Object.freeze({ bcba: 'view_only', office: 'full' }),
-  [ADMIN_SECTION_KEYS.COMMUNICATION]: Object.freeze({ bcba: 'full_clinical', office: 'admin_only' }),
-  [ADMIN_SECTION_KEYS.SETTINGS]: Object.freeze({ bcba: 'limited', office: 'full' }),
+  [ADMIN_SECTION_KEYS.DASHBOARD]: Object.freeze({ bcba: 'full', office: 'full', reception: 'full' }),
+  [ADMIN_SECTION_KEYS.STUDENTS]: Object.freeze({ bcba: 'full_clinical', office: 'roster_only', reception: 'roster_only' }),
+  [ADMIN_SECTION_KEYS.STAFF]: Object.freeze({ bcba: 'view_only', office: 'full', reception: 'view_only' }),
+  [ADMIN_SECTION_KEYS.SCHEDULING]: Object.freeze({ bcba: 'clinical_scheduling', office: 'full', reception: 'front_desk' }),
+  [ADMIN_SECTION_KEYS.PROGRAMS_GOALS]: Object.freeze({ bcba: 'full', office: 'none', reception: 'none' }),
+  [ADMIN_SECTION_KEYS.DATA_REPORTS]: Object.freeze({ bcba: 'clinical_reports', office: 'operational_reports', reception: 'none' }),
+  [ADMIN_SECTION_KEYS.BILLING_AUTHORIZATIONS]: Object.freeze({ bcba: 'view_only', office: 'full', reception: 'view_only' }),
+  [ADMIN_SECTION_KEYS.COMPLIANCE]: Object.freeze({ bcba: 'view_only', office: 'full', reception: 'none' }),
+  [ADMIN_SECTION_KEYS.COMMUNICATION]: Object.freeze({ bcba: 'full_clinical', office: 'admin_only', reception: 'none' }),
+  [ADMIN_SECTION_KEYS.SETTINGS]: Object.freeze({ bcba: 'limited', office: 'full', reception: 'none' }),
 });
 
 export const PROGRAM_TYPES = Object.freeze({
@@ -42,7 +44,7 @@ export const PROGRAM_TYPES = Object.freeze({
 });
 
 export const CONTACT_RELATIONSHIP_TYPES = Object.freeze(['mother', 'father', 'guardian', 'caregiver', 'emergencyContact', 'pickupContact']);
-export const STAFF_RELATIONSHIP_TYPES = Object.freeze(['teacher', 'therapist', 'bcba', 'campusAdmin', 'frontDesk']);
+export const STAFF_RELATIONSHIP_TYPES = Object.freeze(['teacher', 'therapist', 'bcba', 'office', 'reception', 'campusAdmin', 'frontDesk']);
 
 function safeString(value) {
   try {
@@ -82,12 +84,14 @@ export function normalizeUserRole(role) {
   if (value === 'faculty') return USER_ROLES.FACULTY;
   if (value === 'therapist' || value === 'abatech' || value === 'aba tech' || value === 'aba-tech' || value === 'aba_tech' || value === 'behavior technician') return USER_ROLES.THERAPIST;
   if (value === 'bcba') return USER_ROLES.BCBA;
+  if (value === 'office' || value === 'officeadmin' || value === 'office admin' || value === 'office-admin' || value === 'office_admin' || value === 'office personnel' || value === 'officepersonnel') return USER_ROLES.OFFICE;
+  if (value === 'reception' || value === 'receptionist' || value === 'frontdesk' || value === 'front desk' || value === 'front-desk' || value === 'front_desk') return USER_ROLES.RECEPTION;
   if (value === 'admin') return USER_ROLES.ADMIN;
   if (value === 'administrator') return USER_ROLES.ADMIN;
   if (value === 'campusadmin' || value === 'campus_admin') return USER_ROLES.CAMPUS_ADMIN;
   if (value === 'orgadmin' || value === 'org_admin' || value === 'organizationadmin') return USER_ROLES.ORG_ADMIN;
   if (value === 'superadmin' || value === 'super_admin') return USER_ROLES.SUPER_ADMIN;
-  if (value === 'teacher' || value === 'staff' || value === 'office personnel' || value === 'officepersonnel') return USER_ROLES.FACULTY;
+  if (value === 'teacher' || value === 'staff') return USER_ROLES.FACULTY;
   return safeString(role) || USER_ROLES.PARENT;
 }
 
@@ -197,11 +201,17 @@ export function isBcbaRole(role) {
 }
 
 export function isOfficeAdminRole(role) {
-  return isAdminRole(role);
+  const value = normalizeUserRole(role);
+  return value === USER_ROLES.OFFICE || isAdminRole(value);
+}
+
+export function isReceptionRole(role) {
+  return normalizeUserRole(role) === USER_ROLES.RECEPTION;
 }
 
 export function getAdminActorType(role) {
   if (isBcbaRole(role)) return 'bcba';
+  if (isReceptionRole(role)) return 'reception';
   if (isOfficeAdminRole(role)) return 'office';
   return 'none';
 }

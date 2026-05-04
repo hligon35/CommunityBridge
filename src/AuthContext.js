@@ -355,11 +355,6 @@ export function AuthProvider({ children }) {
     return res;
   }
 
-  async function loginWithGoogle(idToken) {
-    const res = await Api.loginWithGoogle(idToken);
-    return res;
-  }
-
   async function completeInvitePasswordSetup(newPassword) {
     const result = await Api.completeInvitePasswordSetup(newPassword);
     setUser((current) => {
@@ -465,7 +460,6 @@ export function AuthProvider({ children }) {
         login,
         loginWithInviteCode,
         loginWithApprovalToken,
-        loginWithGoogle,
         completeInvitePasswordSetup,
         logout,
         setAuth,

@@ -4,11 +4,11 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { useTenant } from '../core/tenant/TenantContext';
-import { ADMIN_SECTION_KEYS, canAccessAdminSection, canAccessAdminWorkspace, isStaffRole } from '../core/tenant/models';
+import { ADMIN_SECTION_KEYS, canAccessAdminSection, canAccessAdminWorkspace, isBcbaRole, isStaffRole } from '../core/tenant/models';
 import { isChildLinkedToTherapist } from '../features/sessionTracking/utils/dashboardSessionTarget';
 import useIsTabletLayout from '../hooks/useIsTabletLayout';
 import { navigationRef } from '../navigationRef';
-import { THERAPY_ROLE_LABELS } from '../utils/roleTerminology';
+import { THERAPY_ROLE_LABELS, getWorkspaceLabel } from '../utils/roleTerminology';
 import LogoTitle from './LogoTitle';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -43,8 +43,11 @@ export default function TabletNavigationShell({ currentRoute, children }) {
   const isStaff = isStaffRole(user?.role);
   const showAdminWorkspace = canAccessAdminWorkspace(user?.role);
   const isParentWorkspace = !showAdminWorkspace && !isStaff;
+  const workspaceLabel = getWorkspaceLabel(user?.role);
   const greeting = String(user?.name || user?.firstName || '').trim() || (showAdminWorkspace ? 'Welcome back' : 'Hello');
   const showQuickAdd = !showAdminWorkspace && isStaff;
+  const showBcbaQuickActions = showAdminWorkspace && isBcbaRole(user?.role);
+  const showHeaderQuickMenu = showQuickAdd || showBcbaQuickActions;
   const activeRouteParams = navigationRef?.getCurrentRoute?.()?.params || null;
   const activeRouteChildId = String(activeRouteParams?.childId || '').trim();
 
@@ -53,11 +56,11 @@ export default function TabletNavigationShell({ currentRoute, children }) {
   }, [currentRoute]);
 
   useEffect(() => {
-    if (showQuickAdd) return;
+    if (showHeaderQuickMenu) return;
     setQuickMenuOpen(false);
     setQuickLogType('');
     setQuickLogValue('');
-  }, [showQuickAdd]);
+  }, [showHeaderQuickMenu]);
 
   const linkedTherapistChildren = useMemo(() => {
     const therapistId = String(user?.id || '').trim();
@@ -75,6 +78,24 @@ export default function TabletNavigationShell({ currentRoute, children }) {
     const availableWidth = Math.max(176, width - drawerWidth - 120);
     return Math.max(176, Math.min(220, availableWidth));
   }, [collapsed, width]);
+
+  const quickHeaderMenuItems = useMemo(() => {
+    if (showBcbaQuickActions) {
+      return [
+        { key: 'program', label: 'Add Program', target: { root: 'Controls', screen: 'ProgramDirectory', params: { focusMode: 'editor' } } },
+        { key: 'documentation', label: 'Documentation', target: { root: 'Controls', screen: 'TherapistDocumentationDashboard' } },
+        { key: 'insights', label: 'Org Insights', target: { root: 'Controls', screen: 'OrganizationInsightsDashboard' } },
+      ];
+    }
+    if (showQuickAdd) {
+      return [
+        { key: 'quick-note', label: 'Quick Note', quickLogType: 'Quick Note' },
+        { key: 'incident', label: 'Incident', quickLogType: 'Incident' },
+        { key: 'unexpected-data', label: 'Unexpected Data', quickLogType: 'Unexpected Data' },
+      ];
+    }
+    return [];
+  }, [showBcbaQuickActions, showQuickAdd]);
 
   function submitQuickLog() {
     if (!quickLogType || !quickLogValue.trim()) {
@@ -109,7 +130,7 @@ export default function TabletNavigationShell({ currentRoute, children }) {
 
     if (isParentWorkspace) {
       return [{
-        label: 'Parent Workspace',
+        label: workspaceLabel,
         items: [
           { key: 'dashboard', label: labels.dashboard || 'Dashboard', icon: 'dashboard', target: { root: 'Home', screen: 'CommunityMain' } },
           { key: 'messages', label: 'Chats', icon: 'chat', target: { root: 'Chats', screen: 'ChatsList' } },
@@ -129,8 +150,8 @@ export default function TabletNavigationShell({ currentRoute, children }) {
       { key: 'settings', label: 'Settings', icon: 'settings', target: { root: 'Settings', screen: 'SettingsMain' } },
     ];
 
-    return [{ label: `${THERAPY_ROLE_LABELS.therapist} Workspace`, items: therapistItems }];
-  }, [isParentWorkspace, isStaff, labels.dashboard, showAdminWorkspace, user?.role]);
+    return [{ label: workspaceLabel, items: therapistItems }];
+  }, [isParentWorkspace, isStaff, labels.dashboard, showAdminWorkspace, user?.role, workspaceLabel]);
 
   if (!isTabletLayout) return children;
 
@@ -168,35 +189,39 @@ export default function TabletNavigationShell({ currentRoute, children }) {
         </View>
 
         <View style={[styles.contentWrap, { paddingTop: 12, paddingBottom: Math.max(insets.bottom, 12) }]}>
-          {showQuickAdd && quickMenuOpen ? <TouchableOpacity style={styles.quickMenuDismissLayer} activeOpacity={1} onPress={() => setQuickMenuOpen(false)} /> : null}
+          {showHeaderQuickMenu && quickMenuOpen ? <TouchableOpacity style={styles.quickMenuDismissLayer} activeOpacity={1} onPress={() => setQuickMenuOpen(false)} /> : null}
           <View style={styles.topBar}>
             <View style={styles.brandRow}>
               <LogoTitle width={150} height={48} />
               {!collapsed ? (
                 <View style={styles.greetingWrap}>
-                  <Text style={styles.topEyebrow}>{showAdminWorkspace ? 'Admin Workspace' : (isParentWorkspace ? 'Parent Workspace' : `${THERAPY_ROLE_LABELS.therapist} Workspace`)}</Text>
+                  <Text style={styles.topEyebrow}>{workspaceLabel}</Text>
                   <Text style={styles.topTitle}>Hello, {greeting}</Text>
                 </View>
               ) : null}
             </View>
             <View style={styles.headerActions}>
-              {showQuickAdd ? (
+              {showHeaderQuickMenu ? (
                 <View style={styles.quickAddAnchor}>
-                  <TouchableOpacity style={[styles.iconOnlyButton, styles.quickAddButton, quickMenuOpen ? styles.iconOnlyButtonActive : null]} onPress={() => setQuickMenuOpen((value) => !value)}>
+                  <TouchableOpacity style={[styles.iconOnlyButton, styles.quickAddButton, quickMenuOpen ? styles.iconOnlyButtonActive : null]} onPress={() => setQuickMenuOpen((value) => !value)} accessibilityLabel={showBcbaQuickActions ? 'Quick actions' : 'Quick add'}>
                     <MaterialIcons name="add" size={20} color="#1d4ed8" />
                   </TouchableOpacity>
                   {quickMenuOpen ? (
                     <View style={[styles.quickHeaderMenu, { width: quickMenuWidth }]}>
-                      {['Quick Note', 'Incident', 'Unexpected Data'].map((item) => (
+                      {quickHeaderMenuItems.map((item) => (
                         <TouchableOpacity
-                          key={item}
+                          key={item.key}
                           style={styles.quickHeaderMenuItem}
                           onPress={() => {
                             setQuickMenuOpen(false);
-                            setQuickLogType(item);
+                            if (item.target) {
+                              openTarget(item.target);
+                              return;
+                            }
+                            setQuickLogType(item.quickLogType || '');
                           }}
                         >
-                          <Text style={styles.quickHeaderMenuText}>{item}</Text>
+                          <Text style={styles.quickHeaderMenuText}>{item.label}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>

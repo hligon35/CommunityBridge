@@ -1,9 +1,11 @@
-import React, { useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
-import { isBcbaRole, isOfficeAdminRole } from '../core/tenant/models';
+import Api from '../Api';
+import { USER_ROLES, isBcbaRole, isOfficeAdminRole, normalizeUserRole } from '../core/tenant/models';
 import { THERAPY_ROLE_LABELS } from '../utils/roleTerminology';
 import { childHasParent, findLinkedParentId } from '../utils/directoryLinking';
 const { isChildLinkedToTherapist } = require('../features/sessionTracking/utils/dashboardSessionTarget');
@@ -12,6 +14,22 @@ function todayStamp(hours = 9, minutes = 0) {
   const date = new Date();
   date.setHours(hours, minutes, 0, 0);
   return date;
+}
+
+function sameDay(left, right) {
+  if (!(left instanceof Date) || !(right instanceof Date)) return false;
+  return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth() && left.getDate() === right.getDate();
+}
+
+function buildCalendarDays(anchorDate) {
+  const monthStart = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+  const calendarStart = new Date(monthStart);
+  calendarStart.setDate(monthStart.getDate() - monthStart.getDay());
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(calendarStart);
+    date.setDate(calendarStart.getDate() + index);
+    return date;
+  });
 }
 
 function buildSessionCards(children = []) {
@@ -34,15 +52,27 @@ function buildSessionCards(children = []) {
 
 export default function ScheduleCalendarScreen() {
   const { user } = useAuth();
-  const { children = [], parents = [] } = useData();
-  const role = String(user?.role || '').trim().toLowerCase();
+  const { children = [], parents = [], therapists = [], setChildren } = useData();
+  const { width } = useWindowDimensions();
+  const role = normalizeUserRole(user?.role);
   const isBcba = isBcbaRole(user?.role);
-  const isTherapist = role === 'therapist';
-  const isParent = role.includes('parent');
+  const isTherapist = role === USER_ROLES.THERAPIST;
+  const isParent = role === USER_ROLES.PARENT;
   const isOffice = isOfficeAdminRole(user?.role);
+  const canManageSchedule = isBcba || isOffice;
   const [viewMode, setViewMode] = useState('day');
   const [focusMode, setFocusMode] = useState('staff');
+  const [editorMode, setEditorMode] = useState('');
+  const [selectedChildId, setSelectedChildId] = useState('');
+  const [draftSession, setDraftSession] = useState('AM');
+  const [draftRoom, setDraftRoom] = useState('');
+  const [draftStart, setDraftStart] = useState('09:00');
+  const [draftEnd, setDraftEnd] = useState('10:00');
+  const [draftAssignedStaffId, setDraftAssignedStaffId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(todayStamp(9, 0));
   const linkedParentId = isParent ? (findLinkedParentId(user, parents) || user?.id || null) : null;
+  const isWideLayout = width >= 980;
 
   const filteredChildren = useMemo(() => {
     if (!isTherapist) return children;
@@ -67,9 +97,15 @@ export default function ScheduleCalendarScreen() {
   const visibleChildren = isParent ? parentChildren : filteredChildren;
 
   const sessions = useMemo(() => buildSessionCards(visibleChildren), [visibleChildren]);
+  const visibleSessions = useMemo(() => sessions.filter((session) => sameDay(session.start, selectedDate)), [selectedDate, sessions]);
+  const selectedChild = useMemo(() => (visibleChildren || []).find((child) => child?.id === selectedChildId) || visibleChildren[0] || null, [selectedChildId, visibleChildren]);
+  const abaTechOptions = useMemo(() => (therapists || []).filter((staff) => {
+    const normalizedRole = String(staff?.role || '').toLowerCase();
+    return staff?.id && !normalizedRole.includes('admin') && !normalizedRole.includes('bcba');
+  }), [therapists]);
   const grouped = useMemo(() => {
     const groups = new Map();
-    sessions.forEach((session) => {
+    visibleSessions.forEach((session) => {
       const key = isTherapist
         ? viewMode.toUpperCase()
         : (isParent ? 'Upcoming sessions' : (focusMode === 'student' ? session.student : focusMode === 'room' ? session.location : session.staff));
@@ -78,7 +114,142 @@ export default function ScheduleCalendarScreen() {
       groups.set(key, next);
     });
     return Array.from(groups.entries()).map(([key, value]) => ({ key, value }));
-  }, [focusMode, isParent, isTherapist, sessions, viewMode]);
+  }, [focusMode, isParent, isTherapist, viewMode, visibleSessions]);
+
+  const calendarDays = useMemo(() => buildCalendarDays(selectedDate), [selectedDate]);
+  const monthLabel = useMemo(() => selectedDate.toLocaleDateString([], { month: 'long', year: 'numeric' }), [selectedDate]);
+
+  useEffect(() => {
+    if (!selectedChildId && visibleChildren[0]?.id) {
+      setSelectedChildId(visibleChildren[0].id);
+    }
+    if (selectedChildId && !visibleChildren.some((child) => child?.id === selectedChildId)) {
+      setSelectedChildId(visibleChildren[0]?.id || '');
+    }
+  }, [selectedChildId, visibleChildren]);
+
+  useEffect(() => {
+    if (!selectedChild) return;
+    const startDate = selectedChild?.dropoffTimeISO ? new Date(selectedChild.dropoffTimeISO) : todayStamp(9, 0);
+    const endDate = selectedChild?.pickupTimeISO ? new Date(selectedChild.pickupTimeISO) : todayStamp(10, 0);
+    const assignedId = typeof selectedChild?.amTherapist === 'object' && draftSession === 'AM'
+      ? selectedChild.amTherapist.id
+      : typeof selectedChild?.pmTherapist === 'object' && draftSession === 'PM'
+        ? selectedChild.pmTherapist.id
+        : Array.isArray(selectedChild?.assignedABA) && selectedChild.assignedABA.length
+          ? String(selectedChild.assignedABA[0])
+          : '';
+    setDraftSession(String(selectedChild?.session || 'AM').toUpperCase() === 'PM' ? 'PM' : 'AM');
+    setDraftRoom(String(selectedChild?.room || ''));
+    setDraftStart(`${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`);
+    setDraftEnd(`${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`);
+    setDraftAssignedStaffId(assignedId || '');
+    setSelectedDate(startDate);
+  }, [selectedChild]);
+
+  function parseDraftTime(value, fallbackDate) {
+    const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    const base = fallbackDate instanceof Date && Number.isFinite(fallbackDate.getTime()) ? new Date(fallbackDate) : new Date(selectedDate);
+    if (!match) return base;
+    const hours = Math.max(0, Math.min(23, Number(match[1])));
+    const minutes = Math.max(0, Math.min(59, Number(match[2])));
+    base.setHours(hours, minutes, 0, 0);
+    return base;
+  }
+
+  function mergeChildUpdate(updatedChild, fallbackUpdater) {
+    if (updatedChild) {
+      setChildren((current) => (current || []).map((child) => (child?.id === updatedChild.id ? { ...child, ...updatedChild } : child)));
+      return;
+    }
+    setChildren((current) => (current || []).map((child) => {
+      if (child?.id !== selectedChild?.id) return child;
+      return typeof fallbackUpdater === 'function' ? fallbackUpdater(child) : child;
+    }));
+  }
+
+  function shiftCalendarMonth(delta) {
+    setSelectedDate((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1, current.getHours(), current.getMinutes(), 0, 0));
+  }
+
+  async function saveSessionDraft() {
+    if (!selectedChild?.id) {
+      Alert.alert('Select a learner', 'Choose a learner before saving the session.');
+      return;
+    }
+    const nextStart = parseDraftTime(draftStart, selectedDate);
+    const nextEnd = parseDraftTime(draftEnd, selectedDate);
+    const fallbackUpdate = (child) => ({
+      ...child,
+      session: draftSession,
+      room: String(draftRoom || '').trim() || child?.room || 'Room TBD',
+      dropoffTimeISO: nextStart.toISOString(),
+      pickupTimeISO: nextEnd.toISOString(),
+    });
+    setSaving(true);
+    try {
+      const result = await Api.updateChildSchedule(selectedChild.id, {
+        session: draftSession,
+        room: String(draftRoom || '').trim() || selectedChild?.room || 'Room TBD',
+        dropoffTimeISO: nextStart.toISOString(),
+        pickupTimeISO: nextEnd.toISOString(),
+      });
+      mergeChildUpdate(result?.item || null, fallbackUpdate);
+      setEditorMode('');
+      Alert.alert('Session saved', `${selectedChild?.name || 'Learner'} now has an updated ${draftSession} session.`);
+    } catch (error) {
+      mergeChildUpdate(null, fallbackUpdate);
+      setEditorMode('');
+      Alert.alert('Session saved locally', `${selectedChild?.name || 'Learner'} was updated in the schedule view.`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveAssignmentDraft() {
+    if (!selectedChild?.id) {
+      Alert.alert('Select a learner', 'Choose a learner before assigning an ABA tech.');
+      return;
+    }
+    if (!draftAssignedStaffId) {
+      Alert.alert('Select staff', 'Choose an ABA tech before saving the assignment.');
+      return;
+    }
+    const assignedStaff = abaTechOptions.find((staff) => staff?.id === draftAssignedStaffId);
+    if (!assignedStaff) {
+      Alert.alert('Select staff', 'The selected ABA tech is no longer available.');
+      return;
+    }
+    const existingAssigned = Array.isArray(selectedChild?.assignedABA) ? selectedChild.assignedABA : Array.isArray(selectedChild?.assigned_ABA) ? selectedChild.assigned_ABA : [];
+    const assignedIds = Array.from(new Set([...existingAssigned.map((item) => String(item)), String(assignedStaff.id)]));
+    const fallbackUpdate = (child) => ({
+      ...child,
+      session: draftSession,
+      assignedABA: assignedIds,
+      assigned_ABA: assignedIds,
+      amTherapist: draftSession === 'AM' ? assignedStaff : child?.amTherapist,
+      pmTherapist: draftSession === 'PM' ? assignedStaff : child?.pmTherapist,
+    });
+    setSaving(true);
+    try {
+      const result = await Api.updateChildSchedule(selectedChild.id, {
+        session: draftSession,
+        assignedABA: assignedIds,
+        assigned_ABA: assignedIds,
+        amTherapist: draftSession === 'AM' ? assignedStaff : undefined,
+        pmTherapist: draftSession === 'PM' ? assignedStaff : undefined,
+      });
+      mergeChildUpdate(result?.item || null, fallbackUpdate);
+      setEditorMode('');
+      Alert.alert('ABA tech assigned', `${assignedStaff.name || 'Selected staff'} was assigned to ${selectedChild?.name || 'the learner'} for the ${draftSession} session.`);
+    } catch (error) {
+      mergeChildUpdate(null, fallbackUpdate);
+      setEditorMode('');
+      Alert.alert('Assignment saved locally', `${assignedStaff.name || 'Selected staff'} was assigned in the schedule view.`);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function action(title, message) {
     Alert.alert(title, message);
@@ -108,14 +279,110 @@ export default function ScheduleCalendarScreen() {
           </ScrollView>
         </View>
 
-        {!isTherapist && !isParent ? <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.primaryButton} onPress={() => action('Add session', 'Session creation can be completed from this scheduling hub.')}>
+        <View style={[styles.scheduleWorkspace, isWideLayout ? styles.scheduleWorkspaceWide : null]}>
+          <View style={[styles.calendarCard, isWideLayout ? styles.calendarCardWide : null]}>
+            <View style={styles.calendarHeader}>
+              <TouchableOpacity style={styles.calendarNavButton} onPress={() => shiftCalendarMonth(-1)}>
+                <MaterialIcons name="chevron-left" size={18} color="#0f172a" />
+              </TouchableOpacity>
+              <Text style={styles.calendarMonth}>{monthLabel}</Text>
+              <TouchableOpacity style={styles.calendarNavButton} onPress={() => shiftCalendarMonth(1)}>
+                <MaterialIcons name="chevron-right" size={18} color="#0f172a" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.calendarWeekHeader}>
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, index) => <Text key={`${label}-${index}`} style={styles.calendarWeekday}>{label}</Text>)}
+            </View>
+            <View style={styles.calendarGrid}>
+              {calendarDays.map((date) => {
+                const inMonth = date.getMonth() === selectedDate.getMonth();
+                const active = sameDay(date, selectedDate);
+                const hasSessions = sessions.some((session) => sameDay(session.start, date));
+                return (
+                  <TouchableOpacity key={date.toISOString()} style={[styles.calendarDay, !inMonth ? styles.calendarDayMuted : null, active ? styles.calendarDayActive : null]} onPress={() => setSelectedDate(date)}>
+                    <Text style={[styles.calendarDayText, active ? styles.calendarDayTextActive : null, !inMonth ? styles.calendarDayTextMuted : null]}>{date.getDate()}</Text>
+                    {hasSessions ? <View style={[styles.calendarDot, active ? styles.calendarDotActive : null]} /> : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <View style={styles.calendarFooter}>
+              <Text style={styles.calendarFooterText}>{selectedDate.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}</Text>
+              <Text style={styles.calendarFooterText}>{visibleSessions.length} scheduled item{visibleSessions.length === 1 ? '' : 's'}</Text>
+            </View>
+          </View>
+
+          <View style={[styles.sessionsPane, isWideLayout ? styles.sessionsPaneWide : null]}>
+        {!isTherapist && !isParent ? <View style={[styles.actionRow, styles.actionRowCentered]}>
+          <TouchableOpacity style={styles.primaryButton} onPress={() => setEditorMode('session')}>
             <Text style={styles.primaryButtonText}>Add Session</Text>
           </TouchableOpacity>
           {isOffice ? <TouchableOpacity style={styles.secondaryButton} onPress={() => action('Edit session', 'Office edit controls are available from the selected session cards.')}><Text style={styles.secondaryButtonText}>Edit Session</Text></TouchableOpacity> : null}
           {isOffice ? <TouchableOpacity style={styles.secondaryButton} onPress={() => action('Approve changes', 'Office approval routing for scheduling changes is staged here.')}><Text style={styles.secondaryButtonText}>Approve Changes</Text></TouchableOpacity> : null}
-          {isBcba ? <TouchableOpacity style={styles.secondaryButton} onPress={() => action(`Assign ${THERAPY_ROLE_LABELS.therapist.toLowerCase()}`, `BCBA assignment controls are staged from the session cards in this hub.`)}><Text style={styles.secondaryButtonText}>{`Assign ${THERAPY_ROLE_LABELS.therapist}`}</Text></TouchableOpacity> : null}
+          {canManageSchedule ? <TouchableOpacity style={styles.secondaryButton} onPress={() => setEditorMode('assignment')}><Text style={styles.secondaryButtonText}>Assign ABA Tech</Text></TouchableOpacity> : null}
         </View> : null}
+
+        {editorMode ? (
+          <View style={styles.editorCard}>
+            <Text style={styles.groupTitle}>{editorMode === 'session' ? 'Add or Update Session' : 'Assign ABA Tech'}</Text>
+            <Text style={styles.groupSubtitle}>{editorMode === 'session' ? 'Choose a learner, set the session window, and save it to the selected calendar date.' : 'Choose a learner and assign an ABA tech to the AM or PM session.'}</Text>
+
+            <Text style={styles.fieldLabel}>Learner</Text>
+            <View style={styles.chipRow}>
+              {visibleChildren.map((child) => (
+                <TouchableOpacity key={child.id} style={[styles.chip, selectedChildId === child.id ? styles.chipActive : null]} onPress={() => setSelectedChildId(child.id)}>
+                  <Text style={[styles.chipText, selectedChildId === child.id ? styles.chipTextActive : null]}>{child.name || 'Learner'}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.fieldLabel}>Session</Text>
+            <View style={styles.chipRow}>
+              {['AM', 'PM'].map((sessionKey) => (
+                <TouchableOpacity key={sessionKey} style={[styles.chip, draftSession === sessionKey ? styles.chipActive : null]} onPress={() => setDraftSession(sessionKey)}>
+                  <Text style={[styles.chipText, draftSession === sessionKey ? styles.chipTextActive : null]}>{sessionKey}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {editorMode === 'session' ? (
+              <>
+                <View style={styles.fieldRow}>
+                  <View style={styles.fieldHalf}>
+                    <Text style={styles.fieldLabel}>Start (HH:MM)</Text>
+                    <TextInput value={draftStart} onChangeText={setDraftStart} placeholder="09:00" style={styles.input} />
+                  </View>
+                  <View style={styles.fieldHalf}>
+                    <Text style={styles.fieldLabel}>End (HH:MM)</Text>
+                    <TextInput value={draftEnd} onChangeText={setDraftEnd} placeholder="10:00" style={styles.input} />
+                  </View>
+                </View>
+                <Text style={styles.fieldLabel}>Room</Text>
+                <TextInput value={draftRoom} onChangeText={setDraftRoom} placeholder="Room 4" style={styles.input} />
+              </>
+            ) : (
+              <>
+                <Text style={styles.fieldLabel}>ABA Tech</Text>
+                <View style={styles.chipRow}>
+                  {abaTechOptions.map((staff) => (
+                    <TouchableOpacity key={staff.id} style={[styles.chip, draftAssignedStaffId === staff.id ? styles.chipActive : null]} onPress={() => setDraftAssignedStaffId(staff.id)}>
+                      <Text style={[styles.chipText, draftAssignedStaffId === staff.id ? styles.chipTextActive : null]}>{staff.name || staff.email || 'Staff'}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+
+            <View style={styles.actionRow}>
+              <TouchableOpacity style={[styles.primaryButton, saving ? styles.buttonDisabled : null]} onPress={editorMode === 'session' ? saveSessionDraft : saveAssignmentDraft} disabled={saving}>
+                <Text style={styles.primaryButtonText}>{saving ? 'Saving...' : editorMode === 'session' ? 'Save Session' : 'Save Assignment'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.secondaryButton, saving ? styles.buttonDisabled : null]} onPress={() => setEditorMode('')} disabled={saving}>
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
 
         {grouped.map((group) => (
           <View key={group.key} style={styles.groupCard}>
@@ -136,7 +403,9 @@ export default function ScheduleCalendarScreen() {
             ))}
           </View>
         ))}
-        {!grouped.length ? <View style={styles.groupCard}><Text style={styles.groupTitle}>{isParent ? 'Family calendar' : 'Assigned sessions'}</Text><Text style={styles.groupSubtitle}>{isParent ? 'No upcoming sessions are linked to your family account right now.' : `No sessions are assigned to your ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} profile right now.`}</Text></View> : null}
+        {!grouped.length ? <View style={styles.groupCard}><Text style={styles.groupTitle}>{isParent ? 'Family calendar' : 'Assigned sessions'}</Text><Text style={styles.groupSubtitle}>{visibleChildren.length ? `No sessions are scheduled for ${selectedDate.toLocaleDateString([], { month: 'short', day: 'numeric' })}.` : isParent ? 'No upcoming sessions are linked to your family account right now.' : `No sessions are assigned to your ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} profile right now.`}</Text></View> : null}
+          </View>
+        </View>
       </ScrollView>
     </ScreenWrapper>
   );
@@ -156,14 +425,43 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#2563eb' },
   chipText: { color: '#0f172a', fontWeight: '700' },
   chipTextActive: { color: '#ffffff' },
+  scheduleWorkspace: { marginTop: 12 },
+  scheduleWorkspaceWide: { flexDirection: 'row', alignItems: 'flex-start' },
+  calendarCard: { borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16, marginBottom: 12 },
+  calendarCardWide: { width: 320, marginRight: 16, marginBottom: 0 },
+  calendarHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  calendarNavButton: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center' },
+  calendarMonth: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
+  calendarWeekHeader: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, marginBottom: 8 },
+  calendarWeekday: { flex: 1, textAlign: 'center', color: '#64748b', fontWeight: '700', fontSize: 12 },
+  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  calendarDay: { width: '14.285%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14, marginBottom: 4 },
+  calendarDayMuted: { opacity: 0.45 },
+  calendarDayActive: { backgroundColor: '#2563eb' },
+  calendarDayText: { color: '#0f172a', fontWeight: '700' },
+  calendarDayTextActive: { color: '#ffffff' },
+  calendarDayTextMuted: { color: '#94a3b8' },
+  calendarDot: { marginTop: 4, width: 6, height: 6, borderRadius: 3, backgroundColor: '#2563eb' },
+  calendarDotActive: { backgroundColor: '#ffffff' },
+  calendarFooter: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#e5e7eb' },
+  calendarFooterText: { color: '#475569', fontWeight: '700', marginBottom: 4 },
+  sessionsPane: { flex: 1 },
+  sessionsPaneWide: { flex: 1 },
   actionRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 12 },
+  actionRowCentered: { justifyContent: 'center' },
   primaryButton: { borderRadius: 12, backgroundColor: '#2563eb', paddingVertical: 12, paddingHorizontal: 14, marginRight: 10, marginBottom: 10 },
+  buttonDisabled: { opacity: 0.65 },
   primaryButtonText: { color: '#ffffff', fontWeight: '800' },
   secondaryButton: { borderRadius: 12, backgroundColor: '#e2e8f0', paddingVertical: 12, paddingHorizontal: 14, marginRight: 10, marginBottom: 10 },
   secondaryButtonText: { color: '#0f172a', fontWeight: '800' },
   groupCard: { marginTop: 12, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },
+  editorCard: { marginTop: 12, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#bfdbfe', padding: 16 },
   groupTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
   groupSubtitle: { marginTop: 4, color: '#64748b' },
+  fieldLabel: { marginTop: 12, marginBottom: 8, color: '#0f172a', fontWeight: '700' },
+  fieldRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  fieldHalf: { width: '48%' },
+  input: { minHeight: 46, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#fff', color: '#0f172a' },
   sessionCard: { marginTop: 12, borderRadius: 16, backgroundColor: '#f8fafc', padding: 14, flexDirection: 'row', alignItems: 'center' },
   sessionTitle: { fontWeight: '800', color: '#0f172a' },
   sessionMeta: { marginTop: 4, color: '#475569' },

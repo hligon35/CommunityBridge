@@ -5,7 +5,7 @@ import { ScreenWrapper, CenteredContainer } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { logPress } from '../utils/logger';
-import { isAdminRole } from '../core/tenant/models';
+import { USER_ROLES, isAdminRole, normalizeUserRole } from '../core/tenant/models';
 import { THERAPY_ROLE_LABELS, getDisplayRoleLabel } from '../utils/roleTerminology';
 
 function normalizeName(s) {
@@ -80,10 +80,10 @@ export default function NewThreadScreen({ navigation }) {
   const { parents = [], therapists = [], children = [] } = useData();
   const [selected, setSelected] = useState(null);
 
-  const role = (user?.role || '').toString().toLowerCase();
+  const role = normalizeUserRole(user?.role);
   const isAdmin = isAdminRole(role);
-  const isTherapist = role === 'therapist';
-  const isParent = role === 'parent';
+  const isTherapist = role === USER_ROLES.THERAPIST;
+  const isParent = role === USER_ROLES.PARENT;
 
   const { admins, connectedTherapists, connectedParents, note } = useMemo(() => {
     const adminContacts = [{ id: 'admin-1', name: 'Office Admin', subtitle: 'Admin' }];

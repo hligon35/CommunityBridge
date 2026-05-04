@@ -4,19 +4,20 @@ import * as DocumentPicker from 'expo-document-picker';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
-import { isBcbaRole } from '../core/tenant/models';
+import { USER_ROLES, isBcbaRole, normalizeUserRole } from '../core/tenant/models';
 import { useBehaviorSystemReports } from '../features/reporting/hooks/useBehaviorSystemReports';
 import { childHasParent, findLinkedParentId } from '../utils/directoryLinking';
+import { getWorkspaceLabel } from '../utils/roleTerminology';
 import * as Api from '../Api';
-const { isChildLinkedToTherapist, resolveSelectedDashboardChild } = require('../features/sessionTracking/utils/dashboardSessionTarget');
+const { isChildLinkedToTherapist } = require('../features/sessionTracking/utils/dashboardSessionTarget');
 const { getEffectiveChatIdentity } = require('../utils/demoIdentity');
 
 function findReportChildren(user, children, parents) {
   const items = Array.isArray(children) ? children : [];
-  const role = String(user?.role || '').trim().toLowerCase();
+  const role = normalizeUserRole(user?.role);
   const effectiveUser = getEffectiveChatIdentity(user);
-  if (role === 'therapist') return items.filter((child) => isChildLinkedToTherapist(child, effectiveUser?.id));
-  if (role.includes('parent')) {
+  if (role === USER_ROLES.THERAPIST) return items.filter((child) => isChildLinkedToTherapist(child, effectiveUser?.id));
+  if (role === USER_ROLES.PARENT) {
     const linkedParentId = findLinkedParentId(user, parents) || user?.id;
     return items.filter((child) => childHasParent(child, linkedParentId));
   }
@@ -50,6 +51,7 @@ function MiniBars({ items = [], color = '#2563eb' }) {
 
 export default function ReportsScreen() {
   const { user } = useAuth();
+  const workspaceLabel = getWorkspaceLabel(user?.role);
   const { children = [], parents = [], urgentMemos = [], messages = [] } = useData();
   const { width } = useWindowDimensions();
   const role = String(user?.role || '').trim().toLowerCase();
@@ -57,22 +59,36 @@ export default function ReportsScreen() {
   const isParent = role.includes('parent');
   const isWideLayout = width >= 900;
   const reportChildren = useMemo(() => findReportChildren(user, children, parents), [user, children, parents]);
-  const [selectedChildId, setSelectedChildId] = useState(reportChildren[0]?.id || null);
+  const [selectedChildId, setSelectedChildId] = useState('all');
+  const [selectedRoom, setSelectedRoom] = useState('all');
   const [tab, setTab] = useState(isBcba ? 'clinical' : 'operational');
   const [jobs, setJobs] = useState([]);
   const [jobsError, setJobsError] = useState('');
   const [transferBusy, setTransferBusy] = useState(false);
-  const selectedChild = useMemo(() => resolveSelectedDashboardChild(reportChildren, selectedChildId), [reportChildren, selectedChildId]);
+  const roomOptions = useMemo(() => ['all', ...Array.from(new Set(reportChildren.map((child) => String(child?.room || '').trim()).filter(Boolean)))], [reportChildren]);
+  const filteredReportChildren = useMemo(() => {
+    if (selectedRoom === 'all') return reportChildren;
+    return reportChildren.filter((child) => String(child?.room || '').trim() === selectedRoom);
+  }, [reportChildren, selectedRoom]);
+  const selectedChild = useMemo(() => {
+    if (!selectedChildId || selectedChildId === 'all') return null;
+    return filteredReportChildren.find((child) => child?.id === selectedChildId) || null;
+  }, [filteredReportChildren, selectedChildId]);
   const { loading, childReports, schoolWide, sessionSummariesByChild } = useBehaviorSystemReports({
     selectedChildId: selectedChild?.id || null,
-    reportChildIds: reportChildren.map((child) => child.id),
-    children: reportChildren,
+    reportChildIds: filteredReportChildren.map((child) => child.id),
+    children: filteredReportChildren,
     urgentMemos,
   });
 
   useEffect(() => {
-    if (!reportChildren.some((child) => child?.id === selectedChildId)) setSelectedChildId(reportChildren[0]?.id || null);
-  }, [reportChildren, selectedChildId]);
+    if (selectedRoom !== 'all' && !roomOptions.includes(selectedRoom)) setSelectedRoom('all');
+  }, [roomOptions, selectedRoom]);
+
+  useEffect(() => {
+    if (selectedChildId === 'all') return;
+    if (!filteredReportChildren.some((child) => child?.id === selectedChildId)) setSelectedChildId('all');
+  }, [filteredReportChildren, selectedChildId]);
 
   useEffect(() => {
     let mounted = true;
@@ -92,12 +108,17 @@ export default function ReportsScreen() {
     };
   }, []);
 
-  const abcLogs = useMemo(() => (sessionSummariesByChild[selectedChild?.id] || []).slice(0, 4).map((item, index) => ({
+  const activeSessionSummaries = useMemo(() => {
+    if (selectedChild?.id) return sessionSummariesByChild[selectedChild.id] || [];
+    return Object.values(sessionSummariesByChild).flat();
+  }, [selectedChild?.id, sessionSummariesByChild]);
+
+  const abcLogs = useMemo(() => activeSessionSummaries.slice(0, 4).map((item, index) => ({
     id: item?.sessionId || `${index}`,
     antecedent: item?.summary?.dailyRecap?.antecedent || 'Routine transition',
     behavior: item?.summary?.dailyRecap?.topBehavior || 'Task refusal',
     consequence: item?.summary?.dailyRecap?.consequence || 'Prompted return to task',
-  })), [selectedChild?.id, sessionSummariesByChild]);
+  })), [activeSessionSummaries]);
 
   const commLogs = useMemo(() => (messages || []).slice(0, 4).map((message, index) => ({
     id: message?.id || `${index}`,
@@ -109,9 +130,9 @@ export default function ReportsScreen() {
     return (
       <ScreenWrapper>
         <View style={styles.parentBlockedCard}>
-          <Text style={styles.parentBlockedEyebrow}>Parent Workspace</Text>
+          <Text style={styles.parentBlockedEyebrow}>{workspaceLabel}</Text>
           <Text style={styles.parentBlockedTitle}>Reports are not available on the parent path.</Text>
-          <Text style={styles.parentBlockedText}>Use Dashboard, Chats, My Child, Calendar, and Billing & Insurance from the parent workspace instead.</Text>
+          <Text style={styles.parentBlockedText}>Use Dashboard, Chats, My Child, Calendar, and Billing & Insurance from the parent portal instead.</Text>
         </View>
       </ScreenWrapper>
     );
@@ -248,15 +269,40 @@ export default function ReportsScreen() {
           ))}
         </View>
 
-        {reportChildren.length ? (
-          <View style={styles.filterRow}>
-            {reportChildren.map((child) => (
-              <TouchableOpacity key={child.id} style={[styles.filterChip, selectedChild?.id === child.id ? styles.filterChipActive : null]} onPress={() => setSelectedChildId(child.id)}>
-                <Text style={[styles.filterChipText, selectedChild?.id === child.id ? styles.filterChipTextActive : null]}>{child.name}</Text>
-              </TouchableOpacity>
-            ))}
+        {roomOptions.length > 1 ? (
+          <View style={styles.filterSection}>
+            <Text style={styles.filterLabel}>Filter by room</Text>
+            <View style={styles.filterRow}>
+              {roomOptions.map((room) => (
+                <TouchableOpacity key={room} style={[styles.filterChip, selectedRoom === room ? styles.filterChipActive : null]} onPress={() => setSelectedRoom(room)}>
+                  <Text style={[styles.filterChipText, selectedRoom === room ? styles.filterChipTextActive : null]}>{room === 'all' ? 'All Rooms' : room}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         ) : null}
+
+        {filteredReportChildren.length ? (
+          <View style={styles.filterSection}>
+            <Text style={styles.filterLabel}>Filter by learner</Text>
+            <View style={styles.filterRow}>
+              <TouchableOpacity style={[styles.filterChip, selectedChildId === 'all' ? styles.filterChipActive : null]} onPress={() => setSelectedChildId('all')}>
+                <Text style={[styles.filterChipText, selectedChildId === 'all' ? styles.filterChipTextActive : null]}>All Learners</Text>
+              </TouchableOpacity>
+              {filteredReportChildren.map((child) => (
+                <TouchableOpacity key={child.id} style={[styles.filterChip, selectedChild?.id === child.id ? styles.filterChipActive : null]} onPress={() => setSelectedChildId(child.id)}>
+                  <Text style={[styles.filterChipText, selectedChild?.id === child.id ? styles.filterChipTextActive : null]}>{child.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ) : reportChildren.length ? (
+          <View style={styles.emptyFilterState}>
+            <Text style={styles.rowText}>No learners were found for the selected room.</Text>
+          </View>
+        ) : null}
+
+        {selectedChildId === 'all' ? <Text style={styles.scopeText}>Showing a collective view for {filteredReportChildren.length || reportChildren.length} learner{(filteredReportChildren.length || reportChildren.length) === 1 ? '' : 's'}.</Text> : null}
 
         {loading ? <View style={styles.loading}><ActivityIndicator color="#2563eb" /></View> : null}
 
@@ -354,11 +400,15 @@ const styles = StyleSheet.create({
   tabButtonActive: { backgroundColor: '#2563eb' },
   tabButtonText: { color: '#0f172a', fontWeight: '700' },
   tabButtonTextActive: { color: '#ffffff' },
+  filterSection: { marginTop: 10 },
+  filterLabel: { marginBottom: 6, color: '#475569', fontWeight: '700' },
   filterRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
   filterChip: { borderRadius: 999, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#e2e8f0', marginRight: 8, marginBottom: 8 },
   filterChipActive: { backgroundColor: '#0f172a' },
   filterChipText: { color: '#0f172a', fontWeight: '700' },
   filterChipTextActive: { color: '#ffffff' },
+  emptyFilterState: { marginTop: 10, borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 14 },
+  scopeText: { marginTop: 6, color: '#64748b', fontWeight: '700' },
   loading: { paddingVertical: 20, alignItems: 'center' },
   summaryRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 12 },
   summaryRowWide: { marginHorizontal: -6 },

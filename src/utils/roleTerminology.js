@@ -10,6 +10,8 @@ const VALUE_LABELS = Object.freeze({
   therapist: THERAPY_ROLE_LABELS.therapist,
   therapists: THERAPY_ROLE_LABELS.therapists,
   bcba: 'BCBA',
+  office: 'Office',
+  reception: 'Reception',
   faculty: 'Faculty',
   parent: 'Parent',
   admin: 'Admin',
@@ -37,4 +39,12 @@ export function getAssignmentRoleLabel(role) {
   if (role === 'AM Therapist') return THERAPY_ROLE_LABELS.amTherapist;
   if (role === 'PM Therapist') return THERAPY_ROLE_LABELS.pmTherapist;
   return getDisplayRoleLabel(role);
+}
+
+export function getWorkspaceLabel(role) {
+  const value = String(role || '').trim();
+  if (!value) return 'Workspace';
+  const normalized = value.toLowerCase().replace(/[^a-z]/g, '');
+  if (normalized.includes('parent')) return 'Parent Portal';
+  return `${getDisplayRoleLabel(value)} Workspace`;
 }

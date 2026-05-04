@@ -3,10 +3,6 @@ import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator, To
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
-import Constants from 'expo-constants';
-import * as Google from 'expo-auth-session/providers/google';
-import * as AuthSession from 'expo-auth-session';
 import SignUpScreen from './SignUpScreen';
 import ForgotPasswordScreen from './ForgotPasswordScreen';
 import { useAuth } from '../src/AuthContext';
@@ -15,31 +11,6 @@ import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportEr
 import { getAuthInitError, getFirebaseAppInitError } from '../src/firebase';
 import { isInviteAccessCode } from '../src/utils/passwordPolicy';
 import { storeApprovalAccessIntent } from '../src/utils/approvalAccessIntent';
-
-WebBrowser.maybeCompleteAuthSession();
-
-function getExpoExtraValue(key) {
-  try {
-    return (
-      Constants?.expoConfig?.extra?.[key] ??
-      Constants?.easConfig?.extra?.[key] ??
-      Constants?.manifest2?.extra?.[key] ??
-      Constants?.manifest?.extra?.[key]
-    );
-  } catch (_) {
-    return undefined;
-  }
-}
-
-function maskClientId(id) {
-  const s = String(id || '').trim();
-  if (!s) return '';
-  if (s.length <= 10) return '***';
-  return `${s.slice(0, 4)}…${s.slice(-6)}`;
-}
-
-const googleWebButtonImage = require('../assets/icons/Google assets/wgbutton.png');
-const googleIconImage = require('../assets/icons/Google assets/ggIcon.png');
 const faceIdIconImage = require('../assets/icons/faceID.png');
 const loginLogoImage = require('../assets/titlelogo.png');
 
@@ -75,174 +46,6 @@ function LoginToast({ toast, onClose, hostStyle }) {
 
 const isMobilePlatform = Platform.OS !== 'web';
 
-function GoogleSignInButtonDisabled({ busy, onPress, variant = 'full' }) {
-  if (variant === 'icon') {
-    return (
-      <TouchableOpacity
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel="Continue with Google (setup required)"
-        style={[styles.iconPushBtn, isMobilePlatform ? styles.mobileIconPushBtn : null, busy ? { opacity: 0.7 } : null]}
-        disabled={busy}
-      >
-        <AuthButtonImage source={googleIconImage} imageStyle={styles.mobileAuthIconImage} />
-      </TouchableOpacity>
-    );
-  }
-
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel="Continue with Google (setup required)"
-      style={[styles.googleImageButtonWrap, busy ? { opacity: 0.7 } : null]}
-      disabled={busy}
-    >
-      <AuthButtonImage source={googleWebButtonImage} style={styles.googleButtonImage} />
-    </TouchableOpacity>
-  );
-}
-
-function GoogleSignInButtonEnabled({
-  auth,
-  navigation,
-  busy,
-  setBusy,
-  showToast,
-  iosClientId,
-  androidClientId,
-  webClientId,
-  redirectUri,
-  variant = 'full',
-}) {
-  // expo-auth-session requires webClientId on web; do not even initialize the hook if it's missing.
-  if (Platform.OS === 'web' && !String(webClientId || '').trim()) {
-    return (
-      <GoogleSignInButtonDisabled
-        busy={busy}
-        variant={variant}
-        onPress={() => {
-          Alert.alert(
-            'Google sign-in not configured',
-            'Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for this web build.'
-          );
-        }}
-      />
-    );
-  }
-
-  const [googleRequest, googleResponse, googlePromptAsync] = Google.useIdTokenAuthRequest({
-    iosClientId: iosClientId || undefined,
-    androidClientId: androidClientId || undefined,
-    webClientId: webClientId || undefined,
-    // IMPORTANT: Only pass a redirect URI override on web.
-    // On native (iOS/Android), let expo-auth-session compute the installed-app redirect
-    // (based on bundle id / application id) to satisfy Google's policies.
-    ...(redirectUri ? { redirectUri } : {}),
-    scopes: ['profile', 'email'],
-  });
-
-  useEffect(() => {
-    if (!googleResponse) return;
-    if (googleResponse.type !== 'success') return;
-
-    const idToken =
-      googleResponse?.authentication?.idToken ||
-      googleResponse?.params?.id_token ||
-      '';
-
-    if (!idToken) {
-      showToast({ title: 'Google sign-in failed', message: 'Missing Google ID token.' });
-      return;
-    }
-
-    (async () => {
-      setBusy(true);
-      try {
-        await auth.loginWithGoogle(idToken);
-        showToast({ title: 'Google sign-in successful', message: 'Finishing sign-in…', tone: 'success', durationMs: 1400 });
-        await finishLoginNavigation();
-      } catch (e) {
-        showToast({ title: 'Google sign-in failed', message: e?.message || 'Please try again.' });
-      } finally {
-        setBusy(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [googleResponse]);
-
-  useEffect(() => {
-    if (!googleResponse) return;
-    if (googleResponse.type === 'success') return;
-
-    const err = String(googleResponse?.error?.message || googleResponse?.error || '').trim();
-    const desc = String(googleResponse?.params?.error_description || '').trim();
-    const code = String(googleResponse?.params?.error || '').trim();
-    if (googleResponse.type === 'error') {
-      showToast({
-        title: 'Google sign-in failed',
-        message: desc || err || (code ? `Google OAuth error: ${code}` : 'Google OAuth error.'),
-      });
-    }
-  }, [googleResponse, googleRequest, showToast]);
-
-  const onPress = () => {
-    if (!googleRequest) {
-      showToast({ title: 'Google sign-in', message: 'Google sign-in is still initializing. Please try again.', tone: 'info' });
-      return;
-    }
-    googlePromptAsync({ showInRecents: true }).catch(() => {
-      showToast({ title: 'Google sign-in failed', message: 'Could not start sign-in.' });
-    });
-  };
-
-  if (variant === 'icon') {
-    return (
-      <TouchableOpacity
-        style={[styles.iconPushBtn, isMobilePlatform ? styles.mobileIconPushBtn : null, busy ? { opacity: 0.7 } : null]}
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel="Continue with Google"
-        disabled={busy}
-      >
-        <AuthButtonImage source={googleIconImage} imageStyle={styles.mobileAuthIconImage} />
-      </TouchableOpacity>
-    );
-  }
-
-  return (
-    <TouchableOpacity
-      style={[styles.googleImageButtonWrap, busy ? { opacity: 0.7 } : null]}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel="Continue with Google"
-      disabled={busy}
-    >
-      <AuthButtonImage source={googleWebButtonImage} style={styles.googleButtonImage} />
-    </TouchableOpacity>
-  );
-}
-
-function GoogleSignInButton(props) {
-  if (!props.enabled) {
-    return <GoogleSignInButtonDisabled busy={props.busy} onPress={props.onMissingConfig} variant={props.variant} />;
-  }
-  return (
-    <GoogleSignInButtonEnabled
-      auth={props.auth}
-      navigation={props.navigation}
-      busy={props.busy}
-      setBusy={props.setBusy}
-      showToast={props.showToast}
-      iosClientId={props.iosClientId}
-      androidClientId={props.androidClientId}
-      webClientId={props.webClientId}
-      redirectUri={props.redirectUri}
-      variant={props.variant}
-    />
-  );
-}
-
 export default function LoginScreen({ navigation, suppressAutoRedirect = false }) {
   const { height: windowHeight } = useWindowDimensions();
   const toastTopOffset = Platform.OS === 'web'
@@ -264,66 +67,6 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
   const auth = useAuth();
   const toastTimerRef = useRef(null);
   const approvalLinkStartedRef = useRef(false);
-
-  const iosGoogleClientId = String(
-    process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
-      getExpoExtraValue('EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID') ||
-      ''
-  ).trim();
-  const androidGoogleClientId = String(
-    process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
-      getExpoExtraValue('EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID') ||
-      ''
-  ).trim();
-  const webGoogleClientId = String(
-    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
-      getExpoExtraValue('EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID') ||
-      ''
-  ).trim();
-
-  // IMPORTANT:
-  // Do NOT fall back to the web client ID on native platforms.
-  // Using a web client ID on iOS/Android is a common cause of Google OAuth
-  // `redirect_uri_mismatch` errors.
-  const googleClientIdForPlatform =
-    Platform.OS === 'ios'
-      ? iosGoogleClientId
-      : Platform.OS === 'android'
-        ? androidGoogleClientId
-        : Platform.OS === 'web'
-          ? webGoogleClientId
-          : '';
-
-  const googleEnabled = Boolean(googleClientIdForPlatform);
-
-  const googleRedirectUri = useMemo(() => {
-    // Web: land back on /dashboard (Expo SPA is hosted under /dashboard).
-    if (Platform.OS === 'web') {
-      try {
-        const origin = String(globalThis?.location?.origin || '').trim();
-        if (origin) return `${origin}/dashboard`;
-      } catch (_) {}
-      return AuthSession.makeRedirectUri();
-    }
-
-    // Native: do not override; expo-auth-session will compute a compliant installed-app redirect.
-    return '';
-  }, []);
-
-  useEffect(() => {
-    logger.info('auth', 'Google auth config', {
-      platform: Platform.OS,
-      googleEnabled,
-      hasIosClientId: Boolean(iosGoogleClientId),
-      hasAndroidClientId: Boolean(androidGoogleClientId),
-      hasWebClientId: Boolean(webGoogleClientId),
-      redirectUri: googleRedirectUri || '(provider default)',
-      iosClientIdHint: maskClientId(iosGoogleClientId),
-      androidClientIdHint: maskClientId(androidGoogleClientId),
-      webClientIdHint: maskClientId(webGoogleClientId),
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const fieldWidthStyle = useMemo(() => ({ width: '100%', maxWidth: 360 }), []);
 
@@ -475,21 +218,6 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
     } finally {
       setBusy(false);
     }
-  }
-
-  function showGoogleConfigHelp() {
-    const missing = [];
-    if (Platform.OS === 'ios' && !iosGoogleClientId) missing.push('EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID');
-    if (Platform.OS === 'android' && !androidGoogleClientId) missing.push('EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID');
-    if (Platform.OS === 'web' && !webGoogleClientId) missing.push('EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID');
-
-    Alert.alert(
-      'Google sign-in not configured',
-      `Missing the Google Client ID for this platform.${missing.length ? `\n\nMissing:\n- ${missing.join('\n- ')}` : ''}` +
-        `\n\nFor EAS builds, add these to your build profile env (or EAS project env vars):\n- EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID\n- EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID\n- EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` +
-        `\n\nRedirect URI:\n${googleRedirectUri || '(provider default for native)'}` +
-        `\n\nThen rebuild the app binary.`
-    );
   }
 
   async function doBiometricUnlock() {
@@ -681,24 +409,6 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
               )}
             </TouchableOpacity>
 
-            {/* Google sign-in as an icon button on mobile */}
-            {Platform.OS !== 'web' ? (
-              <GoogleSignInButton
-                variant="icon"
-                auth={auth}
-                navigation={navigation}
-                enabled={googleEnabled}
-                busy={busy}
-                setBusy={setBusy}
-                showToast={showToast}
-                iosClientId={iosGoogleClientId}
-                androidClientId={androidGoogleClientId}
-                webClientId={webGoogleClientId}
-                redirectUri={googleRedirectUri}
-                onMissingConfig={showGoogleConfigHelp}
-              />
-            ) : null}
-
             {biometricAvailable ? (
               <TouchableOpacity
                 onPress={doBiometricUnlock}
@@ -771,24 +481,6 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
 
           {/* Google sign-in at the bottom of the form */}
           <View style={styles.secondaryActions}>
-            {Platform.OS === 'web' ? (
-              <View style={{ width: '100%', maxWidth: 360 }}>
-                <GoogleSignInButton
-                  variant="full"
-                  auth={auth}
-                  navigation={navigation}
-                  enabled={googleEnabled}
-                  busy={busy}
-                  setBusy={setBusy}
-                  showToast={showToast}
-                  iosClientId={iosGoogleClientId}
-                  androidClientId={androidGoogleClientId}
-                  webClientId={webGoogleClientId}
-                  redirectUri={googleRedirectUri}
-                  onMissingConfig={showGoogleConfigHelp}
-                />
-              </View>
-            ) : null}
           </View>
               </View>
             </ScrollView>
@@ -857,6 +549,4 @@ const styles = StyleSheet.create({
   authButtonImage: { width: '100%', height: '100%' },
   authIconImage: { width: 24, height: 24 },
   mobileAuthIconImage: { width: 42, height: 42 },
-  googleImageButtonWrap: { width: '100%', maxWidth: 360, alignItems: 'center', justifyContent: 'center' },
-  googleButtonImage: { width: '100%', maxWidth: 320, height: 52 },
 });

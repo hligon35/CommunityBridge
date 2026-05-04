@@ -3,13 +3,14 @@ import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View 
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
+import { USER_ROLES, normalizeUserRole } from '../core/tenant/models';
 
 const PRESET_ITEMS = ['Diapers', 'Lunch', 'Change of clothes', 'Medication', 'Other'];
 
 function findRelevantChildren(role, userId, children) {
   const allChildren = Array.isArray(children) ? children : [];
   if (!userId) return [];
-  if (role === 'therapist') {
+  if (role === USER_ROLES.THERAPIST) {
     return allChildren.filter((child) => {
       const assigned = [child?.amTherapist, child?.pmTherapist, child?.bcaTherapist];
       return assigned.some((entry) => {
@@ -25,7 +26,7 @@ function findRelevantChildren(role, userId, children) {
 export default function TherapistItemsNeededScreen({ route }) {
   const { user } = useAuth();
   const { children = [], sendAdminMemo } = useData();
-  const role = String(user?.role || '').trim().toLowerCase();
+  const role = normalizeUserRole(user?.role);
   const relevantChildren = useMemo(() => findRelevantChildren(role, user?.id, children), [children, role, user?.id]);
   const requestedChildId = String(route?.params?.childId || '').trim();
   const [selectedChildId, setSelectedChildId] = useState(requestedChildId || '');

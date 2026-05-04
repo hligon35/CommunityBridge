@@ -11,7 +11,8 @@ test('normalizeUserRole canonicalizes mixed-case and label variants for invited 
   assert.equal(normalizeUserRole('BCBA'), 'bcba');
   assert.equal(normalizeUserRole('Therapist'), 'therapist');
   assert.equal(normalizeUserRole('ABA Tech'), 'therapist');
-  assert.equal(normalizeUserRole('office personnel'), 'faculty');
+  assert.equal(normalizeUserRole('office personnel'), 'office');
+  assert.equal(normalizeUserRole('front desk'), 'reception');
   assert.equal(normalizeUserRole('OrgAdmin'), 'orgAdmin');
 });
 

@@ -6,8 +6,6 @@ import { DEFAULT_AVATAR_TOKEN } from './utils/idVisibility';
 import { isAdminRole } from './core/tenant/models';
 
 import {
-  GoogleAuthProvider,
-  signInWithCredential,
   signInWithCustomToken,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -472,20 +470,6 @@ export async function loginWithApprovalToken(token) {
     invite: json.invite || null,
     redirectIntent: String(json.redirectIntent || '').trim(),
   };
-}
-
-export async function loginWithGoogle(idToken) {
-  const a = requireAuth();
-  const credential = GoogleAuthProvider.credential(String(idToken || ''));
-  const cred = await signInWithCredential(a, credential);
-  const token = await getIdToken(cred.user, true);
-  const email = normalizeEmailInput(cred.user.email);
-  const profile = (await getUserProfile(cred.user.uid)) || (await upsertUserProfile(cred.user.uid, {
-    name: cred.user.displayName || '',
-    email,
-    role: defaultProfileRoleForEmail(email),
-  }));
-  return { token, user: profile };
 }
 
 export async function signup(payload) {
@@ -2405,6 +2389,38 @@ export async function _saveMoodEntryImpl(childId, payload) {
 }
 export const saveMoodEntry = _wrapWithOfflineFallback('saveMoodEntry', _saveMoodEntryImpl);
 
+export async function updateChildSchedule(childId, payload) {
+  const u = requireUser();
+  const apiBase = String(BASE_URL || '').replace(/\/$/, '');
+  if (!apiBase) {
+    const err = new Error('Schedule updates require the API server.');
+    err.code = 'BB_SCHEDULE_API_REQUIRED';
+    throw err;
+  }
+  const resolvedChildId = String(childId || '').trim();
+  if (!resolvedChildId) {
+    const err = new Error('childId is required.');
+    err.code = 'BB_SCHEDULE_BAD_INPUT';
+    throw err;
+  }
+  const idToken = await u.getIdToken(true);
+  const resp = await fetchWithTimeout(`${apiBase}/api/children/${encodeURIComponent(resolvedChildId)}/schedule`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json || json.ok !== true) {
+    const err = new Error(String(json?.error || json?.message || resp.statusText || 'Could not update child schedule.'));
+    err.httpStatus = resp.status;
+    throw err;
+  }
+  return { ok: true, item: json.item || null };
+}
+
 export async function startTherapySession(payload) {
   const u = requireUser();
   const apiBase = String(BASE_URL || '').replace(/\/$/, '');
@@ -3109,7 +3125,6 @@ export default {
   login,
   loginWithInviteCode,
   loginWithApprovalToken,
-  loginWithGoogle,
   signup,
   verify2fa,
   resend2fa,
@@ -3145,6 +3160,7 @@ export default {
   getDirectory,
   getDirectoryMe,
   mergeDirectory,
+  updateChildSchedule,
   getStaffWorkspace,
   listStaffWorkspaces,
   updateStaffWorkspace,
