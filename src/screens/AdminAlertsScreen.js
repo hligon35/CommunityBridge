@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
@@ -14,6 +15,8 @@ export default function AdminAlertsScreen() {
   const [staffWorkspaceMap, setStaffWorkspaceMap] = useState({});
   const [auditItems, setAuditItems] = useState([]);
   const [loadError, setLoadError] = useState('');
+  const [selectedStaffId, setSelectedStaffId] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -62,8 +65,71 @@ export default function AdminAlertsScreen() {
     });
   }, [staffWorkspaceMap, therapists]);
 
-  function action(title) {
-    Alert.alert(title, isBcba ? 'BCBA can review compliance status here.' : 'Office uploads and maintenance are staged from this compliance hub.');
+  const selectedStaff = useMemo(() => {
+    const match = complianceItems.find((item) => item.id === selectedStaffId);
+    return match || complianceItems[0] || null;
+  }, [complianceItems, selectedStaffId]);
+
+  useEffect(() => {
+    if (!selectedStaffId && complianceItems[0]?.id) {
+      setSelectedStaffId(complianceItems[0].id);
+      return;
+    }
+    if (selectedStaffId && !complianceItems.some((item) => item.id === selectedStaffId)) {
+      setSelectedStaffId(complianceItems[0]?.id || '');
+    }
+  }, [complianceItems, selectedStaffId]);
+
+  async function uploadComplianceDocument() {
+    if (isBcba || !selectedStaff?.id) return;
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: false, multiple: false, type: '*/*' });
+      if (picked?.canceled) return;
+      const asset = Array.isArray(picked?.assets) ? picked.assets[0] : null;
+      if (!asset?.uri) return;
+
+      setUploading(true);
+      const formData = new FormData();
+      formData.append('file', {
+        uri: asset.uri,
+        name: asset.name || `compliance-document-${Date.now()}`,
+        type: asset.mimeType || asset.type || 'application/octet-stream',
+      });
+
+      const uploaded = await Api.uploadMedia(formData);
+      const existingWorkspace = staffWorkspaceMap[selectedStaff.id] || {};
+      const existingDocuments = Array.isArray(existingWorkspace?.documents) ? existingWorkspace.documents : [];
+      const nextDocuments = [
+        {
+          id: `staff-doc-${Date.now()}`,
+          title: asset.name || 'Compliance document',
+          url: uploaded?.url || '',
+          uploadedAt: new Date().toISOString(),
+          mimeType: asset.mimeType || asset.type || '',
+        },
+        ...existingDocuments,
+      ].filter((item) => item?.url);
+
+      const result = await Api.updateStaffWorkspace(selectedStaff.id, {
+        credentials: existingWorkspace?.credentials || {},
+        availability: existingWorkspace?.availability || {},
+        documents: nextDocuments,
+        createdAt: existingWorkspace?.createdAt,
+      });
+
+      setStaffWorkspaceMap((current) => ({
+        ...(current || {}),
+        [selectedStaff.id]: {
+          ...(existingWorkspace || {}),
+          ...(result?.item || {}),
+          documents: nextDocuments,
+        },
+      }));
+    } catch (error) {
+      setLoadError(String(error?.message || error || 'Could not upload the compliance document.'));
+    } finally {
+      setUploading(false);
+    }
   }
 
   return (
@@ -94,7 +160,7 @@ export default function AdminAlertsScreen() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>{tab === 'tracker' ? 'Credential tracker' : 'Expiration alerts'}</Text>
             {complianceItems.map((item) => (
-              <View key={item.id} style={styles.row}>
+              <TouchableOpacity key={item.id} style={[styles.row, item.id === selectedStaff?.id ? styles.rowSelected : null]} onPress={() => setSelectedStaffId(item.id)} disabled={tab !== 'documents'}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowTitle}>{item.name} • {item.role}</Text>
                   <Text style={styles.rowText}>Certification: {item.expiration}</Text>
@@ -103,7 +169,7 @@ export default function AdminAlertsScreen() {
                 <View style={[styles.levelPill, item.level === 'red' ? styles.levelRed : item.level === 'yellow' ? styles.levelYellow : styles.levelGreen]}>
                   <Text style={[styles.levelText, item.level === 'red' ? styles.levelTextRed : item.level === 'yellow' ? styles.levelTextYellow : styles.levelTextGreen]}>{item.level.toUpperCase()}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         ) : null}
@@ -111,8 +177,9 @@ export default function AdminAlertsScreen() {
         {tab === 'documents' ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Document uploads</Text>
-            <Text style={styles.rowText}>{isBcba ? 'BCBA can review uploaded compliance documents here.' : 'Office can upload CPR / First Aid, background check, TB test, and certification documents here.'}</Text>
-            {!isBcba ? <TouchableOpacity style={styles.primaryButton} onPress={() => action('Upload compliance document')}><Text style={styles.primaryButtonText}>Upload Document</Text></TouchableOpacity> : null}
+            <Text style={styles.rowText}>{selectedStaff ? `Selected staff member: ${selectedStaff.name}` : 'Select a staff member to manage compliance documents.'}</Text>
+            <Text style={styles.rowText}>{isBcba ? 'BCBA can review uploaded compliance documents here.' : 'Upload a document to the selected staff workspace and store it with the compliance record.'}</Text>
+            {!isBcba ? <TouchableOpacity style={[styles.primaryButton, uploading ? styles.primaryButtonDisabled : null]} disabled={uploading || !selectedStaff} onPress={uploadComplianceDocument}><Text style={styles.primaryButtonText}>{uploading ? 'Uploading...' : 'Upload Document'}</Text></TouchableOpacity> : null}
           </View>
         ) : null}
 
@@ -143,6 +210,7 @@ const styles = StyleSheet.create({
   card: { marginTop: 12, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },
   cardTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 12 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  rowSelected: { backgroundColor: '#eff6ff' },
   rowTitle: { fontWeight: '800', color: '#0f172a' },
   rowText: { marginTop: 4, color: '#475569', lineHeight: 20 },
   levelPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
@@ -154,5 +222,6 @@ const styles = StyleSheet.create({
   levelTextYellow: { color: '#92400e' },
   levelTextGreen: { color: '#166534' },
   primaryButton: { marginTop: 10, alignSelf: 'flex-start', borderRadius: 12, backgroundColor: '#2563eb', paddingVertical: 12, paddingHorizontal: 14 },
+  primaryButtonDisabled: { opacity: 0.6 },
   primaryButtonText: { color: '#ffffff', fontWeight: '800' },
 });

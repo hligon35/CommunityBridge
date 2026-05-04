@@ -145,6 +145,37 @@ export default function SummaryReviewScreen() {
 
   const hasPreviousSessionsSection = isTherapist;
 
+  function returnToWorkspaceRoot() {
+    const parentNavigation = navigation.getParent?.();
+    const parentState = parentNavigation?.getState?.();
+    const parentRouteNames = Array.isArray(parentState?.routeNames)
+      ? parentState.routeNames
+      : Array.isArray(parentState?.routes)
+        ? parentState.routes.map((entry) => entry?.name).filter(Boolean)
+        : [];
+    const currentRootRoute = parentState?.routes?.[parentState?.index ?? 0]?.name || '';
+
+    if (currentRootRoute === 'Home' && parentRouteNames.includes('Home')) {
+      parentNavigation.navigate('Home', { screen: 'CommunityMain' });
+      return;
+    }
+    if (currentRootRoute === 'Controls' && parentRouteNames.includes('Controls')) {
+      parentNavigation.navigate('Controls', { screen: 'ControlsMain' });
+      return;
+    }
+    if (parentRouteNames.includes('Home')) {
+      parentNavigation.navigate('Home', { screen: 'CommunityMain' });
+      return;
+    }
+    if (parentRouteNames.includes('Controls')) {
+      parentNavigation.navigate('Controls', { screen: 'ControlsMain' });
+      return;
+    }
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  }
+
   function formatSessionStamp(item) {
     const source = item?.approvedAt || item?.updatedAt || item?.generatedAt || '';
     if (!source) return 'Session date unavailable';
@@ -181,7 +212,7 @@ export default function SummaryReviewScreen() {
             </View>
           </View>
         </View>
-        <TherapySessionPanel workspace={workspace} mode="summary" title="Session Report" onSubmitted={() => navigation.navigate('CommunityMain')} />
+        <TherapySessionPanel workspace={workspace} mode="summary" title="Session Report" onSubmitted={returnToWorkspaceRoot} />
         {hasPreviousSessionsSection ? (
           <View style={styles.historyCard}>
             <Text style={styles.historyTitle}>Previous Sessions</Text>

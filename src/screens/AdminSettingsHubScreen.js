@@ -12,6 +12,7 @@ function buildFormState(item) {
   const organizationProfile = next.organizationProfile && typeof next.organizationProfile === 'object' ? next.organizationProfile : {};
   const integrations = next.integrations && typeof next.integrations === 'object' ? next.integrations : {};
   const branding = next.branding && typeof next.branding === 'object' ? next.branding : {};
+  const billing = next.billing && typeof next.billing === 'object' ? next.billing : {};
   return {
     organizationName: String(organizationProfile.organizationName || '').trim(),
     supportEmail: String(organizationProfile.supportEmail || '').trim(),
@@ -28,6 +29,11 @@ function buildFormState(item) {
     primaryColor: String(branding.primaryColor || '').trim(),
     accentColor: String(branding.accentColor || '').trim(),
     supportUrl: String(branding.supportUrl || '').trim(),
+    paymentPortalUrl: String(billing.paymentPortalUrl || '').trim(),
+    billingContactEmail: String(billing.contactEmail || '').trim(),
+    billingContactPhone: String(billing.contactPhone || '').trim(),
+    showBillingContactEmail: billing.showContactEmail !== false,
+    showBillingContactPhone: billing.showContactPhone !== false,
   };
 }
 
@@ -112,6 +118,14 @@ export default function AdminSettingsHubScreen() {
             supportPhone: form.supportPhone,
             address: form.address,
           },
+          billing: {
+            ...(settingsItem.billing || {}),
+            paymentPortalUrl: form.paymentPortalUrl,
+            contactEmail: form.billingContactEmail,
+            contactPhone: form.billingContactPhone,
+            showContactEmail: Boolean(form.showBillingContactEmail),
+            showContactPhone: Boolean(form.showBillingContactPhone),
+          },
         };
       } else if (panelKey === 'integrations') {
         payload = {
@@ -193,6 +207,27 @@ export default function AdminSettingsHubScreen() {
               <Text style={styles.fieldLabel}>Arrival check-in enabled</Text>
               <Text style={styles.switchText}>Allow organization-level arrival detection and check-in prompts.</Text>
               <Switch value={Boolean(form.orgArrivalEnabled)} onValueChange={(value) => updateField('orgArrivalEnabled', value)} trackColor={{ false: '#cbd5e1', true: '#93c5fd' }} thumbColor={form.orgArrivalEnabled ? '#2563eb' : '#f8fafc'} />
+            </View>
+          </View>
+          <View style={styles.sectionDivider}>
+            <Text style={styles.sectionTitle}>Billing Contact Settings</Text>
+            <Text style={styles.panelText}>Configure the organization payment portal and which billing contact methods families can use.</Text>
+          </View>
+          <Field label="Payment portal URL" value={form.paymentPortalUrl} onChangeText={(value) => updateField('paymentPortalUrl', value)} placeholder="https://payments.example.org/portal" autoCapitalize="none" />
+          <View style={styles.editorGrid}>
+            <Field label="Billing contact email" value={form.billingContactEmail} onChangeText={(value) => updateField('billingContactEmail', value)} placeholder="billing@communitybridge.app" keyboardType="email-address" autoCapitalize="none" />
+            <Field label="Billing contact phone" value={form.billingContactPhone} onChangeText={(value) => updateField('billingContactPhone', value)} placeholder="(555) 123-4567" keyboardType="phone-pad" autoCapitalize="none" />
+          </View>
+          <View style={styles.editorGrid}>
+            <View style={styles.switchCard}>
+              <Text style={styles.fieldLabel}>Show billing contact email</Text>
+              <Text style={styles.switchText}>Expose the billing email from the family billing screen.</Text>
+              <Switch value={Boolean(form.showBillingContactEmail)} onValueChange={(value) => updateField('showBillingContactEmail', value)} trackColor={{ false: '#cbd5e1', true: '#93c5fd' }} thumbColor={form.showBillingContactEmail ? '#2563eb' : '#f8fafc'} />
+            </View>
+            <View style={styles.switchCard}>
+              <Text style={styles.fieldLabel}>Show billing contact phone</Text>
+              <Text style={styles.switchText}>Expose the billing phone number from the family billing screen.</Text>
+              <Switch value={Boolean(form.showBillingContactPhone)} onValueChange={(value) => updateField('showBillingContactPhone', value)} trackColor={{ false: '#cbd5e1', true: '#93c5fd' }} thumbColor={form.showBillingContactPhone ? '#2563eb' : '#f8fafc'} />
             </View>
           </View>
         </View>
@@ -324,6 +359,8 @@ const styles = StyleSheet.create({
   inputMultiline: { minHeight: 92, textAlignVertical: 'top' },
   switchCard: { width: '100%', marginTop: 14, borderWidth: 1, borderColor: '#dbe2ea', borderRadius: 12, padding: 14, backgroundColor: '#f8fafc' },
   switchText: { marginTop: 6, marginBottom: 12, color: '#64748b', lineHeight: 19 },
+  sectionDivider: { marginTop: 16 },
+  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
   previewCard: { marginTop: 16, borderRadius: 16, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', padding: 16 },
   previewLabel: { fontSize: 12, fontWeight: '800', color: '#475569', textTransform: 'uppercase' },
   previewRow: { marginTop: 10, flexDirection: 'row', alignItems: 'center' },

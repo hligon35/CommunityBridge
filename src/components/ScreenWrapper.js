@@ -27,7 +27,6 @@ export function ScreenWrapper({
 
   const nameMap = {
     CommunityMain: 'Home',
-    PostThread: 'Post',
     ChatsList: 'Chats',
     ChatThread: 'New Message',
     MyChildMain: labels.myChild || 'My Child',

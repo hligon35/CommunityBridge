@@ -69,14 +69,16 @@ export default function PostCard({ post, onLike, onComment, onShare, onAvatarPre
           <MaterialCommunityIcons name="thumb-up-outline" size={18} color="#444" />
           <Text style={pcStyles.actionText}> {post.likes || 0}</Text>
         </Pressable>
-        <Pressable
-          onPress={() => { logPress('PostCard:Comment', { postId: post?.id }); onComment && onComment(post); }}
-          android_ripple={{ color: '#e6eef6' }}
-          style={({ pressed }) => [pcStyles.actionBtn, pressed && pcStyles.actionBtnPressed]}
-        >
-          <MaterialIcons name="comment" size={18} color="#444" />
-          <Text style={pcStyles.actionText}> {(post.comments || []).length}</Text>
-        </Pressable>
+        {onComment ? (
+          <Pressable
+            onPress={() => { logPress('PostCard:Comment', { postId: post?.id }); onComment(post); }}
+            android_ripple={{ color: '#e6eef6' }}
+            style={({ pressed }) => [pcStyles.actionBtn, pressed && pcStyles.actionBtnPressed]}
+          >
+            <MaterialIcons name="comment" size={18} color="#444" />
+            <Text style={pcStyles.actionText}> {(post.comments || []).length}</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );

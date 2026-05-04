@@ -312,7 +312,6 @@ export default function HomeScreen() {
     <PostCard
       post={item}
       onLike={() => like(item.id)}
-      onComment={() => navigation.navigate('PostThread', { postId: item.id })}
       onShare={() => openShareModal(item)}
       onAvatarPress={async (author) => {
         let full = author || {};

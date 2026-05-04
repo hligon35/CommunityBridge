@@ -1,0 +1,122 @@
+You are continuing work in the CommunityBridge repo at:
+
+C:\Users\Harold Ligon\Desktop\MyMobileApps\BuddyBoard
+
+Do not re-audit the app from scratch. Treat the strategic implementation audit as complete and use it as the implementation plan. Your job in this new chat is to begin implementation immediately, starting with the highest-priority stabilization work.
+
+Primary objective
+
+Implement the P0 items from the audit first, in this order:
+
+1. Remove or fix dead and misleading navigation/actions.
+2. Eliminate fake-success behavior where the UI reports success without authoritative persistence.
+3. Hide or disable placeholder actions that look production-ready until they are truly wired.
+
+Current audit conclusions to carry forward
+
+Highest-priority issues already identified:
+
+- DEAD: HomeScreen still navigates to PostThread, but PostThread is not registered in the active route tree.
+- RISKY: InsuranceBillingScreen directly navigates to ChatsList from outside the Chats stack.
+- RISKY: SummaryReviewScreen navigates directly to CommunityMain on submit, which is stack-fragile.
+- PLACEHOLDER: TabletNavigationShell quick log only Alert.alerts success and does not persist anything.
+- PLACEHOLDER: AdminAlertsScreen Upload Document button is placeholder-only.
+- PLACEHOLDER: AdminChatMonitorScreen Send Announcement button is placeholder-only.
+- PARTIAL/RISKY: ScheduleCalendarScreen applies local updates and shows “Session saved locally” / “Assignment saved locally” even when API persistence fails.
+- PARTIAL/RISKY: DataContext respondToProposal removes local proposals and mutates child schedule state even if Api.respondTimeChange fails.
+- PARTIAL/RISKY: InsuranceBillingScreen includes placeholder authorization/verification actions and brittle chat fallback navigation.
+
+Important architectural findings already established:
+
+- Therapy-session APIs are among the more complete end-to-end systems.
+- Admin/reporting/export flows are more misleading than broken: they often simulate workflows using Firestore-side records, uploads, or local state rather than a true backend pipeline.
+- Persistence boundaries are inconsistent across REST, Firestore-direct writes, and AsyncStorage.
+- Nested navigation is inconsistent: some components correctly navigate through Main/root stacks, others navigate directly to nested route names.
+- Several settings are device-local only and do not behave like account-level preferences.
+
+Implementation instructions
+
+Start coding. Do not spend the new chat redoing the audit unless a very narrow disambiguating read is required for a specific fix.
+
+Work in small, validated slices:
+
+1. Fix the navigation defects first.
+2. Validate each navigation fix with the narrowest available check.
+3. Then fix fake-success flows.
+4. Then hide/disable placeholder-only actions or convert them into honest “not available yet” UI states.
+
+First implementation batch
+
+Begin with these exact targets:
+
+1. HomeScreen
+	- Remove or replace navigation to PostThread.
+	- If the screen is dead/inactive, make the action safe instead of pointing to an unregistered route.
+
+2. InsuranceBillingScreen
+	- Replace direct navigation.navigate('ChatsList') calls with explicit nested navigation that reliably reaches the Chats stack.
+	- Review parent Billing/Contact fallback behavior and make it honest and deterministic.
+
+3. SummaryReviewScreen
+	- Replace direct navigation.navigate('CommunityMain') with explicit nested/root navigation that works regardless of launch context.
+
+4. Shared navigation consistency check
+	- Clean up any obviously stale route-name assumptions related to PostThread in shared UI/title logic if still relevant after the above fix.
+
+Second implementation batch
+
+After the navigation defects are fixed and validated, move to fake-success behavior:
+
+1. ScheduleCalendarScreen
+	- Stop showing success-like outcomes when the schedule API fails.
+	- Do not silently mutate authoritative-looking local schedule state on failure unless the UI explicitly marks the result as local draft/offline-only.
+	- Reassess Edit Session / Approve Changes buttons and disable or relabel them if they are still placeholders.
+
+2. DataContext respondToProposal flow
+	- Stop removing proposals and mutating child schedule fields when Api.respondTimeChange fails.
+	- Make the MyChildScreen accept/reject flow report real success/failure.
+
+3. TabletNavigationShell quick log
+	- If no real persistence target exists yet, remove the fake success behavior and present an honest unavailable state.
+
+Third implementation batch
+
+Address visible placeholder actions:
+
+1. AdminAlertsScreen Upload Document
+2. AdminChatMonitorScreen Send Announcement
+3. InsuranceBillingScreen authorization / verification placeholder buttons
+
+If these cannot be made end-to-end in the current pass, change the UI so it no longer implies a completed workflow.
+
+Files likely to change first
+
+- App.js
+- src/screens/HomeScreen.js
+- src/screens/InsuranceBillingScreen.js
+- src/screens/SummaryReviewScreen.js
+- src/components/ScreenWrapper.js
+- src/screens/ScheduleCalendarScreen.js
+- src/DataContext.js
+- src/screens/MyChildScreen.js
+- src/components/TabletNavigationShell.js
+- src/screens/AdminAlertsScreen.js
+- src/screens/AdminChatMonitorScreen.js
+
+Validation expectations
+
+- After each first substantive edit, immediately run the narrowest relevant validation before widening scope.
+- Prefer focused checks over broad builds.
+- If a focused executable validation is available, use it before making additional edits.
+- Do not claim completion for a workflow if it still depends on alerts, local-only mutation, or stack-fragile routing.
+
+Constraints
+
+- Do not revert unrelated user changes.
+- Keep edits minimal and rooted in the real failure, not cosmetic refactors.
+- Preserve existing style and APIs unless a task requires change.
+- Use apply_patch for file edits.
+
+Deliverable for the new chat
+
+Begin implementing the first batch immediately. Report progress concisely, validate after each slice, and continue through as many of the P0 fixes as can be completed safely in one session.

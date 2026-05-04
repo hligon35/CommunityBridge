@@ -5,7 +5,7 @@ import * as Updates from 'expo-updates';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { useTenant } from '../core/tenant/TenantContext';
-import { ADMIN_SECTION_KEYS, canAccessAdminSection, canAccessAdminWorkspace, isBcbaRole, isStaffRole } from '../core/tenant/models';
+import { ADMIN_SECTION_KEYS, canAccessAdminSection, canAccessAdminWorkspace, isBcbaRole, isOfficeAdminRole, isStaffRole } from '../core/tenant/models';
 import { isChildLinkedToTherapist } from '../features/sessionTracking/utils/dashboardSessionTarget';
 import useIsTabletLayout from '../hooks/useIsTabletLayout';
 import { navigationRef } from '../navigationRef';
@@ -36,13 +36,14 @@ export default function TabletNavigationShell({ currentRoute, children }) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
-  const { children: directoryChildren = [] } = useData();
+  const { children: directoryChildren = [], therapists = [], createStaffLog } = useData();
   const tenant = useTenant();
   const labels = tenant?.labels || {};
   const [collapsed, setCollapsed] = useState(false);
   const [quickMenuOpen, setQuickMenuOpen] = useState(false);
-  const [quickLogType, setQuickLogType] = useState('');
-  const [quickLogValue, setQuickLogValue] = useState('');
+  const [quickLogDraft, setQuickLogDraft] = useState(null);
+  const [quickLogBody, setQuickLogBody] = useState('');
+  const [quickLogSaving, setQuickLogSaving] = useState(false);
   const [updateBusy, setUpdateBusy] = useState(false);
   const isStaff = isStaffRole(user?.role);
   const showAdminWorkspace = canAccessAdminWorkspace(user?.role);
@@ -62,9 +63,13 @@ export default function TabletNavigationShell({ currentRoute, children }) {
   useEffect(() => {
     if (showHeaderQuickMenu) return;
     setQuickMenuOpen(false);
-    setQuickLogType('');
-    setQuickLogValue('');
   }, [showHeaderQuickMenu]);
+
+  useEffect(() => {
+    setQuickLogDraft(null);
+    setQuickLogBody('');
+    setQuickLogSaving(false);
+  }, [currentRoute]);
 
   const linkedTherapistChildren = useMemo(() => {
     const therapistId = String(user?.id || '').trim();
@@ -76,6 +81,20 @@ export default function TabletNavigationShell({ currentRoute, children }) {
     if (!linkedTherapistChildren.length) return null;
     return linkedTherapistChildren.find((child) => String(child?.id || '').trim() === activeRouteChildId) || linkedTherapistChildren[0] || null;
   }, [activeRouteChildId, linkedTherapistChildren]);
+
+  const quickLogRecipients = useMemo(() => {
+    return (Array.isArray(therapists) ? therapists : [])
+      .filter((staff) => {
+        if (!staff?.id) return false;
+        if (String(staff.id) === String(user?.id || '')) return false;
+        return isBcbaRole(staff?.role) || isOfficeAdminRole(staff?.role);
+      })
+      .map((staff) => ({
+        id: staff.id,
+        role: staff.role || 'office',
+        name: staff.name || `${staff.firstName || ''} ${staff.lastName || ''}`.trim() || staff.email || 'Staff',
+      }));
+  }, [therapists, user?.id]);
 
   const quickMenuWidth = useMemo(() => {
     const drawerWidth = collapsed ? 92 : 280;
@@ -93,22 +112,55 @@ export default function TabletNavigationShell({ currentRoute, children }) {
     }
     if (showQuickAdd) {
       return [
-        { key: 'quick-note', label: 'Quick Note', quickLogType: 'Quick Note' },
-        { key: 'incident', label: 'Incident', quickLogType: 'Incident' },
-        { key: 'unexpected-data', label: 'Unexpected Data', quickLogType: 'Unexpected Data' },
+        { key: 'quick-note', label: 'Quick Note', logType: 'quick_note', modalTitle: 'Quick Note', placeholder: 'Add a short session note for office or BCBA follow-up.' },
+        { key: 'incident', label: 'Incident Log', logType: 'incident_log', modalTitle: 'Incident Log', placeholder: 'Describe the incident and any immediate action taken.' },
+        { key: 'unexpected-data', label: 'Unexpected Data', logType: 'unexpected_data', modalTitle: 'Unexpected Data', placeholder: 'Describe the unexpected session data or observation.' },
       ];
     }
     return [];
   }, [showBcbaQuickActions, showQuickAdd]);
 
-  function submitQuickLog() {
-    if (!quickLogType || !quickLogValue.trim()) {
-      Alert.alert('Missing details', 'Choose a log type and enter a short note.');
+  function openQuickLogModal(item) {
+    if (!activeQuickChild?.id) {
+      Alert.alert('Select a learner', 'Open a learner workspace first so the quick log can be attached to the correct record.');
       return;
     }
-    Alert.alert('Logged', `${quickLogType} saved for ${activeQuickChild?.name || 'the selected learner'}.`);
-    setQuickLogValue('');
-    setQuickLogType('');
+    setQuickMenuOpen(false);
+    setQuickLogBody('');
+    setQuickLogDraft(item);
+  }
+
+  async function submitQuickLog() {
+    if (!quickLogDraft?.logType) return;
+    if (!activeQuickChild?.id) {
+      Alert.alert('Select a learner', 'Open a learner workspace first so the quick log can be attached to the correct record.');
+      return;
+    }
+    const body = String(quickLogBody || '').trim();
+    if (!body) {
+      Alert.alert('Add details', 'Enter a note before saving this quick log.');
+      return;
+    }
+    setQuickLogSaving(true);
+    try {
+      const created = await createStaffLog?.({
+        type: quickLogDraft.logType,
+        title: `${quickLogDraft.modalTitle} · ${activeQuickChild?.name || 'Learner'}`,
+        body,
+        childId: activeQuickChild.id,
+        recipients: quickLogRecipients,
+      });
+      if (!created) {
+        throw new Error('The quick log could not be saved.');
+      }
+      setQuickLogDraft(null);
+      setQuickLogBody('');
+      Alert.alert('Saved', `${quickLogDraft.modalTitle} was saved for ${activeQuickChild?.name || 'the selected learner'}.`);
+    } catch (error) {
+      Alert.alert('Save failed', String(error?.message || error || 'The quick log could not be saved.'));
+    } finally {
+      setQuickLogSaving(false);
+    }
   }
 
   async function checkForOtaUpdate() {
@@ -262,7 +314,9 @@ export default function TabletNavigationShell({ currentRoute, children }) {
                               openTarget(item.target);
                               return;
                             }
-                            setQuickLogType(item.quickLogType || '');
+                            if (item.logType) {
+                              openQuickLogModal(item);
+                            }
                           }}
                         >
                           <Text style={styles.quickHeaderMenuText}>{item.label}</Text>
@@ -277,26 +331,33 @@ export default function TabletNavigationShell({ currentRoute, children }) {
               </TouchableOpacity>
             </View>
           </View>
+          <Modal visible={!!quickLogDraft} transparent animationType="fade" onRequestClose={() => !quickLogSaving && setQuickLogDraft(null)}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>{quickLogDraft?.modalTitle || 'Quick Log'}</Text>
+                <Text style={styles.modalSubtitle}>Save this note to {activeQuickChild?.name || 'the selected learner'} and notify office or BCBA reviewers.</Text>
+                <TextInput
+                  value={quickLogBody}
+                  onChangeText={setQuickLogBody}
+                  placeholder={quickLogDraft?.placeholder || 'Add details'}
+                  multiline
+                  editable={!quickLogSaving}
+                  style={styles.modalInput}
+                />
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.modalSecondaryBtn} onPress={() => setQuickLogDraft(null)} disabled={quickLogSaving}>
+                    <Text style={styles.modalSecondaryBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalPrimaryBtn} onPress={submitQuickLog} disabled={quickLogSaving}>
+                    <Text style={styles.modalPrimaryBtnText}>{quickLogSaving ? 'Saving...' : 'Save Log'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
           <View style={styles.screenWrap}>{children}</View>
         </View>
       </View>
-      <Modal transparent visible={!!quickLogType} animationType="fade" onRequestClose={() => setQuickLogType('')}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{quickLogType}</Text>
-            <Text style={styles.modalSubtitle}>{activeQuickChild?.name ? `Logging for ${activeQuickChild.name}` : 'Logging for your current learner'}</Text>
-            <TextInput value={quickLogValue} onChangeText={setQuickLogValue} placeholder="Enter a short note" multiline style={styles.modalInput} />
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalSecondaryBtn} onPress={() => { setQuickLogType(''); setQuickLogValue(''); }}>
-                <Text style={styles.modalSecondaryBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalPrimaryBtn} onPress={submitQuickLog}>
-                <Text style={styles.modalPrimaryBtnText}>Submit</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }

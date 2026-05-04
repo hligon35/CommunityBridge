@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
@@ -22,11 +22,15 @@ function buildThreads(messages = []) {
 export default function AdminChatMonitorScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
-  const { messages = [], parents = [], therapists = [] } = useData();
+  const { messages = [], parents = [], therapists = [], urgentMemos = [], sendAdminMemo } = useData();
   const isBcba = isBcbaRole(user?.role);
   const isOffice = isOfficeAdminRole(user?.role);
   const [tab, setTab] = useState('inbox');
   const [query, setQuery] = useState('');
+  const [announcementAudience, setAnnouncementAudience] = useState('staff');
+  const [announcementSubject, setAnnouncementSubject] = useState('');
+  const [announcementBody, setAnnouncementBody] = useState('');
+  const [sendingAnnouncement, setSendingAnnouncement] = useState(false);
 
   const threads = useMemo(() => buildThreads(messages), [messages]);
   const filteredThreads = useMemo(() => {
@@ -39,9 +43,46 @@ export default function AdminChatMonitorScreen() {
     { id: 'notes', label: 'Notes', count: Math.max(1, therapists.length) },
     { id: 'reports', label: 'Reports', count: Math.max(1, parents.length) },
   ], [filteredThreads.length, parents.length, therapists.length]);
+  const recentAnnouncements = useMemo(() => {
+    return (Array.isArray(urgentMemos) ? urgentMemos : [])
+      .filter((item) => String(item?.type || '').toLowerCase() === 'admin_memo')
+      .slice(0, 5);
+  }, [urgentMemos]);
 
-  function action(title) {
-    Alert.alert(title, isOffice ? 'Office broadcast and admin announcement controls are available from this communication hub.' : `BCBA communication review and parent / ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} threads are available from this hub.`);
+  const announcementRecipients = useMemo(() => {
+    if (announcementAudience === 'parents') {
+      return (parents || []).map((entry) => ({ id: entry?.id, role: 'parent', name: entry?.name || `${entry?.firstName || ''} ${entry?.lastName || ''}`.trim() })).filter((entry) => entry.id);
+    }
+    if (announcementAudience === 'all') {
+      return [
+        ...(therapists || []).map((entry) => ({ id: entry?.id, role: 'therapist', name: entry?.name || 'Staff' })),
+        ...(parents || []).map((entry) => ({ id: entry?.id, role: 'parent', name: entry?.name || `${entry?.firstName || ''} ${entry?.lastName || ''}`.trim() })),
+      ].filter((entry) => entry.id);
+    }
+    return (therapists || []).map((entry) => ({ id: entry?.id, role: 'therapist', name: entry?.name || 'Staff' })).filter((entry) => entry.id);
+  }, [announcementAudience, parents, therapists]);
+
+  async function submitAnnouncement() {
+    try {
+      if (!isOffice || typeof sendAdminMemo !== 'function') return;
+      const trimmedSubject = String(announcementSubject || '').trim();
+      const trimmedBody = String(announcementBody || '').trim();
+      if (!trimmedSubject && !trimmedBody) return;
+      if (!announcementRecipients.length) return;
+
+      setSendingAnnouncement(true);
+      const created = await sendAdminMemo({
+        recipients: announcementRecipients,
+        subject: trimmedSubject,
+        body: trimmedBody,
+      });
+      if (created?.id) {
+        setAnnouncementSubject('');
+        setAnnouncementBody('');
+      }
+    } finally {
+      setSendingAnnouncement(false);
+    }
   }
 
   return (
@@ -50,7 +91,7 @@ export default function AdminChatMonitorScreen() {
         <View style={styles.hero}>
           <Text style={styles.eyebrow}>Communication</Text>
           <Text style={styles.title}>Internal and parent communication</Text>
-          <Text style={styles.subtitle}>{isBcba ? `Review parent and ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} communication threads, along with message attachments, from one workspace.` : 'Use inbox, broadcast center, and admin announcements from one office communication hub.'}</Text>
+          <Text style={styles.subtitle}>{isBcba ? `Review parent and ${THERAPY_ROLE_LABELS.therapist.toLowerCase()} communication threads, along with message attachments, from one workspace.` : 'Use this workspace to review inbox threads, attachments, and broadcast announcements from one place.'}</Text>
         </View>
 
         <View style={styles.tabRow}>
@@ -80,8 +121,40 @@ export default function AdminChatMonitorScreen() {
         {tab === 'broadcast' ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Broadcast center</Text>
-            <Text style={styles.rowText}>{isOffice ? 'Send staff-wide or parent-wide announcements from this screen.' : 'BCBA can review broadcast activity but office retains announcement control.'}</Text>
-            {isOffice ? <TouchableOpacity style={styles.primaryButton} onPress={() => action('Send announcement')}><Text style={styles.primaryButtonText}>Send Announcement</Text></TouchableOpacity> : null}
+            <Text style={styles.rowText}>{isOffice ? 'Compose and send an announcement to staff, parents, or both from this workspace.' : 'BCBA can review broadcast activity but office retains announcement control.'}</Text>
+            {isOffice ? (
+              <>
+                <View style={styles.audienceRow}>
+                  {[
+                    { key: 'staff', label: 'Staff' },
+                    { key: 'parents', label: 'Parents' },
+                    { key: 'all', label: 'Everyone' },
+                  ].map((item) => {
+                    const active = announcementAudience === item.key;
+                    return (
+                      <TouchableOpacity key={item.key} style={[styles.audienceChip, active ? styles.audienceChipActive : null]} onPress={() => setAnnouncementAudience(item.key)}>
+                        <Text style={[styles.audienceChipText, active ? styles.audienceChipTextActive : null]}>{item.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <TextInput value={announcementSubject} onChangeText={setAnnouncementSubject} placeholder="Announcement subject" style={styles.input} />
+                <TextInput value={announcementBody} onChangeText={setAnnouncementBody} placeholder="Write the announcement" multiline style={[styles.input, styles.multilineInput]} />
+                <Text style={styles.rowText}>Recipients: {announcementRecipients.length}</Text>
+                <TouchableOpacity style={[styles.primaryButton, sendingAnnouncement ? styles.primaryButtonDisabled : null]} disabled={sendingAnnouncement || !announcementRecipients.length || (!announcementSubject.trim() && !announcementBody.trim())} onPress={submitAnnouncement}><Text style={styles.primaryButtonText}>{sendingAnnouncement ? 'Sending...' : 'Send Announcement'}</Text></TouchableOpacity>
+              </>
+            ) : null}
+            {recentAnnouncements.length ? (
+              <View style={styles.broadcastHistoryWrap}>
+                <Text style={styles.sectionLabel}>Recent announcements</Text>
+                {recentAnnouncements.map((item) => (
+                  <View key={item.id} style={styles.broadcastHistoryRow}>
+                    <Text style={styles.threadTitle}>{item.subject || item.title || 'Announcement'}</Text>
+                    <Text style={styles.rowText}>{item.body || item.note || 'No announcement body provided.'}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -131,9 +204,19 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#fff' },
   card: { marginTop: 12, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },
   cardTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 12 },
+  audienceRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 10 },
+  audienceChip: { borderRadius: 999, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#eff6ff', marginRight: 8, marginBottom: 8 },
+  audienceChipActive: { backgroundColor: '#2563eb' },
+  audienceChipText: { color: '#1d4ed8', fontWeight: '700' },
+  audienceChipTextActive: { color: '#ffffff' },
   rowText: { color: '#475569', lineHeight: 20, marginBottom: 8 },
   primaryButton: { marginTop: 10, alignSelf: 'flex-start', borderRadius: 12, backgroundColor: '#2563eb', paddingVertical: 12, paddingHorizontal: 14 },
+  primaryButtonDisabled: { opacity: 0.6 },
   primaryButtonText: { color: '#ffffff', fontWeight: '800' },
+  multilineInput: { minHeight: 110, textAlignVertical: 'top' },
+  broadcastHistoryWrap: { marginTop: 14, borderTopWidth: 1, borderTopColor: '#e5e7eb', paddingTop: 12 },
+  broadcastHistoryRow: { marginBottom: 10 },
+  sectionLabel: { fontWeight: '800', color: '#0f172a', marginBottom: 8 },
   threadRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
   threadTitle: { fontWeight: '800', color: '#0f172a' },
   attachmentsRow: { flexDirection: 'row', justifyContent: 'space-between' },

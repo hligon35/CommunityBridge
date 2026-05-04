@@ -21,7 +21,7 @@ function Block({ title, children, style }) {
 export default function InsuranceBillingScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
-  const { children = [], parents = [] } = useData();
+  const { children = [], parents = [], setChildren } = useData();
   const role = normalizeUserRole(user?.role);
   const isBcba = isBcbaRole(user?.role);
   const isParent = role === USER_ROLES.PARENT;
@@ -30,6 +30,8 @@ export default function InsuranceBillingScreen() {
   const [auditItems, setAuditItems] = useState([]);
   const [loadError, setLoadError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [selectedLearnerId, setSelectedLearnerId] = useState('');
+  const [orgSettings, setOrgSettings] = useState({});
 
   const linkedParentId = useMemo(() => {
     if (!isParent) return null;
@@ -41,20 +43,73 @@ export default function InsuranceBillingScreen() {
     return (Array.isArray(children) ? children : []).find((child) => childHasParent(child, linkedParentId)) || null;
   }, [children, isParent, linkedParentId]);
 
+  const selectedLearner = useMemo(() => {
+    if (isParent) return linkedChild;
+    const match = (Array.isArray(children) ? children : []).find((child) => child?.id === selectedLearnerId);
+    return match || (Array.isArray(children) ? children[0] : null) || null;
+  }, [children, isParent, linkedChild, selectedLearnerId]);
+
   const insurance = useMemo(() => {
-    const childInsurance = linkedChild?.insurance && typeof linkedChild.insurance === 'object' ? linkedChild.insurance : {};
+    const childInsuranceSource = isParent ? linkedChild : selectedLearner;
+    const childInsurance = childInsuranceSource?.insurance && typeof childInsuranceSource.insurance === 'object' ? childInsuranceSource.insurance : {};
     return {
-      ...(user?.insurance || {}),
+      ...(isParent ? (user?.insurance || {}) : {}),
       ...childInsurance,
     };
-  }, [linkedChild, user]);
+  }, [isParent, linkedChild, selectedLearner, user]);
 
   const childName = useMemo(() => {
-    if (linkedChild?.name) return String(linkedChild.name);
-    const firstName = String(linkedChild?.firstName || '').trim();
-    const lastName = String(linkedChild?.lastName || '').trim();
+    const targetChild = isParent ? linkedChild : selectedLearner;
+    if (targetChild?.name) return String(targetChild.name);
+    const firstName = String(targetChild?.firstName || '').trim();
+    const lastName = String(targetChild?.lastName || '').trim();
     return `${firstName} ${lastName}`.trim() || 'Your child';
-  }, [linkedChild]);
+  }, [isParent, linkedChild, selectedLearner]);
+
+  const billingConfig = useMemo(() => {
+    return orgSettings?.billing && typeof orgSettings.billing === 'object' ? orgSettings.billing : {};
+  }, [orgSettings]);
+
+  const visibleContactOptions = useMemo(() => {
+    const options = [];
+    const email = String(billingConfig.contactEmail || '').trim();
+    const phone = String(billingConfig.contactPhone || '').trim();
+    if (billingConfig.showContactEmail !== false && email) {
+      options.push({ type: 'email', label: email, url: `mailto:${email}` });
+    }
+    if (billingConfig.showContactPhone !== false && phone) {
+      const digits = phone.replace(/[^\d+]/g, '');
+      if (digits.length >= 7) options.push({ type: 'phone', label: phone, url: `tel:${digits}` });
+    }
+    return options;
+  }, [billingConfig]);
+
+  useEffect(() => {
+    if (isParent) return;
+    if (!selectedLearnerId && children[0]?.id) {
+      setSelectedLearnerId(children[0].id);
+      return;
+    }
+    if (selectedLearnerId && !children.some((child) => child?.id === selectedLearnerId)) {
+      setSelectedLearnerId(children[0]?.id || '');
+    }
+  }, [children, isParent, selectedLearnerId]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const result = await Api.getOrgSettings();
+        if (!mounted) return;
+        setOrgSettings(result?.item && typeof result.item === 'object' ? result.item : {});
+      } catch (_) {
+        if (mounted) setOrgSettings({});
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const filteredAuditItems = useMemo(() => {
     const billingItems = (auditItems || []).filter((item) => {
@@ -209,10 +264,6 @@ export default function InsuranceBillingScreen() {
     });
   }
 
-  function action(title) {
-    Alert.alert(title, isBcba ? 'BCBA users can review this workflow, but office users retain edit and submission control.' : `${title} is available from the office workflow surface.`);
-  }
-
   function openEmailAddress(value) {
     const match = String(value || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
     return match ? `mailto:${match[0]}` : '';
@@ -223,7 +274,29 @@ export default function InsuranceBillingScreen() {
     return digits.length >= 7 ? `tel:${digits}` : '';
   }
 
+  function openChatsInbox() {
+    const parentNavigation = navigation.getParent?.();
+    if (parentNavigation?.navigate) {
+      parentNavigation.navigate('Chats', { screen: 'ChatsList' });
+      return true;
+    }
+    try {
+      navigation.navigate('Chats', { screen: 'ChatsList' });
+      return true;
+    } catch (_) {
+      Alert.alert('Messages unavailable', 'We could not open the Messages workspace from this screen.');
+      return false;
+    }
+  }
+
   function openParentBilling() {
+    const paymentPortalUrl = String(billingConfig.paymentPortalUrl || '').trim();
+    if (paymentPortalUrl) {
+      Linking.openURL(paymentPortalUrl).catch(() => {
+        Alert.alert('Billing portal unavailable', 'We could not open the payment portal on this device.');
+      });
+      return;
+    }
     const emailUrl = openEmailAddress(insurance.billingContact || insurance.contact || '');
     const phoneUrl = openPhoneNumber(insurance.billingContact || insurance.contact || '');
     const target = emailUrl || phoneUrl;
@@ -233,11 +306,72 @@ export default function InsuranceBillingScreen() {
       });
       return;
     }
-    navigation.navigate('ChatsList');
+    Alert.alert('Billing portal unavailable', 'No organization billing portal has been configured yet.');
   }
 
   function openParentContact() {
-    navigation.navigate('ChatsList');
+    if (!visibleContactOptions.length) {
+      Alert.alert('Contact unavailable', 'No organization billing contact has been configured yet.');
+      return;
+    }
+    if (visibleContactOptions.length === 1) {
+      Linking.openURL(visibleContactOptions[0].url).catch(() => {
+        Alert.alert('Contact unavailable', 'We could not open the selected billing contact on this device.');
+      });
+      return;
+    }
+    Alert.alert(
+      'Contact billing',
+      'Choose how you want to contact billing.',
+      [
+        ...visibleContactOptions.map((option) => ({
+          text: option.type === 'phone' ? `Call ${option.label}` : `Email ${option.label}`,
+          onPress: () => {
+            Linking.openURL(option.url).catch(() => {
+              Alert.alert('Contact unavailable', 'We could not open the selected billing contact on this device.');
+            });
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  }
+
+  async function persistLearnerInsurance(nextInsurance, successMessage) {
+    if (!selectedLearner?.id) return;
+    const nextChild = {
+      ...selectedLearner,
+      insurance: nextInsurance,
+      insuranceStatus: nextInsurance.authorizationStatus || selectedLearner?.insuranceStatus || '',
+    };
+    try {
+      setBusy(true);
+      await Api.mergeDirectory({ children: [nextChild] });
+      setChildren((current) => (current || []).map((child) => (child?.id === nextChild.id ? { ...child, ...nextChild } : child)));
+      Alert.alert('Billing updated', successMessage);
+    } catch (error) {
+      Alert.alert('Update failed', String(error?.message || error || 'Could not update billing details.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approveAuthorization() {
+    const nextInsurance = {
+      ...(insurance || {}),
+      authorizationStatus: 'approved',
+    };
+    await persistLearnerInsurance(nextInsurance, `${childName} authorization was marked approved.`);
+  }
+
+  async function approveVerification() {
+    const nextInsurance = {
+      ...(insurance || {}),
+      timesheetStatus: 'verified',
+      parentSignatureStatus: 'received',
+      sessionStatus: 'verified',
+    };
+    await persistLearnerInsurance(nextInsurance, `${childName} verification was marked complete.`);
   }
 
   return (
@@ -250,6 +384,22 @@ export default function InsuranceBillingScreen() {
         </View>
 
         {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
+
+        {!isParent ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Learner</Text>
+            <View style={styles.chipRow}>
+              {(children || []).map((child) => {
+                const active = child?.id === selectedLearner?.id;
+                return (
+                  <TouchableOpacity key={child.id} style={[styles.chip, active ? styles.chipActive : null]} onPress={() => setSelectedLearnerId(child.id)}>
+                    <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{child.name || 'Learner'}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
 
         {isParent ? (
           <Block title="Digital Insurance Card">
@@ -277,12 +427,21 @@ export default function InsuranceBillingScreen() {
             </View>
             <View style={styles.parentActionRow}>
               <TouchableOpacity style={styles.primaryButton} onPress={openParentBilling}>
-                <Text style={styles.primaryButtonText}>Billing</Text>
+                <Text style={styles.primaryButtonText}>Payment Portal</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryButton} onPress={openParentContact}>
                 <Text style={styles.secondaryButtonText}>Contact</Text>
               </TouchableOpacity>
             </View>
+            {visibleContactOptions.length ? (
+              <View style={styles.parentContactList}>
+                {visibleContactOptions.map((option) => (
+                  <Text key={`${option.type}-${option.label}`} style={styles.parentContactText}>
+                    {option.type === 'phone' ? 'Phone' : 'Email'}: {option.label}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
           </Block>
         ) : (
           <>
@@ -291,15 +450,16 @@ export default function InsuranceBillingScreen() {
                 <Text style={styles.rowText}>Hours approved: {insurance.approvedHours || 'N/A'}</Text>
                 <Text style={styles.rowText}>Hours remaining: {insurance.remainingHours || 'N/A'}</Text>
                 <Text style={styles.rowText}>Expiration date: {insurance.expirationDate || 'N/A'}</Text>
-                <TouchableOpacity style={styles.secondaryButton} onPress={() => action('Review authorizations')}><Text style={styles.secondaryButtonText}>{isBcba ? 'Review Authorization' : 'Update Authorization'}</Text></TouchableOpacity>
+                <Text style={styles.rowText}>{isBcba ? `Reviewing persisted authorization status for ${childName}.` : `Update the selected learner authorization record for ${childName}.`}</Text>
+                {!isBcba ? <TouchableOpacity style={[styles.secondaryButton, busy ? styles.secondaryButtonDisabled : null]} disabled={busy || !selectedLearner?.id} onPress={approveAuthorization}><Text style={[styles.secondaryButtonText, busy ? styles.secondaryButtonTextDisabled : null]}>Approve Authorization</Text></TouchableOpacity> : null}
               </Block>
 
               <Block title="Session verification" style={styles.splitCard}>
                 <Text style={styles.rowText}>Timesheets: {insurance.timesheetStatus || 'Pending verification'}</Text>
                 <Text style={styles.rowText}>Parent signatures: {insurance.parentSignatureStatus || 'No signature on file'}</Text>
                 <Text style={styles.rowText}>Session status: {insurance.sessionStatus || 'Pending verification'}</Text>
-                {!isBcba ? <TouchableOpacity style={styles.primaryButton} onPress={() => action('Approve verification')}><Text style={styles.primaryButtonText}>Approve Verification</Text></TouchableOpacity> : null}
-                {isBcba ? <TouchableOpacity style={styles.secondaryButton} onPress={() => action('Review verification')}><Text style={styles.secondaryButtonText}>Review Verification</Text></TouchableOpacity> : null}
+                <Text style={styles.rowText}>{isBcba ? `Reviewing persisted verification status for ${childName}.` : `Approve timesheet, signature, and session verification for ${childName}.`}</Text>
+                {!isBcba ? <TouchableOpacity style={[styles.primaryButton, busy ? styles.primaryButtonDisabled : null]} disabled={busy || !selectedLearner?.id} onPress={approveVerification}><Text style={styles.primaryButtonText}>{busy ? 'Saving...' : 'Approve Verification'}</Text></TouchableOpacity> : null}
               </Block>
             </View>
 
@@ -355,6 +515,11 @@ const styles = StyleSheet.create({
   card: { marginTop: 12, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },
   splitCard: { width: '48%', marginTop: 0 },
   cardTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 12 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap' },
+  chip: { borderRadius: 999, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#eff6ff', marginRight: 8, marginBottom: 8 },
+  chipActive: { backgroundColor: '#2563eb' },
+  chipText: { color: '#1d4ed8', fontWeight: '700' },
+  chipTextActive: { color: '#ffffff' },
   rowText: { color: '#475569', lineHeight: 20, marginBottom: 8 },
   digitalCard: { borderRadius: 18, backgroundColor: '#1e3a8a', padding: 18 },
   digitalCardName: { color: '#ffffff', fontSize: 22, fontWeight: '800' },
@@ -364,6 +529,8 @@ const styles = StyleSheet.create({
   digitalCardLabel: { color: '#bfdbfe', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
   digitalCardValue: { marginTop: 4, color: '#ffffff', fontSize: 15, fontWeight: '700' },
   parentActionRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 12 },
+  parentContactList: { marginTop: 10 },
+  parentContactText: { color: '#475569', lineHeight: 20 },
   exportRow: { flexDirection: 'row', justifyContent: 'space-between' },
   exportCard: { width: '48%', borderRadius: 16, backgroundColor: '#f8fafc', padding: 14, marginBottom: 10 },
   exportTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
@@ -375,6 +542,8 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#ffffff', fontWeight: '800' },
   secondaryButton: { marginTop: 10, marginRight: 10, alignSelf: 'flex-start', borderRadius: 12, backgroundColor: '#e2e8f0', paddingVertical: 12, paddingHorizontal: 14 },
   secondaryButtonText: { color: '#0f172a', fontWeight: '800' },
+  secondaryButtonDisabled: { opacity: 0.6 },
+  secondaryButtonTextDisabled: { color: '#475569' },
   jobRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 10 },
   jobMeta: { color: '#64748b', marginBottom: 2 },
 });

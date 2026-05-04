@@ -423,10 +423,18 @@ export default function MyChildScreen() {
                   <View style={{ flexDirection: 'row', marginTop: 8 }}>
                     {p._source === 'proposal' ? (
                       <>
-                        <TouchableOpacity onPress={async () => { const res = await respondToProposal(p.id, 'accept'); if (res) Alert.alert('Accepted'); }} style={{ marginRight: 8, padding: 8, backgroundColor: '#10B981', borderRadius: 8 }}>
+                        <TouchableOpacity onPress={async () => {
+                          const res = await respondToProposal(p.id, 'accept');
+                          if (res?.ok) Alert.alert('Accepted', 'The time change request was accepted.');
+                          else Alert.alert('Accept failed', String(res?.error || 'Could not update the time change request.'));
+                        }} style={{ marginRight: 8, padding: 8, backgroundColor: '#10B981', borderRadius: 8 }}>
                           <Text style={{ color: '#fff' }}>Accept</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={async () => { const res = await respondToProposal(p.id, 'reject'); if (res) Alert.alert('Rejected'); }} style={{ padding: 8, backgroundColor: '#ef4444', borderRadius: 8 }}>
+                        <TouchableOpacity onPress={async () => {
+                          const res = await respondToProposal(p.id, 'reject');
+                          if (res?.ok) Alert.alert('Rejected', 'The time change request was rejected.');
+                          else Alert.alert('Reject failed', String(res?.error || 'Could not update the time change request.'));
+                        }} style={{ padding: 8, backgroundColor: '#ef4444', borderRadius: 8 }}>
                           <Text style={{ color: '#fff' }}>Reject</Text>
                         </TouchableOpacity>
                       </>

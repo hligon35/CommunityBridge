@@ -736,39 +736,24 @@ export function DataProvider({ children: reactChildren }) {
 
   async function respondToProposal(proposalId, action) {
     try {
-      // Find local proposal so we can apply local changes immediately
-      const local = (timeChangeProposals || []).find((p) => p.id === proposalId);
-      // Attempt server call if available
-      let res = null;
-      try {
-        if (Api.respondTimeChange) res = await Api.respondTimeChange(proposalId, action);
-      } catch (e) {
-        console.warn('respondTimeChange API failed', e?.message || e);
+      if (!Api.respondTimeChange) {
+        return { ok: false, error: 'Time change responses are unavailable right now.' };
+      }
+      const res = await Api.respondTimeChange(proposalId, action);
+      if (res?.ok !== true && !res?.updatedChild) {
+        return { ok: false, error: 'The time change request could not be updated.' };
       }
 
-      // Remove the proposal locally
       setTimeChangeProposals((s) => (s || []).filter((p) => p.id !== proposalId));
 
-      // If accepted and we have proposal details, update the child's schedule locally
-      if (action === 'accept' && local) {
-        try {
-          const childId = local.childId;
-          const field = local.type === 'pickup' ? 'pickupTimeISO' : 'dropoffTimeISO';
-          setChildren((prev) => (prev || []).map((c) => (c.id === childId ? { ...c, [field]: local.proposedISO } : c)));
-        } catch (e) {
-          console.warn('apply accepted proposal locally failed', e?.message || e);
-        }
-      }
-
-      // If server returned updated child, merge it as authoritative
       if (res && res.updatedChild && res.updatedChild.id) {
         setChildren((prev) => (prev || []).map((c) => (c.id === res.updatedChild.id ? { ...c, ...res.updatedChild } : c)));
       }
 
-      return res;
+      return { ...res, ok: true };
     } catch (e) {
       console.warn('respondToProposal failed', e?.message || e);
-      return null;
+      return { ok: false, error: e?.message || 'Could not update the proposal.' };
     }
   }
 
@@ -925,6 +910,42 @@ export function DataProvider({ children: reactChildren }) {
       return temp;
     } catch (e) {
       console.warn('sendAdminMemo failed', e?.message || e);
+      return null;
+    }
+  }
+
+  async function createStaffLog({ type = '', title = '', body = '', childId = null, recipients = [] } = {}) {
+    try {
+      const normalizedType = String(type || '').trim().toLowerCase() || 'quick_note';
+      const temp = {
+        id: `urgent-${Date.now()}`,
+        type: normalizedType,
+        title: String(title || '').trim(),
+        body: String(body || '').trim(),
+        childId: childId || null,
+        recipients: Array.isArray(recipients) ? recipients : [],
+        proposerId: user?.id,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      };
+      setUrgentMemos((s) => [temp, ...(s || [])]);
+
+      if (isDemoReviewer) return temp;
+
+      if (Api.sendUrgentMemo) {
+        try {
+          const created = await Api.sendUrgentMemo(temp);
+          if (created && created.id) {
+            setUrgentMemos((s) => (s || []).map((m) => (m.id === temp.id ? created : m)));
+            return created;
+          }
+        } catch (e) {
+          console.warn('createStaffLog API failed', e?.message || e);
+        }
+      }
+      return temp;
+    } catch (e) {
+      console.warn('createStaffLog failed', e?.message || e);
       return null;
     }
   }
@@ -1105,6 +1126,7 @@ export function DataProvider({ children: reactChildren }) {
       fetchAndSync,
       markUrgentRead,
       sendAdminMemo,
+      createStaffLog,
       blockedUserIds,
       blockUser,
       unblockUser,

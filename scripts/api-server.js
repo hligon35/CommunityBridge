@@ -3470,6 +3470,8 @@ app.put('/api/org-settings', authMiddleware, requireAdmin, requireCapability('se
   const lng = payload.lng != null ? Number(payload.lng) : null;
   const dropZoneMiles = payload.dropZoneMiles != null ? Number(payload.dropZoneMiles) : null;
   const orgArrivalEnabled = (typeof payload.orgArrivalEnabled === 'boolean') ? payload.orgArrivalEnabled : null;
+  const currentBilling = currentItem.billing && typeof currentItem.billing === 'object' ? currentItem.billing : {};
+  const payloadBilling = payload.billing && typeof payload.billing === 'object' ? payload.billing : {};
 
   const item = {
     ...currentItem,
@@ -3478,6 +3480,14 @@ app.put('/api/org-settings', authMiddleware, requireAdmin, requireCapability('se
     lng: Number.isFinite(lng) ? lng : null,
     dropZoneMiles: Number.isFinite(dropZoneMiles) ? dropZoneMiles : null,
     orgArrivalEnabled: orgArrivalEnabled,
+    billing: {
+      ...currentBilling,
+      paymentPortalUrl: payloadBilling.paymentPortalUrl != null ? String(payloadBilling.paymentPortalUrl).trim() : String(currentBilling.paymentPortalUrl || '').trim(),
+      contactEmail: payloadBilling.contactEmail != null ? String(payloadBilling.contactEmail).trim() : String(currentBilling.contactEmail || '').trim(),
+      contactPhone: payloadBilling.contactPhone != null ? String(payloadBilling.contactPhone).trim() : String(currentBilling.contactPhone || '').trim(),
+      showContactEmail: typeof payloadBilling.showContactEmail === 'boolean' ? payloadBilling.showContactEmail : currentBilling.showContactEmail !== false,
+      showContactPhone: typeof payloadBilling.showContactPhone === 'boolean' ? payloadBilling.showContactPhone : currentBilling.showContactPhone !== false,
+    },
     programDocumentsByProgramId: normalizeDocumentScopeMap(payload.programDocumentsByProgramId != null ? payload.programDocumentsByProgramId : currentItem.programDocumentsByProgramId),
     campusDocumentsByCampusId: normalizeDocumentScopeMap(payload.campusDocumentsByCampusId != null ? payload.campusDocumentsByCampusId : currentItem.campusDocumentsByCampusId),
   };
@@ -3652,6 +3662,19 @@ app.put('/api/children/:childId/schedule', authMiddleware, requireChildCareWrite
     if (body.pmTherapist !== undefined) {
       nextChild.pmTherapist = body.pmTherapist || null;
       changedFields.push('pmTherapist');
+    }
+    if (body.scheduleApproval !== undefined) {
+      const approval = body.scheduleApproval && typeof body.scheduleApproval === 'object' ? body.scheduleApproval : null;
+      nextChild.scheduleApproval = approval ? {
+        status: safeString(approval.status).trim() || 'pending',
+        submittedAt: approval.submittedAt ? safeString(approval.submittedAt).trim() : null,
+        submittedById: approval.submittedById ? safeString(approval.submittedById).trim() : null,
+        submittedByName: approval.submittedByName ? safeString(approval.submittedByName).trim() : null,
+        approvedAt: approval.approvedAt ? safeString(approval.approvedAt).trim() : null,
+        approvedById: approval.approvedById ? safeString(approval.approvedById).trim() : null,
+        approvedByName: approval.approvedByName ? safeString(approval.approvedByName).trim() : null,
+      } : null;
+      changedFields.push('scheduleApproval');
     }
 
     const now = nowISO();

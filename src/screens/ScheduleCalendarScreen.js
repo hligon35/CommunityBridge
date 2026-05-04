@@ -52,7 +52,7 @@ function buildSessionCards(children = []) {
 
 export default function ScheduleCalendarScreen() {
   const { user } = useAuth();
-  const { children = [], parents = [], therapists = [], setChildren } = useData();
+  const { children = [], parents = [], therapists = [], setChildren, fetchAndSync } = useData();
   const { width } = useWindowDimensions();
   const role = normalizeUserRole(user?.role);
   const isBcba = isBcbaRole(user?.role);
@@ -99,6 +99,9 @@ export default function ScheduleCalendarScreen() {
   const sessions = useMemo(() => buildSessionCards(visibleChildren), [visibleChildren]);
   const visibleSessions = useMemo(() => sessions.filter((session) => sameDay(session.start, selectedDate)), [selectedDate, sessions]);
   const selectedChild = useMemo(() => (visibleChildren || []).find((child) => child?.id === selectedChildId) || visibleChildren[0] || null, [selectedChildId, visibleChildren]);
+  const selectedChildApproval = useMemo(() => {
+    return selectedChild?.scheduleApproval && typeof selectedChild.scheduleApproval === 'object' ? selectedChild.scheduleApproval : null;
+  }, [selectedChild]);
   const abaTechOptions = useMemo(() => (therapists || []).filter((staff) => {
     const normalizedRole = String(staff?.role || '').toLowerCase();
     return staff?.id && !normalizedRole.includes('admin') && !normalizedRole.includes('bcba');
@@ -179,13 +182,15 @@ export default function ScheduleCalendarScreen() {
     }
     const nextStart = parseDraftTime(draftStart, selectedDate);
     const nextEnd = parseDraftTime(draftEnd, selectedDate);
-    const fallbackUpdate = (child) => ({
-      ...child,
-      session: draftSession,
-      room: String(draftRoom || '').trim() || child?.room || 'Room TBD',
-      dropoffTimeISO: nextStart.toISOString(),
-      pickupTimeISO: nextEnd.toISOString(),
-    });
+    const scheduleApproval = {
+      status: 'pending',
+      submittedAt: new Date().toISOString(),
+      submittedById: String(user?.id || '').trim() || null,
+      submittedByName: String(user?.name || user?.displayName || user?.email || '').trim() || 'Staff',
+      approvedAt: null,
+      approvedById: null,
+      approvedByName: null,
+    };
     setSaving(true);
     try {
       const result = await Api.updateChildSchedule(selectedChild.id, {
@@ -193,14 +198,17 @@ export default function ScheduleCalendarScreen() {
         room: String(draftRoom || '').trim() || selectedChild?.room || 'Room TBD',
         dropoffTimeISO: nextStart.toISOString(),
         pickupTimeISO: nextEnd.toISOString(),
+        scheduleApproval,
       });
-      mergeChildUpdate(result?.item || null, fallbackUpdate);
+      if (result?.item) {
+        mergeChildUpdate(result.item);
+      } else {
+        await fetchAndSync?.({ force: true });
+      }
       setEditorMode('');
-      Alert.alert('Session saved', `${selectedChild?.name || 'Learner'} now has an updated ${draftSession} session.`);
+      Alert.alert('Session saved', `${selectedChild?.name || 'Learner'} now has an updated ${draftSession} session pending office approval.`);
     } catch (error) {
-      mergeChildUpdate(null, fallbackUpdate);
-      setEditorMode('');
-      Alert.alert('Session saved locally', `${selectedChild?.name || 'Learner'} was updated in the schedule view.`);
+      Alert.alert('Session not saved', String(error?.message || error || 'We could not save this session update.'));
     } finally {
       setSaving(false);
     }
@@ -222,14 +230,15 @@ export default function ScheduleCalendarScreen() {
     }
     const existingAssigned = Array.isArray(selectedChild?.assignedABA) ? selectedChild.assignedABA : Array.isArray(selectedChild?.assigned_ABA) ? selectedChild.assigned_ABA : [];
     const assignedIds = Array.from(new Set([...existingAssigned.map((item) => String(item)), String(assignedStaff.id)]));
-    const fallbackUpdate = (child) => ({
-      ...child,
-      session: draftSession,
-      assignedABA: assignedIds,
-      assigned_ABA: assignedIds,
-      amTherapist: draftSession === 'AM' ? assignedStaff : child?.amTherapist,
-      pmTherapist: draftSession === 'PM' ? assignedStaff : child?.pmTherapist,
-    });
+    const scheduleApproval = {
+      status: 'pending',
+      submittedAt: new Date().toISOString(),
+      submittedById: String(user?.id || '').trim() || null,
+      submittedByName: String(user?.name || user?.displayName || user?.email || '').trim() || 'Staff',
+      approvedAt: null,
+      approvedById: null,
+      approvedByName: null,
+    };
     setSaving(true);
     try {
       const result = await Api.updateChildSchedule(selectedChild.id, {
@@ -238,14 +247,50 @@ export default function ScheduleCalendarScreen() {
         assigned_ABA: assignedIds,
         amTherapist: draftSession === 'AM' ? assignedStaff : undefined,
         pmTherapist: draftSession === 'PM' ? assignedStaff : undefined,
+        scheduleApproval,
       });
-      mergeChildUpdate(result?.item || null, fallbackUpdate);
+      if (result?.item) {
+        mergeChildUpdate(result.item);
+      } else {
+        await fetchAndSync?.({ force: true });
+      }
       setEditorMode('');
-      Alert.alert('ABA tech assigned', `${assignedStaff.name || 'Selected staff'} was assigned to ${selectedChild?.name || 'the learner'} for the ${draftSession} session.`);
+      Alert.alert('ABA tech assigned', `${assignedStaff.name || 'Selected staff'} was assigned to ${selectedChild?.name || 'the learner'} for the ${draftSession} session pending office approval.`);
     } catch (error) {
-      mergeChildUpdate(null, fallbackUpdate);
-      setEditorMode('');
-      Alert.alert('Assignment saved locally', `${assignedStaff.name || 'Selected staff'} was assigned in the schedule view.`);
+      Alert.alert('Assignment not saved', String(error?.message || error || 'We could not save this assignment.'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function approveScheduleChanges() {
+    if (!selectedChild?.id) {
+      Alert.alert('Select a learner', 'Choose a learner before approving schedule changes.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const currentApproval = selectedChildApproval && typeof selectedChildApproval === 'object' ? selectedChildApproval : {};
+      const result = await Api.updateChildSchedule(selectedChild.id, {
+        scheduleApproval: {
+          ...currentApproval,
+          status: 'approved',
+          submittedAt: currentApproval.submittedAt || new Date().toISOString(),
+          submittedById: currentApproval.submittedById || null,
+          submittedByName: currentApproval.submittedByName || null,
+          approvedAt: new Date().toISOString(),
+          approvedById: String(user?.id || '').trim() || null,
+          approvedByName: String(user?.name || user?.displayName || user?.email || '').trim() || 'Office',
+        },
+      });
+      if (result?.item) {
+        mergeChildUpdate(result.item);
+      } else {
+        await fetchAndSync?.({ force: true });
+      }
+      Alert.alert('Changes approved', `${selectedChild?.name || 'Learner'} schedule changes were approved.`);
+    } catch (error) {
+      Alert.alert('Approval failed', String(error?.message || error || 'We could not approve these schedule changes.'));
     } finally {
       setSaving(false);
     }
@@ -317,10 +362,19 @@ export default function ScheduleCalendarScreen() {
           <TouchableOpacity style={styles.primaryButton} onPress={() => setEditorMode('session')}>
             <Text style={styles.primaryButtonText}>Add Session</Text>
           </TouchableOpacity>
-          {isOffice ? <TouchableOpacity style={styles.secondaryButton} onPress={() => action('Edit session', 'Office edit controls are available from the selected session cards.')}><Text style={styles.secondaryButtonText}>Edit Session</Text></TouchableOpacity> : null}
-          {isOffice ? <TouchableOpacity style={styles.secondaryButton} onPress={() => action('Approve changes', 'Office approval routing for scheduling changes is staged here.')}><Text style={styles.secondaryButtonText}>Approve Changes</Text></TouchableOpacity> : null}
+          {isOffice ? <TouchableOpacity style={styles.secondaryButton} onPress={() => setEditorMode('session')}><Text style={styles.secondaryButtonText}>Edit Session</Text></TouchableOpacity> : null}
+          {isOffice ? <TouchableOpacity style={[styles.secondaryButton, saving ? styles.buttonDisabled : null]} onPress={approveScheduleChanges} disabled={saving}><Text style={styles.secondaryButtonText}>{saving ? 'Saving...' : 'Approve Changes'}</Text></TouchableOpacity> : null}
           {canManageSchedule ? <TouchableOpacity style={styles.secondaryButton} onPress={() => setEditorMode('assignment')}><Text style={styles.secondaryButtonText}>Assign ABA Tech</Text></TouchableOpacity> : null}
         </View> : null}
+
+        {!isTherapist && !isParent && selectedChildApproval ? (
+          <View style={styles.approvalCard}>
+            <Text style={styles.groupTitle}>Schedule Approval</Text>
+            <Text style={styles.groupSubtitle}>Status: {String(selectedChildApproval.status || 'pending').toUpperCase()}</Text>
+            {selectedChildApproval.submittedByName ? <Text style={styles.approvalMeta}>Submitted by {selectedChildApproval.submittedByName}{selectedChildApproval.submittedAt ? ` on ${new Date(selectedChildApproval.submittedAt).toLocaleString()}` : ''}</Text> : null}
+            {selectedChildApproval.approvedByName ? <Text style={styles.approvalMeta}>Approved by {selectedChildApproval.approvedByName}{selectedChildApproval.approvedAt ? ` on ${new Date(selectedChildApproval.approvedAt).toLocaleString()}` : ''}</Text> : null}
+          </View>
+        ) : null}
 
         {editorMode ? (
           <View style={styles.editorCard}>
@@ -453,11 +507,15 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.65 },
   primaryButtonText: { color: '#ffffff', fontWeight: '800' },
   secondaryButton: { borderRadius: 12, backgroundColor: '#e2e8f0', paddingVertical: 12, paddingHorizontal: 14, marginRight: 10, marginBottom: 10 },
+  secondaryButtonDisabled: { opacity: 0.6 },
+  secondaryButtonTextDisabled: { color: '#475569' },
   secondaryButtonText: { color: '#0f172a', fontWeight: '800' },
   groupCard: { marginTop: 12, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },
   editorCard: { marginTop: 12, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#bfdbfe', padding: 16 },
+  approvalCard: { marginTop: 12, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#dbeafe', padding: 16 },
   groupTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
   groupSubtitle: { marginTop: 4, color: '#64748b' },
+  approvalMeta: { marginTop: 6, color: '#475569' },
   fieldLabel: { marginTop: 12, marginBottom: 8, color: '#0f172a', fontWeight: '700' },
   fieldRow: { flexDirection: 'row', justifyContent: 'space-between' },
   fieldHalf: { width: '48%' },

@@ -181,7 +181,7 @@ export default function ExportDataScreen(){
 
         <View style={styles.infoCard}>
           <Text style={styles.infoTitle}>Available export targets</Text>
-          <Text style={styles.infoBody}>PDF, CSV, and Excel-style exports are represented here in the admin redesign. In this build, sensitive export generation remains disabled until server-backed export jobs are enabled.</Text>
+          <Text style={styles.infoBody}>Queue PDF, CSV, and Excel-style export jobs for reports, billing handoff, and compliance review from this workspace.</Text>
         </View>
 
         <View style={styles.metricRow}>
