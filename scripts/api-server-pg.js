@@ -1563,6 +1563,7 @@ async function completeManagedInvitePasswordSetup(userId, inviteId, newPassword)
     buildInvitePasswordCompletionProfileUpdate(getFirebaseAdmin().firestore.FieldValue.serverTimestamp()),
     { merge: true }
   );
+  await syncManagedUserStaffDirectoryPg(pool, uid);
 }
 
 function isAdminRole(role) {
@@ -1778,6 +1779,56 @@ async function rebuildAbaRelationshipsFromDirectoryPg(client) {
   }
 
   return { supervision: supervision.size, assignments: assignments.size };
+}
+
+function shouldMirrorManagedUserToStaffDirectory(role) {
+  const normalized = safeString(normalizeManagedInviteRole(role)).trim().toLowerCase();
+  return Boolean(normalized && normalized !== 'parent');
+}
+
+function buildManagedUserStaffDirectoryRecord(userRow, existingRecord) {
+  const existing = existingRecord && typeof existingRecord === 'object' ? existingRecord : {};
+  const nextName = safeString(userRow?.name).trim() || safeString(existing.name).trim() || safeString(userRow?.email).trim();
+  const nextEmail = normalizeEmail(userRow?.email) || normalizeEmail(existing.email);
+  return {
+    ...existing,
+    id: safeString(userRow?.id).trim(),
+    name: nextName,
+    email: nextEmail,
+    avatar: safeString(userRow?.avatar).trim() || safeString(existing.avatar).trim(),
+    phone: safeString(userRow?.phone).trim() || safeString(existing.phone).trim(),
+    address: safeString(userRow?.address).trim() || safeString(existing.address).trim(),
+    role: safeString(userRow?.role).trim() || safeString(existing.role).trim(),
+  };
+}
+
+async function syncManagedUserStaffDirectoryPg(client, userId) {
+  const uid = safeString(userId).trim();
+  if (!uid) return null;
+
+  const existingRow = await client.query('SELECT data_json, created_at FROM directory_therapists WHERE id = $1', [uid]);
+  const existing = existingRow?.rows?.[0] || null;
+  const userResult = await client.query('SELECT id,email,name,avatar,phone,address,role FROM users WHERE id = $1', [uid]);
+  const userRow = userResult?.rows?.[0] || null;
+
+  if (!userRow || !shouldMirrorManagedUserToStaffDirectory(userRow.role)) {
+    if (existing) {
+      await client.query('DELETE FROM directory_therapists WHERE id = $1', [uid]);
+      await rebuildAbaRelationshipsFromDirectoryPg(client);
+    }
+    return null;
+  }
+
+  const nextRecord = buildManagedUserStaffDirectoryRecord(userRow, safeJsonObject(existing?.data_json));
+  const now = new Date();
+  await client.query(
+    `INSERT INTO directory_therapists (id, data_json, created_at, updated_at)
+     VALUES ($1,$2,$3,$4)
+     ON CONFLICT (id) DO UPDATE SET data_json = EXCLUDED.data_json, updated_at = EXCLUDED.updated_at`,
+    [uid, JSON.stringify(nextRecord), existing?.created_at || now, now]
+  );
+  await rebuildAbaRelationshipsFromDirectoryPg(client);
+  return nextRecord;
 }
 
 async function seedAdminUser() {
@@ -4763,6 +4814,7 @@ app.put('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapabil
     values.push(userId);
 
     await pool.query(`UPDATE users SET ${sets.join(', ')} WHERE id = $${i}`, values);
+    await syncManagedUserStaffDirectoryPg(pool, userId);
 
     const row = await pgQueryOne('SELECT id,email,name,avatar,phone,address,role,created_at,updated_at FROM users WHERE id = $1', [userId]);
     const firebaseProfile = await getFirebaseManagedProfiles([userId]).catch(() => new Map());
@@ -4886,6 +4938,7 @@ app.delete('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapa
     }
 
     await pool.query('DELETE FROM users WHERE id = $1', [userId]);
+    await syncManagedUserStaffDirectoryPg(pool, userId);
   slog.info('admin', 'Managed user deleted', { actorId: req.user?.id, targetUserId: userId, targetRole: existingUser.role });
     await recordAuditLog({
       actorId: req.user?.id,

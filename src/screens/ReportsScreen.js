@@ -49,6 +49,36 @@ function MiniBars({ items = [], color = '#2563eb' }) {
   );
 }
 
+function UtilizationMeters({ items = [] }) {
+  const normalizedItems = Array.isArray(items) ? items : [];
+  const max = Math.max(1, ...normalizedItems.map((item) => Number(item?.value || 0)));
+
+  if (!normalizedItems.length) {
+    return <Text style={styles.rowText}>No utilization data is available yet.</Text>;
+  }
+
+  return (
+    <View>
+      {normalizedItems.map((item) => {
+        const value = Number(item?.value || 0);
+        const percent = Math.max(0, Math.min(100, Math.round((value / max) * 100)));
+        const tone = percent >= 85 ? '#16a34a' : percent >= 55 ? '#0284c7' : '#f59e0b';
+        return (
+          <View key={item.label} style={styles.utilizationRow}>
+            <View style={styles.utilizationHeader}>
+              <Text style={styles.utilizationLabel}>{item.label}</Text>
+              <Text style={styles.utilizationValue}>{value} • {percent}%</Text>
+            </View>
+            <View style={styles.utilizationTrack}>
+              <View style={[styles.utilizationFill, { width: `${Math.max(percent, 8)}%`, backgroundColor: tone }]} />
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function ReportsScreen() {
   const { user } = useAuth();
   const workspaceLabel = getWorkspaceLabel(user?.role);
@@ -58,6 +88,7 @@ export default function ReportsScreen() {
   const isBcba = isBcbaRole(user?.role);
   const isParent = role.includes('parent');
   const isWideLayout = width >= 900;
+  const isThreeCardLayout = width >= 720;
   const reportChildren = useMemo(() => findReportChildren(user, children, parents), [user, children, parents]);
   const [selectedChildId, setSelectedChildId] = useState('all');
   const [selectedRoom, setSelectedRoom] = useState('all');
@@ -325,26 +356,27 @@ export default function ReportsScreen() {
 
         {tab === 'operational' ? (
           <>
-            <View style={[styles.summaryRow, isWideLayout ? styles.summaryRowWide : null]}>
-              <View style={[styles.summaryCard, isWideLayout ? styles.summaryCardWide : null]}>
+            <View style={[styles.summaryRow, isThreeCardLayout ? styles.summaryRowWide : null]}>
+              <View style={[styles.summaryCard, isThreeCardLayout ? styles.summaryCardWide : null]}>
                 <Text style={styles.summaryCardTitle}>Attendance</Text>
                 <Text style={styles.summaryCardValue}>Present: {childReports.attendanceSummary.present}</Text>
                 <Text style={styles.summaryCardValue}>Absent: {childReports.attendanceSummary.absent}</Text>
                 <Text style={styles.summaryCardValue}>Tardy: {childReports.attendanceSummary.tardy}</Text>
               </View>
-              <View style={[styles.summaryCard, isWideLayout ? styles.summaryCardWide : null]}>
-                <Text style={styles.summaryCardTitle}>Session Verification</Text>
-                <Text style={styles.summaryCardValue}>{schoolWide.totalSessions} summaries logged</Text>
-                <Text style={styles.summaryCardValue}>{schoolWide.activeLearners} active learners</Text>
-              </View>
-              <View style={[styles.summaryCard, isWideLayout ? styles.summaryCardWide : null]}>
+              <View style={[styles.summaryCard, isThreeCardLayout ? styles.summaryCardWide : null]}>
                 <Text style={styles.summaryCardTitle}>Staff Hours</Text>
                 <Text style={styles.summaryCardValue}>{(schoolWide.parentEngagement || []).length} service channels</Text>
                 <Text style={styles.summaryCardValue}>Available for staffing review</Text>
               </View>
+              <View style={[styles.summaryCard, isThreeCardLayout ? styles.summaryCardWide : null]}>
+                <Text style={styles.summaryCardTitle}>Session Verification</Text>
+                <Text style={styles.summaryCardValue}>{schoolWide.totalSessions} summaries logged</Text>
+                <Text style={styles.summaryCardValue}>{schoolWide.activeLearners} active learners</Text>
+              </View>
             </View>
             <SectionCard title="Utilization">
-              <MiniBars items={(schoolWide.parentEngagement || []).map((item) => ({ label: item.label, value: item.value }))} color="#0ea5e9" />
+              <Text style={styles.utilizationIntro}>Compare active service channels side by side with a capacity-style meter so underused and heavily used lanes are obvious at a glance.</Text>
+              <UtilizationMeters items={(schoolWide.parentEngagement || []).map((item) => ({ label: item.label, value: item.value }))} />
             </SectionCard>
           </>
         ) : null}
@@ -419,6 +451,13 @@ const styles = StyleSheet.create({
   card: { marginTop: 12, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb', padding: 16 },
   cardTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 12 },
   rowText: { color: '#475569', lineHeight: 20, marginBottom: 8 },
+  utilizationIntro: { color: '#64748b', lineHeight: 20, marginBottom: 14 },
+  utilizationRow: { marginBottom: 14 },
+  utilizationHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  utilizationLabel: { color: '#0f172a', fontWeight: '700', flex: 1, paddingRight: 12 },
+  utilizationValue: { color: '#475569', fontWeight: '700' },
+  utilizationTrack: { height: 14, borderRadius: 999, backgroundColor: '#e2e8f0', overflow: 'hidden' },
+  utilizationFill: { height: '100%', borderRadius: 999, minWidth: 10 },
   barRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   barItem: { flex: 1, alignItems: 'center', marginHorizontal: 4 },
   barTrack: { height: 110, width: 28, borderRadius: 14, backgroundColor: '#e2e8f0', justifyContent: 'flex-end', overflow: 'hidden' },

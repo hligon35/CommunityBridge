@@ -1587,6 +1587,53 @@ try {
   // ignore
 }
 
+function shouldMirrorManagedUserToStaffDirectory(role) {
+  const normalized = safeString(normalizeManagedInviteRole(role)).trim().toLowerCase();
+  return Boolean(normalized && normalized !== 'parent');
+}
+
+function buildManagedUserStaffDirectoryRecord(userRow, existingRecord) {
+  const existing = existingRecord && typeof existingRecord === 'object' ? existingRecord : {};
+  const nextName = safeString(userRow?.name).trim() || safeString(existing.name).trim() || safeString(userRow?.email).trim();
+  const nextEmail = normalizeEmail(userRow?.email) || normalizeEmail(existing.email);
+  return {
+    ...existing,
+    id: safeString(userRow?.id).trim(),
+    name: nextName,
+    email: nextEmail,
+    avatar: safeString(userRow?.avatar).trim() || safeString(existing.avatar).trim(),
+    phone: safeString(userRow?.phone).trim() || safeString(existing.phone).trim(),
+    address: safeString(userRow?.address).trim() || safeString(existing.address).trim(),
+    role: safeString(userRow?.role).trim() || safeString(existing.role).trim(),
+  };
+}
+
+function syncManagedUserStaffDirectorySqlite(userId) {
+  const uid = safeString(userId).trim();
+  if (!uid) return null;
+
+  const now = nowISO();
+  const existingRow = db.prepare('SELECT data_json, created_at FROM directory_therapists WHERE id = ?').get(uid) || null;
+  const userRow = db.prepare('SELECT id,email,name,avatar,phone,address,role FROM users WHERE id = ?').get(uid) || null;
+
+  if (!userRow || !shouldMirrorManagedUserToStaffDirectory(userRow.role)) {
+    if (existingRow) {
+      db.prepare('DELETE FROM directory_therapists WHERE id = ?').run(uid);
+      rebuildAbaRelationshipsFromDirectorySqlite(now);
+    }
+    return null;
+  }
+
+  const existingRecord = safeJsonParse(String(existingRow?.data_json || ''), null);
+  const nextRecord = buildManagedUserStaffDirectoryRecord(userRow, existingRecord);
+  db.prepare(
+    'INSERT INTO directory_therapists (id, data_json, created_at, updated_at) VALUES (?,?,?,?)\n' +
+    'ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json, updated_at=excluded.updated_at'
+  ).run(uid, JSON.stringify(nextRecord), existingRow?.created_at || now, now);
+  rebuildAbaRelationshipsFromDirectorySqlite(now);
+  return nextRecord;
+}
+
 function roleLower(u) {
   try { return String(u && u.role ? u.role : '').trim().toLowerCase(); } catch (_) { return ''; }
 }
@@ -1954,6 +2001,7 @@ async function completeManagedInvitePasswordSetup(userId, inviteId, newPassword)
     buildInvitePasswordCompletionProfileUpdate(getFirebaseAdmin().firestore.FieldValue.serverTimestamp()),
     { merge: true }
   );
+  syncManagedUserStaffDirectorySqlite(uid);
 }
 
 function hasExpoPushToken(token) {
@@ -4910,6 +4958,7 @@ app.put('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapabil
     values.push(nowISO());
     values.push(userId);
     db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    syncManagedUserStaffDirectorySqlite(userId);
 
     const row = db.prepare('SELECT id,email,name,avatar,phone,address,role,created_at,updated_at FROM users WHERE id = ?').get(userId);
     const firebaseProfile = await getFirebaseManagedProfiles([userId]).catch(() => new Map());
@@ -5032,6 +5081,7 @@ app.delete('/api/admin/users/:userId', authMiddleware, requireAdmin, requireCapa
     }
 
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  syncManagedUserStaffDirectorySqlite(userId);
   slog.info('admin', 'Managed user deleted', { actorId: req.user?.id, targetUserId: userId, targetRole: existingUser.role });
     recordAuditLog({
       actorId: req.user?.id,

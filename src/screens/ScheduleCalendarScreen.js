@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import TimeField from '../components/TimeField';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import Api from '../Api';
@@ -403,12 +404,12 @@ export default function ScheduleCalendarScreen() {
               <>
                 <View style={styles.fieldRow}>
                   <View style={styles.fieldHalf}>
-                    <Text style={styles.fieldLabel}>Start (HH:MM)</Text>
-                    <TextInput value={draftStart} onChangeText={setDraftStart} placeholder="09:00" style={styles.input} />
+                    <Text style={styles.fieldLabel}>Start time</Text>
+                    <TimeField value={draftStart} onChangeText={setDraftStart} placeholder="09:00" inputStyle={styles.input} accessibilityLabel="Session start time" />
                   </View>
                   <View style={styles.fieldHalf}>
-                    <Text style={styles.fieldLabel}>End (HH:MM)</Text>
-                    <TextInput value={draftEnd} onChangeText={setDraftEnd} placeholder="10:00" style={styles.input} />
+                    <Text style={styles.fieldLabel}>End time</Text>
+                    <TimeField value={draftEnd} onChangeText={setDraftEnd} placeholder="10:00" inputStyle={styles.input} accessibilityLabel="Session end time" />
                   </View>
                 </View>
                 <Text style={styles.fieldLabel}>Room</Text>

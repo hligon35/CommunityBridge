@@ -1,4 +1,17 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Api from '../Api';
+
+export const PUSH_STORAGE_KEYS = Object.freeze({
+  enabled: 'settings_push_enabled_v1',
+  chats: 'settings_push_chats_v1',
+  timelinePosts: 'settings_push_timeline_posts_v1',
+  mentionsPosts: 'settings_push_mentions_posts_v1',
+  tagsPosts: 'settings_push_tags_posts_v1',
+  updates: 'settings_push_updates_v1',
+  other: 'settings_push_other_v1',
+  token: 'push_expo_token_v1',
+});
 
 let notificationsLib = null;
 function getNotificationsLib() {
@@ -131,8 +144,85 @@ export async function registerForExpoPushTokenAsync() {
   }
 }
 
+async function readStoredPushPreferences() {
+  const values = await AsyncStorage.multiGet([
+    PUSH_STORAGE_KEYS.enabled,
+    PUSH_STORAGE_KEYS.chats,
+    PUSH_STORAGE_KEYS.timelinePosts,
+    PUSH_STORAGE_KEYS.mentionsPosts,
+    PUSH_STORAGE_KEYS.tagsPosts,
+    PUSH_STORAGE_KEYS.updates,
+    PUSH_STORAGE_KEYS.other,
+    PUSH_STORAGE_KEYS.token,
+  ]);
+  const map = new Map(values || []);
+  const enabled = map.get(PUSH_STORAGE_KEYS.enabled) === '1';
+  return {
+    enabled,
+    token: String(map.get(PUSH_STORAGE_KEYS.token) || '').trim(),
+    preferences: {
+      chats: map.get(PUSH_STORAGE_KEYS.chats) !== '0',
+      timelinePosts: map.get(PUSH_STORAGE_KEYS.timelinePosts) !== '0',
+      mentionsPosts: map.get(PUSH_STORAGE_KEYS.mentionsPosts) !== '0',
+      tagsPosts: map.get(PUSH_STORAGE_KEYS.tagsPosts) !== '0',
+      updates: map.get(PUSH_STORAGE_KEYS.updates) !== '0',
+      other: map.get(PUSH_STORAGE_KEYS.other) === '1',
+    },
+  };
+}
+
+export async function syncLoggedInDevicePushRegistration({ userId } = {}) {
+  if (Platform.OS === 'web' || isExpoGo()) {
+    return { ok: false, skipped: true, reason: Platform.OS === 'web' ? 'web-unsupported' : 'expo-go' };
+  }
+
+  const nextUserId = String(userId || '').trim();
+  if (!nextUserId) return { ok: false, skipped: true, reason: 'missing-user' };
+
+  const stored = await readStoredPushPreferences();
+  if (!stored.enabled) {
+    if (stored.token) {
+      await Api.unregisterPushToken({ token: stored.token, userId: nextUserId, platform: Platform.OS }).catch(() => {});
+    }
+    return { ok: true, skipped: true, reason: 'push-disabled' };
+  }
+
+  let token = stored.token;
+  if (!token) {
+    const result = await registerForExpoPushTokenAsync();
+    if (!result.ok || !result.token) return result;
+    token = String(result.token || '').trim();
+    if (!token) return { ok: false, reason: 'token-missing' };
+    await AsyncStorage.setItem(PUSH_STORAGE_KEYS.token, token).catch(() => {});
+  }
+
+  await Api.registerPushToken({
+    token,
+    userId: nextUserId,
+    platform: Platform.OS,
+    enabled: true,
+    preferences: stored.preferences,
+  });
+  return { ok: true, token };
+}
+
+export async function unregisterLoggedInDevicePushRegistration({ userId } = {}) {
+  if (Platform.OS === 'web' || isExpoGo()) {
+    return { ok: false, skipped: true, reason: Platform.OS === 'web' ? 'web-unsupported' : 'expo-go' };
+  }
+
+  const storedToken = String(await AsyncStorage.getItem(PUSH_STORAGE_KEYS.token).catch(() => '') || '').trim();
+  const nextUserId = String(userId || '').trim();
+  if (!storedToken) return { ok: true, skipped: true, reason: 'no-token' };
+
+  await Api.unregisterPushToken({ token: storedToken, userId: nextUserId, platform: Platform.OS }).catch(() => {});
+  return { ok: true, token: storedToken };
+}
+
 export default {
   configureNotificationHandling,
   setApplicationBadgeCountAsync,
   registerForExpoPushTokenAsync,
+  syncLoggedInDevicePushRegistration,
+  unregisterLoggedInDevicePushRegistration,
 };

@@ -119,6 +119,13 @@ function normalizeManagedUsers(items) {
   }));
 }
 
+function isPendingInvite(invite) {
+  if (!invite || typeof invite !== 'object') return false;
+  const status = String(invite.status || '').trim().toLowerCase();
+  if (status === 'used' || status === 'revoked') return false;
+  return status === 'sent' || status === 'started' || String(invite.lastEmailStatus || '').trim().toLowerCase() === 'failed';
+}
+
 function isValidEmail(value) {
   const normalized = String(value || '').trim();
   if (!normalized) return false;
@@ -386,14 +393,12 @@ export default function ManagePermissionsScreen(){
 
   function renderInviteStatus(userItem) {
     const invite = userItem?.invite;
-    if (!invite) return null;
-    const statusLabel = invite.status === 'used'
-      ? 'Invite completed'
-      : invite.status === 'started'
+    if (!isPendingInvite(invite)) return null;
+    const statusLabel = invite.status === 'started'
         ? 'Password setup in progress'
         : invite.lastEmailStatus === 'failed'
           ? 'Invite email failed'
-          : 'Invite Sent';
+          : 'Pending invite';
     return (
       <View style={styles.inviteCard}>
         <Text style={styles.inviteTitle}>{statusLabel}</Text>

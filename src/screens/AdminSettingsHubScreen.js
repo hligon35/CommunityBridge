@@ -71,6 +71,15 @@ export default function AdminSettingsHubScreen() {
 
   const cardBasis = width >= 1040 ? '31.6%' : width >= 700 ? '48.4%' : '100%';
 
+  const openPersonalSettings = React.useCallback(() => {
+    const parentNavigation = navigation.getParent?.();
+    if (parentNavigation?.navigate) {
+      parentNavigation.navigate('Settings', { screen: 'SettingsMain' });
+      return;
+    }
+    navigation.navigate('Settings', { screen: 'SettingsMain' });
+  }, [navigation]);
+
   const loadSettings = React.useCallback(async () => {
     if (!canSeeSettingsWorkspace) {
       setLoading(false);
@@ -163,6 +172,7 @@ export default function AdminSettingsHubScreen() {
   }, [canManageOfficeSettings, form, settingsItem]);
 
   const sections = canSeeSettingsWorkspace ? [
+    { title: 'Personal Settings', description: 'Update your own display name, contact details, privacy preferences, and notification settings.', action: openPersonalSettings },
     { key: 'organization', title: 'Organization Settings', description: canManageOfficeSettings ? 'Office configuration for organization profile, campuses, and operating defaults.' : 'Review organization profile, campuses, and operating defaults from one workspace.', action: () => setActivePanel('organization') },
     { title: 'User Roles & Permissions', description: canManageOfficeSettings ? 'Office role and access management.' : 'Review role access and permission routing from a dedicated settings screen.', action: () => navigation.navigate('ManagePermissions') },
     { title: 'Clinical Templates', description: 'BCBA clinical templates and reusable programming standards.', action: () => navigation.navigate('ProgramDirectory', { focusMode: 'library' }) },
@@ -318,6 +328,11 @@ export default function AdminSettingsHubScreen() {
                 <TouchableOpacity style={styles.cardTitleButton} onPress={section.action} accessibilityRole="button" accessibilityLabel={section.title}>
                   <Text style={[styles.cardTitle, selected ? styles.cardTitleSelected : null]}>{section.title}</Text>
                 </TouchableOpacity>
+                <Text style={styles.cardDescription}>{section.description}</Text>
+                <View style={styles.cardActionRow}>
+                  <Text style={styles.cardActionText}>{section.title === 'Personal Settings' ? 'Open profile settings' : 'Open workspace'}</Text>
+                  <MaterialIcons name="arrow-forward" size={18} color={selected ? '#1d4ed8' : '#64748b'} />
+                </View>
               </View>
             );
           })}
@@ -345,6 +360,9 @@ const styles = StyleSheet.create({
   cardTitleButton: { alignSelf: 'flex-start' },
   cardTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
   cardTitleSelected: { color: '#1d4ed8' },
+  cardDescription: { marginTop: 10, color: '#64748b', lineHeight: 20 },
+  cardActionRow: { marginTop: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cardActionText: { color: '#0f172a', fontWeight: '700' },
   panelCard: { marginTop: 18, borderRadius: 22, borderWidth: 1, borderColor: '#dbeafe', backgroundColor: '#ffffff', padding: 18 },
   panelHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
   panelTitle: { fontSize: 22, fontWeight: '800', color: '#0f172a' },

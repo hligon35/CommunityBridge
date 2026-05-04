@@ -8,6 +8,7 @@ import { resetToLogin, resetToTwoFactor } from './navigationRef';
 import { logger, setDebugContext } from './utils/logger';
 import { reportErrorToSentry } from './utils/reportError';
 import { normalizeRoleOverride, isDevSwitcherUser, isDemoReviewerUser, isSpecialAccessUser, getMfaFreshnessWindowMs } from './utils/authState';
+import { syncLoggedInDevicePushRegistration, unregisterLoggedInDevicePushRegistration } from './utils/pushNotifications';
 
 const AuthContext = createContext(null);
 const MFA_VERIFIED_CACHE_KEY = 'bb_mfa_verified_at_cache_v1';
@@ -339,6 +340,27 @@ export function AuthProvider({ children }) {
     } catch (_) {}
   }, [user, token]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      if (loading || !token || !user?.id) return;
+      try {
+        await syncLoggedInDevicePushRegistration({ userId: user.id });
+      } catch (e) {
+        if (!cancelled) {
+          try {
+            logger.warn('auth', 'push sync failed', { message: e?.message || String(e), userId: user.id });
+          } catch (_) {}
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, token, user?.id]);
+
   async function login(email, password) {
     const res = await Api.login(email, password);
     // onAuthStateChanged will refresh token/user; still return the API response for screens.
@@ -370,6 +392,7 @@ export function AuthProvider({ children }) {
 
   async function logout() {
     const a = getAuthInstance();
+    const currentUserId = String(user?.id || '').trim();
     let signedOut = false;
     try {
       if (a) {
@@ -389,6 +412,8 @@ export function AuthProvider({ children }) {
     }
 
     if (!signedOut && a?.currentUser) return;
+
+    await unregisterLoggedInDevicePushRegistration({ userId: currentUserId }).catch(() => {});
 
     try {
       await SecureStore.deleteItemAsync('bb_bio_enabled');
