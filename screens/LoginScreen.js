@@ -432,7 +432,7 @@ export default function LoginScreen({ navigation, suppressAutoRedirect = false }
               accessibilityRole="button"
               disabled={busy}
             >
-              <Text style={styles.linkText}>Register</Text>
+              <Text style={styles.linkText}>First-Time Here?</Text>
             </TouchableOpacity>
 
             <Text style={styles.linkSeparator} accessibilityElementsHidden accessibilityIgnoresInvertColors>

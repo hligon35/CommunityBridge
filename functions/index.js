@@ -279,6 +279,46 @@ function normalizedEnrollmentCodes(data) {
   return Array.from(new Set(base.map((value) => value.toUpperCase())));
 }
 
+async function resolveEnrollmentContextFromCode({ firestore, enrollmentCode }) {
+  const campusSnap = await firestore.collectionGroup('campuses').where('active', '==', true).get();
+  const matches = campusSnap.docs.filter((docSnap) => normalizedEnrollmentCodes(docSnap.data()).includes(enrollmentCode));
+  if (!matches.length) {
+    throw new functions.https.HttpsError('permission-denied', 'Enrollment code did not match an active campus.');
+  }
+  if (matches.length > 1) {
+    throw new functions.https.HttpsError('failed-precondition', 'Enrollment code matched multiple campuses. Contact support to finish account setup.');
+  }
+
+  const matchedCampus = matches[0];
+  const orgRef = matchedCampus.ref.parent.parent;
+  const orgSnap = orgRef ? await orgRef.get() : null;
+  const orgData = orgSnap?.exists ? (orgSnap.data() || {}) : null;
+  const resolvedOrganizationId = safeString(orgSnap?.id).trim();
+  const resolvedProgramId = safeString(matchedCampus.data()?.programId || matchedCampus.data()?.branchId).trim();
+  if (!orgSnap?.exists || orgData?.active === false || !resolvedOrganizationId || !resolvedProgramId) {
+    throw new functions.https.HttpsError('not-found', 'Enrollment context is not active.');
+  }
+
+  const programSnap = await orgRef.collection('programs').doc(resolvedProgramId).get();
+  if (!programSnap.exists || programSnap.data()?.active === false) {
+    throw new functions.https.HttpsError('not-found', 'Program not found.');
+  }
+
+  return {
+    organization: sanitizeLookupDoc(orgSnap.id, orgData, {
+      shortCode: safeString(orgData?.shortCode || orgData?.code).trim(),
+    }),
+    program: sanitizeLookupDoc(programSnap.id, programSnap.data(), {
+      organizationId: resolvedOrganizationId,
+      type: safeString(programSnap.data()?.type).trim(),
+    }),
+    campus: sanitizeLookupDoc(matchedCampus.id, matchedCampus.data(), {
+      organizationId: resolvedOrganizationId,
+      programId: resolvedProgramId,
+    }),
+  };
+}
+
 function slugify(value) {
   return safeString(value)
     .trim()
@@ -1285,8 +1325,14 @@ exports.resolveEnrollmentContextPublic = regional.https.onCall(async (data) => {
   const campusId = safeString(data?.campusId).trim();
   const enrollmentCode = safeString(data?.enrollmentCode).trim().toUpperCase();
 
-  if (!organizationId || !programId || !enrollmentCode) {
-    throw new functions.https.HttpsError('invalid-argument', 'organizationId, programId, and enrollmentCode are required.');
+  if (!enrollmentCode) {
+    throw new functions.https.HttpsError('invalid-argument', 'enrollmentCode is required.');
+  }
+  if (!organizationId || !programId) {
+    return resolveEnrollmentContextFromCode({
+      firestore: admin.firestore(),
+      enrollmentCode,
+    });
   }
 
   const orgRef = admin.firestore().collection('organizations').doc(organizationId);

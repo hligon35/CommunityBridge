@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   View,
@@ -10,11 +10,9 @@ import {
   Platform,
   Image,
   ScrollView,
-  Modal,
   TouchableWithoutFeedback,
   Keyboard,
   TouchableOpacity,
-  Linking,
   useWindowDimensions,
 } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
@@ -24,19 +22,19 @@ import { reportErrorToSentry, formatSupportDetails } from '../src/utils/reportEr
 import { getAuthInitError, getAuthInstance, getFirebaseAppInitError } from '../src/firebase';
 import { MaterialIcons } from '@expo/vector-icons';
 import { USER_ROLES } from '../src/core/tenant/models';
+import { getPasswordPolicyError } from '../src/utils/passwordPolicy';
 import { useAuth } from '../src/AuthContext';
 
 const signupLogoImage = require('../assets/titlelogo.png');
-const SUPPORT_EMAIL = (() => {
-  try {
-    const value = (typeof process !== 'undefined' && process.env && process.env.EXPO_PUBLIC_SUPPORT_EMAIL)
-      ? String(process.env.EXPO_PUBLIC_SUPPORT_EMAIL)
-      : '';
-    return value.trim() || 'support@communitybridge.app';
-  } catch (_) {
-    return 'support@communitybridge.app';
-  }
-})();
+
+function getPasswordStrength(password) {
+  const raw = String(password || '');
+  let score = 0;
+  if (raw.length >= 8) score += 1;
+  if (/[A-Z]/.test(raw)) score += 1;
+  if (/[^A-Za-z0-9]/.test(raw)) score += 1;
+  return score;
+}
 
 export default function SignUpScreen({ onDone, onCancel }) {
   const auth = useAuth();
@@ -45,98 +43,12 @@ export default function SignUpScreen({ onDone, onCancel }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [organizationId, setOrganizationId] = useState('');
-  const [programId, setProgramId] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [enrollmentCode, setEnrollmentCode] = useState('');
-  const [organizations, setOrganizations] = useState([]);
-  const [programs, setPrograms] = useState([]);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [activeMenu, setActiveMenu] = useState('');
   const role = USER_ROLES.PARENT;
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const result = await Api.listOrganizations();
-        const nextItems = Array.isArray(result?.items) ? result.items : [];
-        if (!mounted) return;
-        setOrganizations(nextItems);
-        if (!organizationId && nextItems[0]?.id) {
-          setOrganizationId(nextItems[0].id);
-        }
-      } catch (_) {
-        if (!mounted) return;
-        setOrganizations([]);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    if (!organizationId) {
-      setPrograms([]);
-      setProgramId('');
-      return () => { mounted = false; };
-    }
-    (async () => {
-      try {
-        const result = await Api.listPrograms(organizationId);
-        const nextItems = Array.isArray(result?.items) ? result.items : [];
-        if (!mounted) return;
-        setPrograms(nextItems);
-        if (!nextItems.some((item) => item.id === programId)) {
-          setProgramId(nextItems[0]?.id || '');
-        }
-      } catch (_) {
-        if (!mounted) return;
-        setPrograms([]);
-        setProgramId('');
-      }
-    })();
-    return () => { mounted = false; };
-  }, [organizationId]);
-
-  const organizationOptions = useMemo(
-    () => organizations.map((item) => ({ value: item.id, label: item.name })),
-    [organizations]
-  );
-
-  const programOptions = useMemo(
-    () => programs.map((item) => ({ value: item.id, label: item.name })),
-    [programs]
-  );
-
-  const menuOptions = activeMenu === 'organization'
-      ? organizationOptions
-      : activeMenu === 'program'
-        ? programOptions
-        : [];
-
-  async function requestStaffAccess() {
-    const subject = encodeURIComponent('CommunityBridge staff/admin access request');
-    const body = encodeURIComponent(
-      'I need staff or administrator access for CommunityBridge.\n\n' +
-      'Organization: \n' +
-      'Program: \n' +
-      'Requested role: \n' +
-      'Work email: \n\n' +
-      'Please send the appropriate invite or next steps.'
-    );
-    const url = `mailto:${encodeURIComponent(SUPPORT_EMAIL)}?subject=${subject}&body=${body}`;
-
-    try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-        return;
-      }
-    } catch (_) {}
-
-    Alert.alert('Staff/Admin access', `Staff, faculty, therapist, BCBA, and admin access must be invited by an existing administrator. Contact ${SUPPORT_EMAIL} from your work email if you need help getting an invite.`);
-  }
 
   function splitNameParts(fullName) {
     const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
@@ -152,23 +64,28 @@ export default function SignUpScreen({ onDone, onCancel }) {
     return /^\S+@\S+\.[^\s@]+$/.test(String(value || '').trim());
   }
 
-  function getPasswordPolicyError(value) {
-    const raw = String(value || '');
-    if (raw.length < 8) return 'Password must be at least 8 characters.';
-    if (!/[a-z]/.test(raw) || !/[A-Z]/.test(raw) || !/[0-9]/.test(raw)) {
-      return 'Password must include uppercase, lowercase, and a number.';
-    }
-    return '';
-  }
+  const passwordChecks = useMemo(() => {
+    const raw = String(password || '');
+    return [
+      { label: '8 characters', met: raw.length >= 8 },
+      { label: '1 capital letter', met: /[A-Z]/.test(raw) },
+      { label: '1 special character', met: /[^A-Za-z0-9]/.test(raw) },
+    ];
+  }, [password]);
+
+  const passwordStrength = useMemo(() => getPasswordStrength(password), [password]);
+  const passwordStrengthLabel = passwordStrength <= 1 ? 'Needs work' : passwordStrength === 2 ? 'Almost there' : 'Ready';
+  const passwordMismatch = Boolean(confirmPassword) && password !== confirmPassword;
 
   const submit = async () => {
     const cleanedName = String(name || '').trim();
     const cleanedEmail = String(email || '').trim().toLowerCase();
     const cleanedPassword = String(password || '');
+    const cleanedConfirmPassword = String(confirmPassword || '');
     const cleanedEnrollmentCode = String(enrollmentCode || '').trim().toUpperCase();
 
-    if (!cleanedEmail || !cleanedName || !cleanedPassword || !organizationId || !programId || !cleanedEnrollmentCode) {
-      Alert.alert('Missing', 'Please provide name, email, password, organization, program, and enrollment code');
+    if (!cleanedEmail || !cleanedName || !cleanedPassword || !cleanedConfirmPassword || !cleanedEnrollmentCode) {
+      Alert.alert('Missing', 'Please provide your full name, email, password, confirmation, and enrollment code.');
       return;
     }
     if (cleanedName.length > 120) {
@@ -182,6 +99,10 @@ export default function SignUpScreen({ onDone, onCancel }) {
     const passwordPolicyError = getPasswordPolicyError(cleanedPassword);
     if (passwordPolicyError) {
       Alert.alert('Invalid password', passwordPolicyError);
+      return;
+    }
+    if (cleanedPassword !== cleanedConfirmPassword) {
+      Alert.alert('Password mismatch', 'Your confirmation password must match exactly.');
       return;
     }
     if (!/^[A-Z0-9-]{4,24}$/.test(cleanedEnrollmentCode)) {
@@ -200,8 +121,6 @@ export default function SignUpScreen({ onDone, onCancel }) {
         email: cleanedEmail,
         password: cleanedPassword,
         role,
-        organizationId,
-        programId,
         enrollmentCode: cleanedEnrollmentCode,
       });
 
@@ -282,21 +201,10 @@ export default function SignUpScreen({ onDone, onCancel }) {
             </View>
 
             <View style={styles.formCard}>
-              <Text style={styles.title}>Register</Text>
-              <View style={styles.infoCard}>
-                <Text style={styles.infoTitle}>Parent registration only</Text>
-                <Text style={styles.infoBody}>
-                  Staff, faculty, therapists, BCBAs, and administrators must be invited by an existing organization administrator before they can activate an account.
-                </Text>
-                <TouchableOpacity
-                  style={styles.staffAccessBtn}
-                  onPress={requestStaffAccess}
-                  accessibilityRole="button"
-                  accessibilityLabel="Request staff or admin access"
-                >
-                  <Text style={styles.staffAccessBtnText}>Request Staff/Admin Access</Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={styles.title}>First-Time Setup</Text>
+              <Text style={styles.subTitle}>
+                Create your parent account with the enrollment code provided by your organization.
+              </Text>
 
               <View style={styles.fieldWidth}>
                 <TextInput
@@ -343,39 +251,53 @@ export default function SignUpScreen({ onDone, onCancel }) {
               </View>
 
               <View style={styles.fieldWidth}>
-                <Text style={styles.sectionLabel}>Organization</Text>
-                <TouchableOpacity
-                  style={styles.dropdownTrigger}
-                  onPress={() => setActiveMenu('organization')}
-                  accessibilityRole="button"
-                  accessibilityLabel="Choose organization"
-                >
-                  <Text style={styles.dropdownTriggerText}>
-                    {organizationOptions.find((option) => option.value === organizationId)?.label || 'Select organization'}
-                  </Text>
-                  <MaterialIcons name={activeMenu === 'organization' ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={22} color="#475569" />
-                </TouchableOpacity>
+                <View style={styles.passwordMeterRow}>
+                  {[0, 1, 2].map((index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.passwordMeterSegment,
+                        index < passwordStrength ? styles.passwordMeterSegmentActive : null,
+                      ]}
+                    />
+                  ))}
+                </View>
+                <Text style={styles.passwordMeterLabel}>Password strength: {passwordStrengthLabel}</Text>
+                <View style={styles.requirementsCard}>
+                  {passwordChecks.map((item) => (
+                    <View key={item.label} style={styles.requirementRow}>
+                      <MaterialIcons name={item.met ? 'check-circle' : 'radio-button-unchecked'} size={16} color={item.met ? '#059669' : '#94a3b8'} />
+                      <Text style={[styles.requirementText, item.met ? styles.requirementTextMet : null]}>{item.label}</Text>
+                    </View>
+                  ))}
+                </View>
               </View>
 
-              <View style={styles.fieldWidth}>
-                <Text style={styles.sectionLabel}>Program</Text>
+              <View style={[styles.fieldWidth, styles.passwordFieldWrap]}>
+                <TextInput
+                  placeholder="Confirm password"
+                  value={confirmPassword}
+                  onChangeText={(value) => setConfirmPassword(String(value || '').slice(0, 128))}
+                  secureTextEntry={!showConfirmPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textContentType="newPassword"
+                  style={[styles.input, styles.passwordInput, passwordMismatch ? styles.inputError : null]}
+                />
                 <TouchableOpacity
-                  style={[styles.dropdownTrigger, !organizationId ? styles.dropdownTriggerDisabled : null]}
-                  onPress={() => organizationId && setActiveMenu('program')}
+                  style={styles.peekIconBtn}
+                  onPress={() => setShowConfirmPassword((value) => !value)}
                   accessibilityRole="button"
-                  accessibilityLabel="Choose program"
-                  disabled={!organizationId}
+                  accessibilityLabel={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'}
                 >
-                  <Text style={[styles.dropdownTriggerText, !organizationId ? styles.dropdownTriggerTextDisabled : null]}>
-                    {programOptions.find((option) => option.value === programId)?.label || 'Select program'}
-                  </Text>
-                  <MaterialIcons name={activeMenu === 'program' ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={22} color="#475569" />
+                  <MaterialIcons name={showConfirmPassword ? 'visibility-off' : 'visibility'} size={20} color="#2563eb" />
                 </TouchableOpacity>
               </View>
+              {passwordMismatch ? <Text style={styles.errorText}>Passwords must match.</Text> : null}
 
               <View style={styles.fieldWidth}>
                 <TextInput
-                  placeholder="Organization / Enrollment code"
+                  placeholder="Enrollment code"
                   value={enrollmentCode}
                   onChangeText={(value) => setEnrollmentCode(String(value || '').replace(/[^a-z0-9-]/gi, '').slice(0, 24).toUpperCase())}
                   autoCapitalize="characters"
@@ -383,13 +305,7 @@ export default function SignUpScreen({ onDone, onCancel }) {
                   style={styles.input}
                   maxLength={24}
                 />
-              </View>
-
-              <View style={styles.fieldWidth}>
-                <Text style={styles.sectionLabel}>Account type</Text>
-                <View style={styles.readonlyBadge}>
-                  <Text style={styles.readonlyBadgeText}>Parent</Text>
-                </View>
+                <Text style={styles.hintText}>We’ll use this code to find the right organization and link your account to your child or children.</Text>
               </View>
 
               <View style={styles.actionsRow}>
@@ -417,45 +333,6 @@ export default function SignUpScreen({ onDone, onCancel }) {
                   )}
                 </TouchableOpacity>
               </View>
-
-              <Modal visible={Boolean(activeMenu)} transparent animationType="fade" onRequestClose={() => setActiveMenu('')}>
-                <TouchableWithoutFeedback onPress={() => setActiveMenu('')}>
-                  <View style={styles.modalBackdrop}>
-                    <TouchableWithoutFeedback>
-                      <View style={styles.dropdownModalCard}>
-                        <Text style={styles.dropdownModalTitle}>
-                          {activeMenu === 'organization' ? 'Select organization' : 'Select program'}
-                        </Text>
-                        {menuOptions.map((option) => {
-                          const currentValue = activeMenu === 'organization' ? organizationId : programId;
-                          const isSelected = option.value === currentValue;
-                          return (
-                            <TouchableOpacity
-                              key={option.value}
-                              style={[styles.dropdownOption, isSelected ? styles.dropdownOptionSelected : null]}
-                              onPress={() => {
-                                if (activeMenu === 'organization') {
-                                  setOrganizationId(option.value);
-                                  setProgramId('');
-                                } else {
-                                  setProgramId(option.value);
-                                }
-                                setActiveMenu('');
-                              }}
-                              accessibilityRole="button"
-                            >
-                              <Text style={[styles.dropdownOptionText, isSelected ? styles.dropdownOptionTextSelected : null]}>
-                                {option.label}
-                              </Text>
-                              {isSelected ? <MaterialIcons name="check" size={18} color="#2563eb" /> : null}
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    </TouchableWithoutFeedback>
-                  </View>
-                </TouchableWithoutFeedback>
-              </Modal>
             </View>
           </ScrollView>
         </OuterWrapper>
@@ -472,34 +349,27 @@ const styles = StyleSheet.create({
   brandSection: { width: '100%', maxWidth: 420, alignItems: 'center', justifyContent: 'center' },
   logo: { width: '100%', maxWidth: 520, resizeMode: 'contain' },
   formCard: { width: '100%', maxWidth: 420, alignSelf: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
-  title: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
-  infoCard: { width: '100%', maxWidth: 360, borderRadius: 12, borderWidth: 1, borderColor: '#dbeafe', backgroundColor: '#eff6ff', padding: 12, marginBottom: 14 },
-  infoTitle: { fontSize: 14, fontWeight: '800', color: '#1d4ed8', marginBottom: 6 },
-  infoBody: { fontSize: 13, lineHeight: 18, color: '#1e3a8a' },
-  staffAccessBtn: { marginTop: 10, alignSelf: 'flex-start', backgroundColor: '#1d4ed8', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12 },
-  staffAccessBtnText: { color: '#fff', fontWeight: '800' },
+  title: { fontSize: 20, fontWeight: '700', marginBottom: 8 },
+  subTitle: { fontSize: 13, lineHeight: 18, color: '#64748b', marginBottom: 14 },
   fieldWidth: { width: '100%', maxWidth: 360 },
-  sectionLabel: { fontSize: 13, fontWeight: '700', color: '#475569', marginBottom: 8 },
   input: { borderWidth: 1, borderColor: '#ccc', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12, borderRadius: 10, backgroundColor: '#fff' },
-  dropdownTrigger: { borderWidth: 1, borderColor: '#ccc', paddingVertical: 12, paddingHorizontal: 12, marginBottom: 12, borderRadius: 10, backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  dropdownTriggerText: { color: '#111827', fontSize: 15 },
-  dropdownTriggerDisabled: { backgroundColor: '#f8fafc', borderColor: '#e5e7eb' },
-  dropdownTriggerTextDisabled: { color: '#94a3b8' },
-  readonlyBadge: { borderWidth: 1, borderColor: '#bfdbfe', backgroundColor: '#eff6ff', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 12, marginBottom: 12 },
-  readonlyBadgeText: { color: '#1d4ed8', fontSize: 15, fontWeight: '700' },
+  inputError: { borderColor: '#dc2626' },
   passwordFieldWrap: { position: 'relative' },
   passwordInput: { paddingRight: 42 },
   peekIconBtn: { position: 'absolute', right: 10, top: '50%', marginTop: -25, width: 28, height: 40, alignItems: 'center', justifyContent: 'center' },
+  passwordMeterRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  passwordMeterSegment: { flex: 1, height: 8, borderRadius: 999, backgroundColor: '#e5e7eb' },
+  passwordMeterSegmentActive: { backgroundColor: '#2563eb' },
+  passwordMeterLabel: { fontSize: 12, color: '#475569', marginBottom: 8 },
+  requirementsCard: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12, backgroundColor: '#f8fafc' },
+  requirementRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  requirementText: { marginLeft: 8, fontSize: 12, color: '#64748b' },
+  requirementTextMet: { color: '#0f766e', fontWeight: '700' },
+  errorText: { color: '#dc2626', fontSize: 12, marginTop: -6, marginBottom: 10 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', maxWidth: 360 },
   primaryPushBtn: { backgroundColor: '#2563eb', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, minWidth: 170, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
   primaryPushBtnText: { color: '#fff', fontWeight: '800' },
   secondaryPushBtn: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, minWidth: 120, alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc', marginRight: 10 },
   secondaryPushBtnText: { color: '#111827', fontWeight: '800' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.28)', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  dropdownModalCard: { width: '100%', maxWidth: 360, backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
-  dropdownModalTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 10 },
-  dropdownOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10, marginTop: 6, backgroundColor: '#f8fafc' },
-  dropdownOptionSelected: { backgroundColor: '#eff6ff' },
-  dropdownOptionText: { color: '#111827', fontWeight: '600' },
-  dropdownOptionTextSelected: { color: '#1d4ed8' },
+  hintText: { fontSize: 12, color: '#64748b', marginTop: -2, marginBottom: 8 },
 });

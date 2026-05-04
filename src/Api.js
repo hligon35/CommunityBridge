@@ -321,6 +321,115 @@ export async function resolveEnrollmentContext(payload) {
   );
 }
 
+function normalizePersonName(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function doesChildParentMatchName(child, normalizedName) {
+  if (!normalizedName) return false;
+  const parentEntries = Array.isArray(child?.parents) ? child.parents : [];
+  return parentEntries.some((entry) => {
+    if (!entry) return false;
+    if (typeof entry === 'string') return normalizePersonName(entry) === normalizedName;
+    return normalizePersonName(entry?.name || `${entry?.firstName || ''} ${entry?.lastName || ''}`) === normalizedName;
+  });
+}
+
+async function findEnrollmentContextByCode(enrollmentCode) {
+  const cleanedCode = String(enrollmentCode || '').trim().toUpperCase();
+  if (!cleanedCode) {
+    const err = new Error('Enrollment code is required.');
+    err.code = 'BB_ENROLLMENT_CONTEXT_REQUIRED';
+    throw err;
+  }
+  try {
+    return await resolveEnrollmentContext({ enrollmentCode: cleanedCode });
+  } catch (error) {
+    const err = new Error('We could not verify your enrollment details right now. Please try again in a moment.');
+    err.code = error?.code || 'BB_ENROLLMENT_LOOKUP_FAILED';
+    throw err;
+  }
+}
+
+async function linkParentSignupChildren({ uid, parentName, email, enrollmentContext }) {
+  if (!db || !uid || !enrollmentContext?.organization?.id || !enrollmentContext?.program?.id || !enrollmentContext?.campus?.id) return;
+  const normalizedName = normalizePersonName(parentName);
+  const parentRef = doc(db, 'parents', uid);
+  const childrenQuery = query(
+    collection(db, 'children'),
+    where('organizationId', '==', String(enrollmentContext.organization.id)),
+    where('programId', '==', String(enrollmentContext.program.id)),
+    where('campusId', '==', String(enrollmentContext.campus.id)),
+    limit(100)
+  );
+  const childrenSnap = await getDocs(childrenQuery).catch(() => null);
+  const matchingChildren = (childrenSnap?.docs || [])
+    .map((snap) => ({ id: snap.id, ...(snap.data() || {}) }))
+    .filter((child) => doesChildParentMatchName(child, normalizedName));
+  if (!matchingChildren.length) {
+    const err = new Error('We could not match that parent name to any children for this enrollment code.');
+    err.code = 'BB_PARENT_CHILD_MATCH_REQUIRED';
+    throw err;
+  }
+
+  const parentIds = [uid];
+  await setDoc(
+    parentRef,
+    {
+      id: uid,
+      uid,
+      name: parentName,
+      email,
+      organizationId: String(enrollmentContext.organization.id),
+      organizationName: String(enrollmentContext.organization.name || ''),
+      programId: String(enrollmentContext.program.id),
+      programName: String(enrollmentContext.program.name || ''),
+      campusId: String(enrollmentContext.campus.id),
+      campusName: String(enrollmentContext.campus.name || ''),
+      childIds: matchingChildren.map((child) => String(child.id)),
+      familyId: uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  await Promise.all(matchingChildren.map((child) => {
+    const existingParentIds = Array.isArray(child?.parentIds) ? child.parentIds.map((value) => String(value || '')).filter(Boolean) : [];
+    const nextParentIds = Array.from(new Set([...existingParentIds, uid]));
+    const existingParents = Array.isArray(child?.parents) ? child.parents : [];
+    const hasParentEntry = existingParents.some((entry) => String(entry?.id || entry || '').trim() === uid);
+    const nextParents = hasParentEntry
+      ? existingParents
+      : [...existingParents, { id: uid, name: parentName, email }];
+    return setDoc(
+      doc(db, 'children', child.id),
+      {
+        parentIds: nextParentIds,
+        parents: nextParents,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }));
+
+  await setDoc(
+    doc(db, 'directoryLinks', uid),
+    {
+      role: 'parent',
+      parentId: uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
 async function getUserProfile(uid) {
   if (!db) {
     const err = new Error('Firebase is not initialized (missing Firestore instance).');
@@ -492,21 +601,20 @@ export async function signup(payload) {
   }
 
   let enrollmentContext = null;
-  if (organizationId || programId || campusId || enrollmentCode) {
-    if (!organizationId || !programId || !enrollmentCode) {
-      const err = new Error('Organization, program, and enrollment code are required.');
-      err.code = 'BB_ENROLLMENT_CONTEXT_REQUIRED';
-      throw err;
-    }
-    try {
-      enrollmentContext = await resolveEnrollmentContext({ organizationId, programId, campusId, enrollmentCode });
-    } catch (error) {
-      const err = new Error('We could not verify your enrollment details right now. Please try again in a moment.');
-      err.code = error?.code || 'BB_ENROLLMENT_LOOKUP_FAILED';
-      throw err;
+  if (enrollmentCode) {
+    if (organizationId || programId || campusId) {
+      try {
+        enrollmentContext = await resolveEnrollmentContext({ organizationId, programId, campusId, enrollmentCode });
+      } catch (error) {
+        const err = new Error('We could not verify your enrollment details right now. Please try again in a moment.');
+        err.code = error?.code || 'BB_ENROLLMENT_LOOKUP_FAILED';
+        throw err;
+      }
+    } else {
+      enrollmentContext = await findEnrollmentContextByCode(enrollmentCode);
     }
     if (!enrollmentContext?.organization?.id || !enrollmentContext?.program?.id || !enrollmentContext?.campus?.id) {
-      const err = new Error('The enrollment code did not match the selected organization and program.');
+      const err = new Error('The enrollment code did not match an active organization enrollment.');
       err.code = 'BB_INVALID_ENROLLMENT_CODE';
       throw err;
     }
@@ -662,39 +770,22 @@ export async function signup(payload) {
   });
   const token = await getIdToken(cred.user, true);
 
-  // Secure-by-default directory access: create a self-owned parent directory record + link on signup.
-  // Admins can later re-link accounts to seeded directory records if desired.
-  try {
-    const roleLower = String(role || '').toLowerCase();
-    if (roleLower.includes('parent')) {
-      const parentId = cred.user.uid;
-
-      await setDoc(
-        doc(db, 'parents', parentId),
-        indexDirectoryRecord({
-          uid: cred.user.uid,
-          name: name || profile?.name || '',
-          email: email || profile?.email || '',
-          familyId: cred.user.uid,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        }),
-        { merge: true }
-      );
-
-      await setDoc(
-        doc(db, 'directoryLinks', cred.user.uid),
-        {
-          role: 'parent',
-          parentId,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+  const roleLower = String(role || '').toLowerCase();
+  if (roleLower.includes('parent')) {
+    try {
+      await linkParentSignupChildren({
+        uid: cred.user.uid,
+        parentName: name || profile?.name || '',
+        email: email || profile?.email || '',
+        enrollmentContext,
+      });
+    } catch (linkError) {
+      try { await deleteDoc(doc(db, 'users', cred.user.uid)); } catch (_) {}
+      try { await deleteDoc(doc(db, 'parents', cred.user.uid)); } catch (_) {}
+      try { await deleteDoc(doc(db, 'directoryLinks', cred.user.uid)); } catch (_) {}
+      try { await deleteUser(cred.user); } catch (_) {}
+      throw linkError;
     }
-  } catch (_) {
-    // ignore (rules or offline); core signup should still succeed
   }
 
   return { token, user: profile };
