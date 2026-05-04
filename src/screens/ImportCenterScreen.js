@@ -7,15 +7,238 @@ import { useData } from '../DataContext';
 import { hasFullAdminSectionAccess, ADMIN_SECTION_KEYS } from '../core/tenant/models';
 import * as Api from '../Api';
 
+function normalizeText(value) {
+  return String(value == null ? '' : value).trim();
+}
+
+function normalizeHeader(value) {
+  return normalizeText(value).toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function normalizeEmail(value) {
+  return normalizeText(value).toLowerCase();
+}
+
+function splitList(value) {
+  if (Array.isArray(value)) return value.map((item) => normalizeText(item)).filter(Boolean);
+  return normalizeText(value).split(/[;,|]/).map((item) => normalizeText(item)).filter(Boolean);
+}
+
+function buildImportId(prefix, parts, fallbackIndex) {
+  const base = parts
+    .map((value) => normalizeText(value).toLowerCase())
+    .filter(Boolean)
+    .join('-')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (base) return `${prefix}-${base}`;
+  return `${prefix}-${fallbackIndex}-${Date.now().toString(36)}`;
+}
+
+function buildRowMap(record) {
+  const map = new Map();
+  Object.entries(record && typeof record === 'object' ? record : {}).forEach(([key, value]) => {
+    map.set(normalizeHeader(key), value);
+  });
+  return map;
+}
+
+function pickValue(record, aliases) {
+  const map = buildRowMap(record);
+  for (const alias of aliases) {
+    const value = map.get(normalizeHeader(alias));
+    if (Array.isArray(value)) {
+      if (value.length) return value;
+      continue;
+    }
+    if (normalizeText(value)) return value;
+  }
+  return '';
+}
+
+function parseDelimitedRecords(raw) {
+  const text = String(raw || '').replace(/^\uFEFF/, '');
+  const rows = [];
+  let currentCell = '';
+  let currentRow = [];
+  let insideQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const nextChar = text[index + 1];
+
+    if (char === '"') {
+      if (insideQuotes && nextChar === '"') {
+        currentCell += '"';
+        index += 1;
+      } else {
+        insideQuotes = !insideQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !insideQuotes) {
+      currentRow.push(currentCell);
+      currentCell = '';
+      continue;
+    }
+
+    if ((char === '\n' || char === '\r') && !insideQuotes) {
+      if (char === '\r' && nextChar === '\n') index += 1;
+      currentRow.push(currentCell);
+      if (currentRow.some((value) => normalizeText(value))) rows.push(currentRow);
+      currentCell = '';
+      currentRow = [];
+      continue;
+    }
+
+    currentCell += char;
+  }
+
+  currentRow.push(currentCell);
+  if (currentRow.some((value) => normalizeText(value))) rows.push(currentRow);
+  if (!rows.length) return [];
+
+  const headers = rows[0].map((header, index) => normalizeText(header) || `column_${index + 1}`);
+  return rows.slice(1).map((row) => {
+    const record = {};
+    headers.forEach((header, index) => {
+      record[header] = row[index] != null ? row[index] : '';
+    });
+    return record;
+  });
+}
+
+function inferRecordType(record) {
+  const explicit = normalizeText(pickValue(record, ['type', 'entity', 'record type', 'kind', 'category'])).toLowerCase();
+  if (explicit.includes('parent') || explicit.includes('guardian') || explicit.includes('family')) return 'parent';
+  if (explicit.includes('staff') || explicit.includes('therap') || explicit.includes('bcba') || explicit.includes('teacher') || explicit.includes('faculty') || explicit.includes('provider')) return 'therapist';
+  if (explicit.includes('child') || explicit.includes('student') || explicit.includes('learner')) return 'child';
+
+  if (normalizeText(pickValue(record, ['child name', 'student name', 'learner name', 'student', 'learner']))) return 'child';
+
+  const role = normalizeText(pickValue(record, ['role', 'title', 'staff role'])).toLowerCase();
+  if (role && !role.includes('parent')) return 'therapist';
+
+  if (normalizeText(pickValue(record, ['parent name', 'guardian name', 'guardian', 'parent']))) return 'parent';
+  return '';
+}
+
+function normalizeChildRecord(record, index) {
+  const name = normalizeText(pickValue(record, ['name', 'child name', 'student name', 'learner name', 'student', 'learner']));
+  if (!name) return null;
+  const parentName = normalizeText(pickValue(record, ['parent name', 'guardian name', 'guardian', 'parent']));
+  const parentEmail = normalizeEmail(pickValue(record, ['parent email', 'guardian email', 'family email']));
+  const parentPhone = normalizeText(pickValue(record, ['parent phone', 'guardian phone', 'family phone']));
+  const parents = [];
+  if (parentName || parentEmail || parentPhone) {
+    parents.push({
+      ...(parentName ? { name: parentName } : { name: parentEmail || 'Parent/Guardian' }),
+      ...(parentEmail ? { email: parentEmail } : {}),
+      ...(parentPhone ? { phone: parentPhone } : {}),
+    });
+  }
+  return {
+    id: normalizeText(pickValue(record, ['id', 'child id', 'student id', 'learner id'])) || buildImportId('child', [name, parentName, parentEmail], index),
+    name,
+    age: normalizeText(pickValue(record, ['age', 'grade', 'dob', 'date of birth'])),
+    room: normalizeText(pickValue(record, ['room', 'classroom', 'homeroom', 'class'])),
+    session: normalizeText(pickValue(record, ['session'])).toUpperCase(),
+    organizationId: normalizeText(pickValue(record, ['organization id', 'org id'])),
+    organizationName: normalizeText(pickValue(record, ['organization', 'organization name', 'org name'])),
+    programId: normalizeText(pickValue(record, ['program id', 'program'])),
+    programName: normalizeText(pickValue(record, ['program name'])),
+    campusId: normalizeText(pickValue(record, ['campus id', 'location id', 'site id'])),
+    campusName: normalizeText(pickValue(record, ['campus', 'location', 'site', 'campus name', 'location name'])),
+    enrollmentCode: normalizeText(pickValue(record, ['enrollment code', 'code'])).toUpperCase(),
+    carePlan: normalizeText(pickValue(record, ['care plan', 'program notes', 'notes'])),
+    parents,
+  };
+}
+
+function normalizeParentRecord(record, index) {
+  const name = normalizeText(pickValue(record, ['name', 'parent name', 'guardian name', 'guardian', 'parent']));
+  const email = normalizeEmail(pickValue(record, ['email', 'parent email', 'guardian email']));
+  const phone = normalizeText(pickValue(record, ['phone', 'parent phone', 'guardian phone']));
+  if (!name && !email && !phone) return null;
+  return {
+    id: normalizeText(pickValue(record, ['id', 'parent id', 'guardian id'])) || buildImportId('parent', [email, name, phone], index),
+    name: name || email || 'Parent/Guardian',
+    email,
+    phone,
+    childIds: splitList(pickValue(record, ['child ids', 'children', 'learner ids', 'student ids'])),
+  };
+}
+
+function normalizeTherapistRecord(record, index) {
+  const name = normalizeText(pickValue(record, ['name', 'staff name', 'therapist name', 'provider name', 'employee name']));
+  const email = normalizeEmail(pickValue(record, ['email', 'staff email', 'therapist email']));
+  const phone = normalizeText(pickValue(record, ['phone', 'staff phone', 'therapist phone']));
+  const role = normalizeText(pickValue(record, ['role', 'title', 'staff role'])) || 'staff';
+  if (!name && !email) return null;
+  return {
+    id: normalizeText(pickValue(record, ['id', 'staff id', 'therapist id', 'provider id'])) || buildImportId('staff', [email, name, role], index),
+    name: name || email || 'Staff',
+    email,
+    phone,
+    role,
+  };
+}
+
+function dedupeRecords(items) {
+  const map = new Map();
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    if (!item?.id) return;
+    map.set(String(item.id), { ...(map.get(String(item.id)) || {}), ...item });
+  });
+  return Array.from(map.values());
+}
+
 function normalizeImportedDirectory(payload) {
   const source = payload && typeof payload === 'object' ? payload : {};
+  const children = [];
+  const parents = [];
+  const therapists = [];
+
+  function ingestRecords(records, explicitType = '') {
+    (Array.isArray(records) ? records : []).forEach((record, index) => {
+      const type = explicitType || inferRecordType(record);
+      if (type === 'child') {
+        const normalized = normalizeChildRecord(record, children.length + index + 1);
+        if (normalized) children.push(normalized);
+        return;
+      }
+      if (type === 'parent') {
+        const normalized = normalizeParentRecord(record, parents.length + index + 1);
+        if (normalized) parents.push(normalized);
+        return;
+      }
+      if (type === 'therapist') {
+        const normalized = normalizeTherapistRecord(record, therapists.length + index + 1);
+        if (normalized) therapists.push(normalized);
+      }
+    });
+  }
+
+  if (Array.isArray(source)) {
+    ingestRecords(source);
+  } else {
+    ingestRecords(source.children || source.students || source.learners, 'child');
+    ingestRecords(source.parents || source.guardians || source.families, 'parent');
+    ingestRecords(source.therapists || source.staff || source.providers || source.faculty || source.employees, 'therapist');
+    ingestRecords(source.records || source.items || source.rows);
+    if (!children.length && !parents.length && !therapists.length) {
+      ingestRecords([source]);
+    }
+  }
+
   const normalized = {
-    children: Array.isArray(source.children) ? source.children.filter(Boolean) : [],
-    parents: Array.isArray(source.parents) ? source.parents.filter(Boolean) : [],
-    therapists: Array.isArray(source.therapists) ? source.therapists.filter(Boolean) : [],
+    children: dedupeRecords(children),
+    parents: dedupeRecords(parents),
+    therapists: dedupeRecords(therapists),
   };
   const total = normalized.children.length + normalized.parents.length + normalized.therapists.length;
-  if (!total) throw new Error('Import file must contain at least one of: children, parents, therapists.');
+  if (!total) throw new Error('Import file did not contain any recognizable children, parents, or staff records.');
   return normalized;
 }
 
@@ -30,9 +253,8 @@ export default function ImportCenterScreen() {
   const [auditError, setAuditError] = useState('');
 
   const samplePayload = useMemo(() => ({
-    children: [{ id: 'child-001', name: 'Sample Learner', age: '6', room: 'A1' }],
-    parents: [{ id: 'parent-001', name: 'Sample Parent', email: 'parent@example.com' }],
-    therapists: [{ id: 'staff-001', name: 'Sample BCBA', role: 'bcba', email: 'bcba@example.com' }],
+    learners: [{ child_name: 'Sample Learner', guardian_name: 'Sample Parent', enrollment_code: 'CENTER-101', room: 'A1' }],
+    staff: [{ full_name: 'Sample BCBA', title: 'bcba', email: 'bcba@example.com' }],
   }), []);
 
   if (!canManageImports) {
@@ -72,7 +294,7 @@ export default function ImportCenterScreen() {
         await new Promise((resolve) => {
           const input = document.createElement('input');
           input.type = 'file';
-          input.accept = '.json,application/json';
+          input.accept = '.json,.csv,text/csv,application/json,text/plain';
           input.onchange = () => {
             const file = input.files && input.files[0] ? input.files[0] : null;
             if (file) {
@@ -96,7 +318,7 @@ export default function ImportCenterScreen() {
         return;
       }
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/json', 'text/plain', '*/*'],
+        type: ['application/json', 'text/csv', 'text/plain', '*/*'],
         copyToCacheDirectory: true,
         multiple: false,
       });
@@ -110,7 +332,7 @@ export default function ImportCenterScreen() {
   }
 
   async function readImportContents() {
-    if (!pickedFile) throw new Error('Choose a JSON file before importing.');
+    if (!pickedFile) throw new Error('Choose a JSON or CSV file before importing.');
     if (pickedFile.file && typeof pickedFile.file.text === 'function') return pickedFile.file.text();
     if (pickedFile.uri) return FileSystem.readAsStringAsync(pickedFile.uri, { encoding: FileSystem.EncodingType.UTF8 });
     throw new Error('Selected file could not be read.');
@@ -120,7 +342,17 @@ export default function ImportCenterScreen() {
     try {
       setBusy(true);
       const raw = await readImportContents();
-      const parsed = JSON.parse(String(raw || ''));
+      const fileName = String(pickedFile?.name || '').toLowerCase();
+      let parsed;
+      if (fileName.endsWith('.csv')) {
+        parsed = parseDelimitedRecords(raw);
+      } else {
+        try {
+          parsed = JSON.parse(String(raw || ''));
+        } catch (_) {
+          parsed = parseDelimitedRecords(raw);
+        }
+      }
       const normalized = normalizeImportedDirectory(parsed);
       await Api.mergeDirectory(normalized);
       await fetchAndSync({ force: true });
@@ -144,11 +376,12 @@ export default function ImportCenterScreen() {
         <View style={styles.hero}>
           <Text style={styles.eyebrow}>Import Center</Text>
           <Text style={styles.title}>Directory ingestion and validation workspace</Text>
-          <Text style={styles.subtitle}>Office users can review expected payload shape, choose a file, and run a scoped directory merge without leaving the admin workspace.</Text>
+          <Text style={styles.subtitle}>Office users can import JSON or CSV exports from pre-existing directories. The importer recognizes common learner, parent, guardian, staff, therapist, provider, and faculty field names.</Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Expected JSON shape</Text>
+          <Text style={styles.sectionTitle}>Supported shapes</Text>
+          <Text style={styles.helperText}>Use top-level arrays such as children, students, learners, parents, guardians, staff, providers, or a flat CSV or records export with recognizable headers like student name, guardian name, room, role, or email.</Text>
           <Text style={styles.codeBlock}>{JSON.stringify(samplePayload, null, 2)}</Text>
         </View>
 
@@ -196,7 +429,7 @@ const styles = StyleSheet.create({
   subtitle: { marginTop: 8, color: '#475569', lineHeight: 20 },
   card: { marginTop: 14, borderRadius: 16, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff', padding: 14 },
   sectionTitle: { fontSize: 15, fontWeight: '800', color: '#111827', marginBottom: 8 },
-  codeBlock: { borderRadius: 12, backgroundColor: '#0f172a', color: '#e2e8f0', padding: 12, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12 },
+  codeBlock: { borderRadius: 12, backgroundColor: '#0f172a', color: '#e2e8f0', padding: 12, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12, marginTop: 12 },
   helperText: { color: '#64748b', lineHeight: 18 },
   errorText: { color: '#b91c1c', marginBottom: 8 },
   buttonRow: { flexDirection: 'row', marginTop: 12 },

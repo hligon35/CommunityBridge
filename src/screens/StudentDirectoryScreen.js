@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useAuth } from '../AuthContext';
@@ -7,6 +7,7 @@ import { useData } from '../DataContext';
 import { isBcbaRole, isOfficeAdminRole } from '../core/tenant/models';
 import { avatarSourceFor } from '../utils/idVisibility';
 import { THERAPY_ROLE_LABELS } from '../utils/roleTerminology';
+import * as Api from '../Api';
 
 function TabButton({ label, active, onPress }) {
   return (
@@ -16,10 +17,30 @@ function TabButton({ label, active, onPress }) {
   );
 }
 
+function normalizeInlineParents(selectedChild, parents) {
+  if (!selectedChild) return [];
+  const parentEntries = Array.isArray(selectedChild.parents) ? selectedChild.parents : [];
+  const parentIds = new Set(parentEntries.map((item) => (item && typeof item === 'object' ? item.id : item)).filter(Boolean));
+  const linked = (parents || []).filter((parent) => parentIds.has(parent?.id));
+  if (linked.length) return linked;
+  return parentEntries.map((entry, index) => {
+    if (!entry) return null;
+    if (typeof entry === 'string') {
+      return { id: `inline-parent-${index}`, name: entry, email: '', phone: '' };
+    }
+    return {
+      id: entry.id || `inline-parent-${index}`,
+      name: entry.name || `${entry.firstName || ''} ${entry.lastName || ''}`.trim() || 'Parent/Guardian',
+      email: entry.email || '',
+      phone: entry.phone || '',
+    };
+  }).filter(Boolean);
+}
+
 export default function StudentDirectoryScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
-  const { children = [], parents = [], therapists = [] } = useData();
+  const { children = [], parents = [], therapists = [], fetchAndSync } = useData();
   const isBcba = isBcbaRole(user?.role);
   const isOffice = isOfficeAdminRole(user?.role);
   const [query, setQuery] = useState('');
@@ -27,6 +48,16 @@ export default function StudentDirectoryScreen() {
   const [sortKey, setSortKey] = useState('name');
   const [selectedChildId, setSelectedChildId] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [enrollSaving, setEnrollSaving] = useState(false);
+  const [enrollDraft, setEnrollDraft] = useState({
+    name: '',
+    parentName: '',
+    enrollmentCode: '',
+    room: '',
+    parentEmail: '',
+    parentPhone: '',
+  });
 
   const visibleTabs = useMemo(() => {
     const base = [
@@ -74,11 +105,7 @@ export default function StudentDirectoryScreen() {
   }, [filteredChildren, selectedChildId]);
 
   const selectedChild = useMemo(() => filteredChildren.find((child) => child?.id === selectedChildId) || null, [filteredChildren, selectedChildId]);
-  const linkedParents = useMemo(() => {
-    if (!selectedChild) return [];
-    const parentIds = new Set((selectedChild.parents || []).map((item) => item?.id || item));
-    return (parents || []).filter((parent) => parentIds.has(parent?.id));
-  }, [parents, selectedChild]);
+  const linkedParents = useMemo(() => normalizeInlineParents(selectedChild, parents), [parents, selectedChild]);
   const assignedStaff = useMemo(() => {
     if (!selectedChild) return [];
     const ids = [selectedChild?.amTherapist, selectedChild?.pmTherapist, selectedChild?.bcaTherapist].map((entry) => typeof entry === 'string' ? entry : entry?.id).filter(Boolean);
@@ -87,6 +114,40 @@ export default function StudentDirectoryScreen() {
 
   function openAction(title, message) {
     Alert.alert(title, message);
+  }
+
+  function updateEnrollDraft(key, value) {
+    setEnrollDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function resetEnrollDraft() {
+    setEnrollDraft({
+      name: '',
+      parentName: '',
+      enrollmentCode: '',
+      room: '',
+      parentEmail: '',
+      parentPhone: '',
+    });
+  }
+
+  async function submitEnrollment() {
+    setEnrollSaving(true);
+    try {
+      const result = await Api.enrollLearner(enrollDraft);
+      setSelectedChildId(result?.child?.id || null);
+      await fetchAndSync?.({ force: true });
+      setEnrollOpen(false);
+      resetEnrollDraft();
+      Alert.alert(
+        'Learner enrolled',
+        `${result?.child?.name || 'The learner'} was added to ${result?.enrollmentContext?.campus?.name || 'the selected campus'}. A family can now finish signup with the same enrollment code and the matching parent or guardian name.`
+      );
+    } catch (error) {
+      Alert.alert('Enrollment failed', String(error?.message || error || 'We could not enroll this learner.'));
+    } finally {
+      setEnrollSaving(false);
+    }
   }
 
   function renderTabContent() {
@@ -164,7 +225,12 @@ export default function StudentDirectoryScreen() {
         <View style={styles.hero}>
           <Text style={styles.eyebrow}>Students</Text>
           <Text style={styles.title}>Central hub for student records</Text>
-          <Text style={styles.subtitle}>Search, filter, and sort the roster while reviewing the selected student profile tabs on the same screen.</Text>
+          <Text style={styles.subtitle}>Search, filter, sort, and manually enroll a learner without leaving the directory workspace.</Text>
+          {isOffice ? (
+            <TouchableOpacity style={styles.heroButton} onPress={() => setEnrollOpen(true)}>
+              <Text style={styles.heroButtonText}>Enroll Learner</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <View style={styles.filtersCard}>
@@ -234,6 +300,42 @@ export default function StudentDirectoryScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <Modal visible={enrollOpen} transparent animationType="fade" onRequestClose={() => !enrollSaving && setEnrollOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Enroll Learner</Text>
+            <Text style={styles.modalBody}>Use the campus enrollment code plus the family’s matching guardian name so the learner can be claimed later during parent signup.</Text>
+
+            <Text style={styles.fieldLabel}>Learner name</Text>
+            <TextInput value={enrollDraft.name} onChangeText={(value) => updateEnrollDraft('name', value)} placeholder="Learner full name" style={styles.input} editable={!enrollSaving} />
+
+            <Text style={styles.fieldLabel}>Parent or guardian name</Text>
+            <TextInput value={enrollDraft.parentName} onChangeText={(value) => updateEnrollDraft('parentName', value)} placeholder="Parent or guardian full name" style={styles.input} editable={!enrollSaving} />
+
+            <Text style={styles.fieldLabel}>Enrollment code</Text>
+            <TextInput value={enrollDraft.enrollmentCode} onChangeText={(value) => updateEnrollDraft('enrollmentCode', String(value || '').toUpperCase())} placeholder="Campus enrollment code" style={styles.input} editable={!enrollSaving} autoCapitalize="characters" autoCorrect={false} />
+
+            <Text style={styles.fieldLabel}>Room</Text>
+            <TextInput value={enrollDraft.room} onChangeText={(value) => updateEnrollDraft('room', value)} placeholder="Optional classroom or room" style={styles.input} editable={!enrollSaving} />
+
+            <Text style={styles.fieldLabel}>Parent email</Text>
+            <TextInput value={enrollDraft.parentEmail} onChangeText={(value) => updateEnrollDraft('parentEmail', value)} placeholder="Optional" style={styles.input} editable={!enrollSaving} autoCapitalize="none" keyboardType="email-address" />
+
+            <Text style={styles.fieldLabel}>Parent phone</Text>
+            <TextInput value={enrollDraft.parentPhone} onChangeText={(value) => updateEnrollDraft('parentPhone', value)} placeholder="Optional" style={styles.input} editable={!enrollSaving} keyboardType="phone-pad" />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => setEnrollOpen(false)} disabled={enrollSaving}>
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.primaryButton} onPress={submitEnrollment} disabled={enrollSaving}>
+                <Text style={styles.primaryButtonText}>{enrollSaving ? 'Saving...' : 'Enroll Learner'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenWrapper>
   );
 }
@@ -242,6 +344,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#f8fafc' },
   content: { padding: 16 },
   hero: { borderRadius: 22, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', padding: 18 },
+  heroButton: { marginTop: 14, alignSelf: 'flex-start', borderRadius: 12, backgroundColor: '#2563eb', paddingVertical: 10, paddingHorizontal: 14 },
+  heroButtonText: { color: '#fff', fontWeight: '800' },
   eyebrow: { color: '#1d4ed8', fontWeight: '800', fontSize: 12, textTransform: 'uppercase' },
   title: { marginTop: 6, fontSize: 24, fontWeight: '800', color: '#0f172a' },
   subtitle: { marginTop: 8, color: '#475569', lineHeight: 20 },
@@ -275,4 +379,10 @@ const styles = StyleSheet.create({
   secondaryButton: { borderRadius: 12, backgroundColor: '#e2e8f0', paddingVertical: 12, paddingHorizontal: 14, marginRight: 10, marginBottom: 10 },
   secondaryButtonText: { color: '#0f172a', fontWeight: '800' },
   empty: { color: '#64748b' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.42)', alignItems: 'center', justifyContent: 'center', padding: 16 },
+  modalCard: { width: '100%', maxWidth: 520, borderRadius: 20, backgroundColor: '#ffffff', padding: 20 },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
+  modalBody: { marginTop: 8, color: '#475569', lineHeight: 20 },
+  fieldLabel: { marginTop: 12, color: '#0f172a', fontWeight: '700' },
+  modalActions: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 18 },
 });

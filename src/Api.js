@@ -1970,6 +1970,12 @@ function indexChildRecord(child) {
   return out;
 }
 
+function buildDirectoryRecordId(prefix) {
+  const stamp = Date.now().toString(36);
+  const random = Math.random().toString(36).slice(2, 8);
+  return `${String(prefix || 'record').trim() || 'record'}-${stamp}-${random}`;
+}
+
 export async function getDirectory() {
   const u = requireUser();
   const apiBase = String(BASE_URL || '').replace(/\/$/, '');
@@ -2140,6 +2146,69 @@ export async function mergeDirectory(payload) {
 
   await batch.commit();
   return { ok: true };
+}
+
+export async function enrollLearner(payload) {
+  requireUser();
+
+  const learnerName = String(payload?.name || payload?.learnerName || '').trim();
+  const parentName = String(payload?.parentName || payload?.guardianName || '').trim();
+  const parentEmail = normalizeEmailInput(payload?.parentEmail || payload?.guardianEmail || '');
+  const parentPhone = String(payload?.parentPhone || payload?.guardianPhone || '').trim();
+  const room = String(payload?.room || '').trim();
+  const age = String(payload?.age || '').trim();
+  const session = String(payload?.session || '').trim().toUpperCase();
+  const enrollmentCode = String(payload?.enrollmentCode || '').trim().toUpperCase();
+
+  if (!learnerName) {
+    const err = new Error('Learner name is required.');
+    err.code = 'BB_LEARNER_NAME_REQUIRED';
+    throw err;
+  }
+  if (!parentName) {
+    const err = new Error('Parent or guardian name is required.');
+    err.code = 'BB_PARENT_NAME_REQUIRED';
+    throw err;
+  }
+  if (!enrollmentCode) {
+    const err = new Error('Enrollment code is required.');
+    err.code = 'BB_ENROLLMENT_CODE_REQUIRED';
+    throw err;
+  }
+
+  const enrollmentContext = await resolveEnrollmentContext({ enrollmentCode });
+  if (!enrollmentContext?.organization?.id || !enrollmentContext?.program?.id || !enrollmentContext?.campus?.id) {
+    const err = new Error('The enrollment code did not resolve to an active organization, program, and campus.');
+    err.code = 'BB_INVALID_ENROLLMENT_CODE';
+    throw err;
+  }
+
+  const now = new Date().toISOString();
+  const child = indexChildRecord({
+    id: String(payload?.id || '').trim() || buildDirectoryRecordId('child'),
+    name: learnerName,
+    age,
+    room,
+    session: session === 'PM' ? 'PM' : session === 'AM' ? 'AM' : '',
+    organizationId: String(enrollmentContext.organization.id),
+    organizationName: String(enrollmentContext.organization.name || ''),
+    programId: String(enrollmentContext.program.id),
+    programName: String(enrollmentContext.program.name || ''),
+    campusId: String(enrollmentContext.campus.id),
+    campusName: String(enrollmentContext.campus.name || ''),
+    enrollmentCode,
+    active: true,
+    parents: [{
+      name: parentName,
+      ...(parentEmail ? { email: parentEmail } : {}),
+      ...(parentPhone ? { phone: parentPhone } : {}),
+    }],
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await mergeDirectory({ children: [child] });
+  return { ok: true, child, enrollmentContext };
 }
 
 export async function getStaffWorkspace(facultyId) {
